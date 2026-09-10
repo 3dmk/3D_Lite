@@ -1,0 +1,45 @@
+name: L3N Pass 1 Telemetry Patch
+
+on:
+  push:
+    branches: [l3n-dev]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: l3n-dev
+      - name: Deduplicate RAF telemetry timestamps
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text()
+          old='''  let lastFrame=0;\n  function markFrame(ts=performance.now()){\n    if(lastFrame){\n      const dt=ts-lastFrame;\n      metrics.frameTimes.push(dt);\n      if(metrics.frameTimes.length>240)metrics.frameTimes.shift();\n    }\n    lastFrame=ts; metrics.lastFrameAt=ts; metrics.frames++;\n  }'''
+          new='''  let lastFrame=0;\n  function markFrame(ts=performance.now()){\n    // Multiple RAF callbacks can share one browser frame timestamp. Record the\n    // display frame once so telemetry does not create false 0 ms samples/FPS.\n    if(ts===lastFrame)return false;\n    if(lastFrame){\n      const dt=ts-lastFrame;\n      if(dt>0){\n        metrics.frameTimes.push(dt);\n        if(metrics.frameTimes.length>240)metrics.frameTimes.shift();\n      }\n    }\n    lastFrame=ts; metrics.lastFrameAt=ts; metrics.frames++;\n    return true;\n  }'''
+          if new in s:
+              print('Telemetry patch already applied.')
+          elif old in s:
+              s=s.replace(old,new,1)
+              s=s.replace('<title>3DLite v3.94.1 L3N GitHub Runtime</title>','<title>3DLite v3.94.2 L3N Gen3 Pass 1</title>',1)
+              p.write_text(s)
+              print('Applied telemetry deduplication patch.')
+          else:
+              raise SystemExit('Expected telemetry block not found; refusing unsafe patch.')
+          PY
+      - name: Commit patch
+        shell: bash
+        run: |
+          if git diff --quiet -- index.html; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'L3N Gen3 Pass 1: deduplicate RAF frame telemetry'
+          git push origin HEAD:l3n-dev
