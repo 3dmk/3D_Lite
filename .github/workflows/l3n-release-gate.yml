@@ -25,6 +25,7 @@ jobs:
           const fs = require('fs');
           const html = fs.readFileSync('index.html','utf8');
           const failures = [];
+          const warnings = [];
 
           // 1) Basic document markers.
           if (!/<!doctype html>/i.test(html)) failures.push('Missing <!doctype html>');
@@ -61,26 +62,49 @@ jobs:
 
           // 3) Duplicate DOM ids are release-blocking.
           const ids = [...html.matchAll(/\bid\s*=\s*["']([^"']+)["']/gi)].map(x=>x[1]);
-          const seen = new Set();
-          const dup = new Set();
-          for (const id of ids) { if (seen.has(id)) dup.add(id); else seen.add(id); }
-          if (dup.size) failures.push('Duplicate IDs: ' + [...dup].join(', '));
+          const seenIds = new Set();
+          const duplicateIds = new Set();
+          for (const id of ids) { if (seenIds.has(id)) duplicateIds.add(id); else seenIds.add(id); }
+          if (duplicateIds.size) failures.push('Duplicate IDs: ' + [...duplicateIds].join(', '));
 
-          // 4) Detect direct animation loop starts. 3DLite should own only one continuous loop.
+          // 4) One continuous viewport animation-loop owner.
           const loopStarts = [...html.matchAll(/requestAnimationFrame\s*\(\s*animate\s*\)/g)].length;
-          if (loopStarts > 1) failures.push(`Multiple animation-loop starts detected: ${loopStarts}`);
+          if (loopStarts !== 1) failures.push(`Expected exactly one animation-loop owner; found ${loopStarts}`);
 
-          // 5) Require runtime error capture / boot observability markers.
+          // 5) Runtime error capture / boot observability markers.
           const hasErrorCapture = /unhandledrejection/.test(html) && /window-error/.test(html);
           if (!hasErrorCapture) failures.push('Runtime error telemetry markers missing');
+          if (!/L3N Runtime Learning/.test(html)) failures.push('L3N Runtime Learning block missing');
 
-          const hasRuntimeLearning = /L3N Runtime Learning/.test(html);
-          if (!hasRuntimeLearning) failures.push('L3N Runtime Learning block missing');
-
-          // 6) Three.js must be referenced somewhere because the viewport depends on it.
+          // 6) Three.js viewport dependency marker.
           if (!/three(\.min)?\.js|THREE\./i.test(html)) failures.push('Three.js dependency/reference not found');
 
-          console.log(`Checked ${ids.length} ids and ${scriptCount} parsed script blocks.`);
+          // 7) Telemetry correctness: multiple RAF callbacks sharing a browser timestamp
+          // must not create false 0 ms samples or inflated FPS.
+          if (!/if\s*\(\s*ts===lastFrame\s*\)\s*return false/.test(html)) {
+            failures.push('RAF telemetry timestamp deduplication missing');
+          }
+          if (!/if\s*\(\s*dt>0\s*\)/.test(html)) failures.push('Positive frame-time guard missing');
+
+          // 8) Detect duplicated named 3DLite const services. This intentionally limits
+          // scope to project-owned names to avoid false positives from local variables.
+          const serviceNames = [...html.matchAll(/\bconst\s+(ThreeDLite[A-Za-z0-9_$]+)\s*=/g)].map(x=>x[1]);
+          const seenServices = new Set();
+          const duplicateServices = new Set();
+          for (const name of serviceNames) {
+            if (seenServices.has(name)) duplicateServices.add(name); else seenServices.add(name);
+          }
+          if (duplicateServices.size) failures.push('Duplicate 3DLite service declarations: ' + [...duplicateServices].join(', '));
+
+          // 9) Version identity must be explicit and current-format.
+          const titleMatch = html.match(/<title>3DLite\s+v(\d+\.\d+\.\d+)[^<]*<\/title>/i);
+          if (!titleMatch) failures.push('3DLite semantic version missing from document title');
+          if (/3DLite v3\.93\.0 — L3N Runtime Learning/.test(html)) {
+            warnings.push('Stale v3.93.0 Runtime Learning section comment remains; non-blocking documentation debt.');
+          }
+
+          console.log(`Checked ${ids.length} ids, ${scriptCount} parsed script blocks, and ${serviceNames.length} project service declarations.`);
+          for (const w of warnings) console.warn('WARNING: ' + w);
           if (failures.length) {
             console.error('\nL3N RELEASE GATE FAILED');
             for (const f of failures) console.error(' - ' + f);
@@ -98,5 +122,5 @@ jobs:
             echo ''
             echo '- Branch: `${{ github.ref_name }}`'
             echo '- Commit: `${{ github.sha }}`'
-            echo '- Gate checks startup structure, duplicate IDs, script integrity, loop ownership, runtime telemetry, and Three.js dependency markers.'
+            echo '- Gate checks startup structure, duplicate IDs, script integrity, single-loop ownership, runtime telemetry correctness, project service duplication, version identity, and Three.js dependency markers.'
           } >> "$GITHUB_STEP_SUMMARY"
