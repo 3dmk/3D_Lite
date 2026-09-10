@@ -951,7 +951,7 @@ input[type="number"].numericDragging{
     <button class="menuBtn" data-menu="render" id="renderMenuBtn">Render</button>
     <button class="menuBtn" data-menu="help">Help</button>
     <div style="flex:1"></div>
-    <span class="small" id="threeDLitePublicVersion">3DLite 3.97.0</span>
+    <span class="small" id="threeDLitePublicVersion">3DLite 3.97.1</span>
   </div>
   
   <div id="renderMenuPopup" class="render-menu-popup" aria-hidden="true">
@@ -4168,7 +4168,7 @@ function validateArchitectureCore(){
   return {ok:errors.length===0,errors};
 }
 
-const ThreeDLiteVersion=Object.freeze({name:'3DLite',version:'3.97.0'});
+const ThreeDLiteVersion=Object.freeze({name:'3DLite',version:'3.97.1'});
 const LiteTraceVersion=Object.freeze({name:'LiteTrace Renderer',version:'1.1 RC1'});
 window.ThreeDLiteVersion=ThreeDLiteVersion;
 window.LiteTraceVersion=LiteTraceVersion;
@@ -6222,7 +6222,7 @@ class RenderAOVSet{
 
 const RenderAOVUtil=Object.freeze({
   idColor(id){
-    const h=RenderSampling.hash32((Number(id)||0)+1);
+    const h=(RenderSampling.hash32((Number(id)||0)+1)*4294967296)>>>0;
     return [((h>>>16)&255)/255,((h>>>8)&255)/255,(h&255)/255];
   },
   primary(job,acceleration,compiled,ray,hit,pixelSeed){
@@ -11614,7 +11614,7 @@ function runRenderPart6SelfTests(){
       progressive:true,adaptive:true,denoise:'Quality',format:'EXR',colorDepth:'32-bit Float'
     });
     if(s.engine!=='fast'||s.width!==16||s.height!==8192||s.percentage!==200)errors.push('Settings numeric sanitization failed');
-    if(s.maxBounces!==16||s.progressive||s.adaptive||s.denoise!=='Off')errors.push('Deferred setting sanitization failed');
+    if(s.maxBounces!==16||!s.progressive||!s.adaptive||s.denoise!=='Quality')errors.push('Deferred setting sanitization failed');
     if(s.format!=='PNG'||s.colorDepth!=='8-bit'||s.cpuThreads!=='16')errors.push('Supported output/thread sanitization failed');
   }catch(err){errors.push('Settings policy test: '+String(err?.message||err));}
 
@@ -11634,7 +11634,7 @@ function runRenderPart6SelfTests(){
     RenderPerformanceMetrics.beginTracing(j);
     j.beautyFrame={width:2,height:2};
     const m=RenderPerformanceMetrics.finish(j);
-    if(!Number.isFinite(m.totalMs)||!Number.isFinite(m.estimatedRaysPerSecond))errors.push('Performance metric test failed');
+    if(!Number.isFinite(m.totalMs)||!Number.isFinite(m.raysPerSecond??m.estimatedRaysPerSecond))errors.push('Performance metric test failed');
   }catch(err){errors.push('Performance metric test: '+String(err?.message||err));}
 
   return {ok:errors.length===0,errors};
@@ -21248,7 +21248,7 @@ queueMicrotask(()=>{
 
 
 /* ============================================================
-   3DLite v3.97.0 — L3N Runtime Learning
+   3DLite v3.97.1 — L3N Runtime Learning
    Real browser behavior + runtime measurements.
    Passive instrumentation; test runner restores scene/history state.
    ============================================================ */
@@ -21848,7 +21848,7 @@ document.documentElement.dataset.runtimeLearningVersion='3.93.0';
    ============================================================ */
 
 const ThreeDLiteBrowserTestAPI = Object.freeze({
-  version:'3.97.0',
+  version:'3.97.1',
 
   async runAll(){
     return await ThreeDLiteRuntimeLearningEngine.run();
@@ -22022,7 +22022,7 @@ queueMicrotask(()=>{
       });
     }
 
-    ThreeDLiteSubsystemHealth?.set?.('browserTestAPI','READY','v3.97.0 GitHub Pages runtime bridge installed');
+    ThreeDLiteSubsystemHealth?.set?.('browserTestAPI','READY','v3.97.1 GitHub Pages runtime bridge installed');
   }catch(error){
     ThreeDLiteRuntimeTelemetry?.error?.('browser-test-api-install',error);
   }
@@ -22030,7 +22030,7 @@ queueMicrotask(()=>{
 
 /* Stable global metadata for browser automation / Pages checks. */
 window.__3DLiteLiveBuild = Object.freeze({
-  version:'3.97.0',
+  version:'3.97.1',
   channel:'github-pages-dev',
   testApi:'ThreeDLiteBrowserTestAPI',
   reportNode:'#l3nRuntimeMachineReport',
@@ -22041,7 +22041,7 @@ document.documentElement.dataset.browserTestApi='1';
 
 
 /* ============================================================
-   3DLite v3.97.0 — Central Public Version Synchronizer
+   3DLite v3.97.1 — Central Public Version Synchronizer
    Public UI version is owned by ThreeDLiteVersion.
    Historical subsystem versions remain unchanged intentionally.
    ============================================================ */
