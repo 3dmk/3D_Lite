@@ -1,0 +1,29 @@
+{
+  "version": "3.94.0",
+  "source": "v3.93.0 L3N Runtime Learning",
+  "implemented": [
+    "Stable window.ThreeDLiteBrowserTestAPI",
+    "run all / run one / list tests",
+    "read runtime health and current report",
+    "copy report directly to clipboard",
+    "in-editor View Report panel",
+    "hidden machine-readable report DOM bridge",
+    "GitHub Pages live-build metadata",
+    "no second render loop",
+    "preserved final bootstrap"
+  ],
+  "release_gate": {
+    "javascript_syntax": "PASS",
+    "duplicate_ids": 0,
+    "duplicate_top_level_lexical": 0,
+    "standalone_boot_calls": 1,
+    "animation_loop_owner_calls": 1,
+    "external_script_inline_body_violations": 0,
+    "final_bootstrap_order": "PASS",
+    "browser_test_api": "PASS",
+    "copy_report": "PASS",
+    "view_report": "PASS",
+    "machine_report_bridge": "PASS"
+  },
+  "live_browser_confirmation": "PENDING"
+}

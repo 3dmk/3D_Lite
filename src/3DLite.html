@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>3DLite v3.93.0 L3N Runtime Learning</title>
+<title>3DLite v3.94.0 L3N GitHub Runtime</title>
 <style>
 :root{
   --bg:#202020;--panel:#2a2a2a;--panel2:#303030;--line:#444;--line2:#555;
@@ -21806,6 +21806,205 @@ window.__3DLiteRuntimeLearning = Object.freeze({
 });
 document.documentElement.dataset.l3nLearningVersion='6';
 document.documentElement.dataset.runtimeLearningVersion='3.93.0';
+
+
+/* ============================================================
+   3DLite v3.94.0 — GitHub Pages + Browser Test API
+   Adds machine-readable/copyable runtime evidence for L3N.
+   ============================================================ */
+
+const ThreeDLiteBrowserTestAPI = Object.freeze({
+  version:'3.94.0',
+
+  async runAll(){
+    return await ThreeDLiteRuntimeLearningEngine.run();
+  },
+
+  async run(name){
+    return await ThreeDLiteRuntimeWorkflowTests.runOne(name);
+  },
+
+  list(){
+    return ThreeDLiteRuntimeWorkflowTests.list();
+  },
+
+  getReport(){
+    return window.__3DLiteRuntimeLearningReport || null;
+  },
+
+  getReportJSON(pretty=true){
+    const r=this.getReport();
+    return r ? JSON.stringify(r,null,pretty?2:0) : null;
+  },
+
+  getHealth(){
+    return {
+      version:this.version,
+      booted:!!window.__3DLiteBooted,
+      renderer:!!renderer?.domElement,
+      scene:!!scene,
+      frame:ThreeDLiteFrameMonitor.capture(),
+      sceneProbe:ThreeDLiteRuntimeSceneProbe.capture(),
+      telemetry:ThreeDLiteRuntimeTelemetry?.summary?.()||null,
+      reportReady:!!window.__3DLiteRuntimeLearningReport
+    };
+  },
+
+  async copyReport(){
+    const text=this.getReportJSON(true);
+    if(!text)return false;
+    try{
+      await navigator.clipboard.writeText(text);
+      return true;
+    }catch(_){
+      const ta=document.createElement('textarea');
+      ta.value=text;
+      ta.style.position='fixed';
+      ta.style.left='-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok=document.execCommand('copy');
+      ta.remove();
+      return ok;
+    }
+  },
+
+  saveBaseline(){
+    const r=this.getReport();
+    return r ? ThreeDLiteRuntimeBaselineStore.save(r) : false;
+  },
+
+  clearBaseline(){
+    return ThreeDLiteRuntimeBaselineStore.clear();
+  }
+});
+window.ThreeDLiteBrowserTestAPI=ThreeDLiteBrowserTestAPI;
+
+/* Expose a stable machine-readable snapshot in the page.
+   This is intentionally read-only and does not start another render loop.
+*/
+const ThreeDLiteRuntimeReportBridge = Object.freeze({
+  update(report){
+    const node=document.getElementById('l3nRuntimeMachineReport');
+    if(node) node.textContent=JSON.stringify(report||{},null,2);
+    document.documentElement.dataset.l3nRuntimeReportReady=report?'1':'0';
+  },
+  install(){
+    if(document.getElementById('l3nRuntimeMachineReport'))return;
+    const pre=document.createElement('pre');
+    pre.id='l3nRuntimeMachineReport';
+    pre.hidden=true;
+    pre.setAttribute('aria-hidden','true');
+    pre.textContent='{}';
+    document.body.appendChild(pre);
+  }
+});
+window.ThreeDLiteRuntimeReportBridge=ThreeDLiteRuntimeReportBridge;
+
+/* Extend the existing Runtime Learning UI with non-download evidence access. */
+queueMicrotask(()=>{
+  try{
+    ThreeDLiteRuntimeReportBridge.install();
+
+    const bar=document.getElementById('l3nRuntimeLearningBar');
+    if(!bar || document.getElementById('l3nRuntimeCopyButton'))return;
+
+    const copy=document.createElement('button');
+    copy.id='l3nRuntimeCopyButton';
+    copy.textContent='Copy Report';
+    copy.style.cssText='background:#363636;color:#eee;border:1px solid #555;padding:5px 8px;cursor:pointer;border-radius:3px';
+
+    const view=document.createElement('button');
+    view.id='l3nRuntimeViewButton';
+    view.textContent='View Report';
+    view.style.cssText='background:#363636;color:#eee;border:1px solid #555;padding:5px 8px;cursor:pointer;border-radius:3px';
+
+    const status=document.getElementById('l3nRuntimeStatus');
+
+    copy.addEventListener('click',async()=>{
+      const ok=await ThreeDLiteBrowserTestAPI.copyReport();
+      if(status)status.textContent=ok?'Report copied':'Run test first';
+    });
+
+    view.addEventListener('click',()=>{
+      const report=ThreeDLiteBrowserTestAPI.getReport();
+      if(!report){
+        if(status)status.textContent='Run test first';
+        return;
+      }
+      let panel=document.getElementById('l3nRuntimeReportPanel');
+      if(!panel){
+        panel=document.createElement('div');
+        panel.id='l3nRuntimeReportPanel';
+        panel.style.cssText=[
+          'position:fixed','left:20px','top:20px','right:20px','bottom:70px',
+          'z-index:100000','background:#181818','border:1px solid #555',
+          'box-shadow:0 6px 24px #000b','display:flex','flex-direction:column',
+          'font:12px Consolas,monospace','color:#ddd'
+        ].join(';');
+
+        const head=document.createElement('div');
+        head.style.cssText='display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#242424;border-bottom:1px solid #444';
+        const title=document.createElement('strong');
+        title.textContent='L3N Runtime Report';
+        const close=document.createElement('button');
+        close.textContent='Close';
+        close.style.cssText='background:#363636;color:#eee;border:1px solid #555;padding:4px 8px;cursor:pointer';
+        close.onclick=()=>panel.remove();
+        head.append(title,close);
+
+        const body=document.createElement('pre');
+        body.id='l3nRuntimeReportPanelBody';
+        body.style.cssText='margin:0;padding:12px;overflow:auto;white-space:pre-wrap;user-select:text;flex:1';
+
+        panel.append(head,body);
+        document.body.appendChild(panel);
+      }
+      document.getElementById('l3nRuntimeReportPanelBody').textContent=
+        ThreeDLiteBrowserTestAPI.getReportJSON(true);
+    });
+
+    const exportBtn=document.getElementById('l3nRuntimeExportButton');
+    if(exportBtn){
+      bar.insertBefore(copy,exportBtn);
+      bar.insertBefore(view,exportBtn);
+    }else{
+      bar.append(copy,view);
+    }
+
+    // Keep hidden machine-readable report synchronized after every test run.
+    const run=document.getElementById('l3nRuntimeRunButton');
+    if(run && !run.dataset.v394Bridge){
+      run.dataset.v394Bridge='1';
+      run.addEventListener('click',()=>{
+        const sync=()=>{
+          if(window.__3DLiteRuntimeLearningReport){
+            ThreeDLiteRuntimeReportBridge.update(window.__3DLiteRuntimeLearningReport);
+          }else{
+            setTimeout(sync,100);
+          }
+        };
+        setTimeout(sync,0);
+      });
+    }
+
+    ThreeDLiteSubsystemHealth?.set?.('browserTestAPI','READY','v3.94.0 GitHub Pages runtime bridge installed');
+  }catch(error){
+    ThreeDLiteRuntimeTelemetry?.error?.('browser-test-api-install',error);
+  }
+});
+
+/* Stable global metadata for browser automation / Pages checks. */
+window.__3DLiteLiveBuild = Object.freeze({
+  version:'3.94.0',
+  channel:'github-pages-dev',
+  testApi:'ThreeDLiteBrowserTestAPI',
+  reportNode:'#l3nRuntimeMachineReport',
+  readyFlag:'data-l3n-runtime-report-ready'
+});
+
+document.documentElement.dataset.runtimeLearningVersion='3.94.0';
+document.documentElement.dataset.browserTestApi='1';
 
 /* FINAL BOOTSTRAP: all subsystem declarations/registrations above this line. */
 boot3DLite();

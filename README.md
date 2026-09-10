@@ -1,31 +1,23 @@
-# 3DLite
+# 3D_Lite
 
-Browser-based 3D editor with L3N iterative learning.
+Current GitHub Pages development build: **v3.94.0 — L3N GitHub Runtime**
 
-## Current development build
-**v3.93.0 — L3N Runtime Learning**
+## Live runtime workflow
 
-Open `index.html` to run the editor.
+1. Open the GitHub Pages site.
+2. Click **Run L3N Runtime Test**.
+3. Use **View Report** to inspect results in-page.
+4. Use **Copy Report** to copy the JSON directly into ChatGPT.
+5. `window.ThreeDLiteBrowserTestAPI` provides a stable browser automation API.
 
-### Runtime learning
-The current build includes:
-- browser frame/runtime measurements
-- operation profiling
-- workflow regression tests
-- runtime baseline comparison
-- L3N runtime-confirmed evidence ingestion
-- JSON runtime report export
+### Browser Test API
 
-## Repository layout
-- `index.html` — deployable/current browser entry point
-- `src/3DLite.html` — current development source
-- `builds/v3.93.0/` — versioned build snapshot
-- `reports/runtime/` — L3N/runtime reports
-- `docs/` — project/development notes
+```js
+await ThreeDLiteBrowserTestAPI.runAll()
+ThreeDLiteBrowserTestAPI.getHealth()
+ThreeDLiteBrowserTestAPI.getReport()
+ThreeDLiteBrowserTestAPI.getReportJSON()
+await ThreeDLiteBrowserTestAPI.copyReport()
+```
 
-## Branch policy
-- `main` — last browser-confirmed good build
-- `l3n/*` — active L3N development
-- `candidate/*` — release candidates
-
-Do not promote a candidate if startup/runtime release gates fail.
+`main` should remain the last browser-confirmed good build.
