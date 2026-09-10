@@ -1,0 +1,57 @@
+name: L3N Browser Smoke
+on:
+  push:
+    branches:
+      - l3n-dev
+    paths:
+      - .l3n-browser-smoke-trigger
+jobs:
+  browser-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: l3n-dev
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save playwright@1.55.0
+      - run: npx playwright install --with-deps chromium
+      - run: python3 -m http.server 8000 >/tmp/3dlite-http.log 2>&1 &
+      - name: Browser runtime smoke
+        run: |
+          node <<'NODE'
+          const { chromium } = require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--use-angle=swiftshader','--enable-webgl','--ignore-gpu-blocklist']});
+            const page=await browser.newPage({viewport:{width:1280,height:800}});
+            const pageErrors=[]; const consoleErrors=[];
+            page.on('pageerror',e=>pageErrors.push(String(e)));
+            page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
+            const response=await page.goto('http://127.0.0.1:8000/',{waitUntil:'domcontentloaded',timeout:60000});
+            if(!response||!response.ok())throw new Error('HTTP load failed');
+            await page.waitForTimeout(3000);
+            const state=await page.evaluate(()=>({
+              title:document.title,
+              viewport:!!document.getElementById('viewport'),
+              canvas:!!document.querySelector('#viewport canvas'),
+              rendered:document.documentElement.dataset.viewportRendered||null,
+              three:!!window.THREE,
+              deep:window.__3DLiteL3NDeepIntegration||null,
+              telemetry:window.ThreeDLiteRuntimeTelemetry?.snapshot?.()||null
+            }));
+            console.log(JSON.stringify({state,pageErrors,consoleErrors},null,2));
+            const failures=[];
+            if(!state.title.includes('3DLite v3.97.0'))failures.push('version title');
+            if(!state.viewport)failures.push('viewport missing');
+            if(!state.canvas)failures.push('canvas missing');
+            if(!state.three)failures.push('THREE missing');
+            if(state.rendered!=='true')failures.push('viewport did not render');
+            if(!state.deep)failures.push('deep integration snapshot missing');
+            if(state.deep?.regression?.passed===false)failures.push('L3N regression snapshot failed');
+            if(pageErrors.length)failures.push('page errors: '+pageErrors.join(' | '));
+            if(failures.length){await browser.close();throw new Error(failures.join('; '));}
+            await browser.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
