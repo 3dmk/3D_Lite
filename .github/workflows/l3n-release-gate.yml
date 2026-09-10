@@ -65,12 +65,15 @@ jobs:
           // 6) Three.js must be referenced somewhere because the viewport depends on it.
           if (!/three(\.min)?\.js|THREE\./i.test(html)) failures.push('Three.js dependency/reference not found');
 
-          // 7) Crude script-balance guard catches a common corruption class.
-          const openScripts = (html.match(/<script\b/gi)||[]).length;
-          const closeScripts = (html.match(/<\/script>/gi)||[]).length;
-          if (openScripts !== closeScripts) failures.push(`Unbalanced script tags: ${openScripts} open / ${closeScripts} close`);
+          // 7) Count only physical HTML script-tag lines. Raw '<script' text can legitimately
+          // appear inside JS strings/templates and must not be treated as an HTML tag.
+          const physicalOpenScripts = (html.match(/^[ \t]*<script\b[^>]*>/gmi)||[]).length;
+          const physicalCloseScripts = (html.match(/^[ \t]*<\/script\s*>/gmi)||[]).length;
+          if (physicalOpenScripts !== physicalCloseScripts) {
+            failures.push(`Unbalanced physical script tags: ${physicalOpenScripts} open / ${physicalCloseScripts} close`);
+          }
 
-          console.log(`Checked ${ids.length} ids and ${scriptCount} script blocks.`);
+          console.log(`Checked ${ids.length} ids, ${scriptCount} parsed script blocks, and ${physicalOpenScripts} physical script tags.`);
           if (failures.length) {
             console.error('\nL3N RELEASE GATE FAILED');
             for (const f of failures) console.error(' - ' + f);
@@ -88,5 +91,5 @@ jobs:
             echo ''
             echo '- Branch: `${{ github.ref_name }}`'
             echo '- Commit: `${{ github.sha }}`'
-            echo '- Gate checks startup structure, duplicate IDs, script integrity, loop ownership, runtime telemetry, and Three.js dependency markers.'
+            echo '- Gate checks startup structure, duplicate IDs, physical script integrity, loop ownership, runtime telemetry, and Three.js dependency markers.'
           } >> "$GITHUB_STEP_SUMMARY"
