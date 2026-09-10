@@ -3,13 +3,14 @@ name: L3N Integration Steps 2-7
 on:
   push:
     branches: [l3n-dev]
+    paths:
+      - '.l3n-integration-trigger'
 
 permissions:
   contents: write
 
 jobs:
   integrate:
-    if: ${{ github.actor != 'github-actions[bot]' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -52,11 +53,18 @@ L.startup();window.__3DLiteL3NIntegrationSnapshot=L.regression();})();
         shell: bash
         run: |
           node <<'NODE'
-          const fs=require('fs'),html=fs.readFileSync('index.html','utf8');if(!html.includes('__3DLiteL3NIntegrationSteps2to7'))throw new Error('integration missing');const re=/<script\b([^>]*)>([\s\S]*?)<\/script>/gi;let m,n=0;while((m=re.exec(html))){n++;if(/\bsrc\s*=/.test(m[1]||''))continue;new Function(m[2]||'');}console.log('Parsed '+n+' scripts');
+          const fs=require('fs'),html=fs.readFileSync('index.html','utf8');
+          if(!html.includes('__3DLiteL3NIntegrationSteps2to7'))throw new Error('integration missing');
+          const re=/<script\b([^>]*)>([\s\S]*?)<\/script>/gi;let m,n=0;
+          while((m=re.exec(html))){n++;if(/\bsrc\s*=/.test(m[1]||''))continue;new Function(m[2]||'');}
+          console.log('Parsed '+n+' scripts');
           NODE
       - name: Commit integrated build
         shell: bash
         run: |
           if git diff --quiet -- index.html; then exit 0; fi
-          git config user.name 'github-actions[bot]'; git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add index.html; git commit -m 'L3N steps 2-7: integrate reliability layers'; git push origin HEAD:l3n-dev
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'L3N steps 2-7: integrate reliability layers'
+          git push origin HEAD:l3n-dev
