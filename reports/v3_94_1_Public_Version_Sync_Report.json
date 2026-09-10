@@ -1,0 +1,30 @@
+{
+  "version": "3.94.1",
+  "source": "v3.94.0 L3N GitHub Runtime",
+  "problem_confirmed": [
+    "Top bar was hard-coded to 3DLite 3.90.0",
+    "ThreeDLiteVersion was hard-coded to 3.83.7",
+    "Renderer diagnostics displayed v3.83.7"
+  ],
+  "fixes": [
+    "Centralized public app version in ThreeDLiteVersion",
+    "Top bar synchronized at startup",
+    "Document title synchronized at startup",
+    "Renderer status now reads ThreeDLiteVersion.version",
+    "data-app-version exposed",
+    "window.__3DLiteAppVersion exposed",
+    "Historical subsystem versions left intact"
+  ],
+  "release_gate": {
+    "javascript_syntax": "PASS",
+    "duplicate_ids": 0,
+    "duplicate_top_level_lexical": 0,
+    "standalone_boot_calls": 1,
+    "animation_loop_owner_calls": 1,
+    "external_script_inline_body_violations": 0,
+    "final_bootstrap_order": "PASS",
+    "top_bar_version": "3DLite 3.94.1",
+    "central_version": "3.94.1"
+  },
+  "browser_confirmation": "PENDING"
+}

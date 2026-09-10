@@ -1,23 +1,15 @@
 # 3D_Lite
 
-Current GitHub Pages development build: **v3.94.0 — L3N GitHub Runtime**
+Current GitHub Pages development build: **v3.94.1 — Public Version Sync**
 
-## Live runtime workflow
+The visible editor version is now owned by `ThreeDLiteVersion.version`.
 
-1. Open the GitHub Pages site.
-2. Click **Run L3N Runtime Test**.
-3. Use **View Report** to inspect results in-page.
-4. Use **Copy Report** to copy the JSON directly into ChatGPT.
-5. `window.ThreeDLiteBrowserTestAPI` provides a stable browser automation API.
+Public version surfaces synchronized at startup:
+- browser title
+- top-right editor version label
+- renderer diagnostics version
+- `data-app-version`
+- `window.__3DLiteAppVersion`
+- live-build metadata
 
-### Browser Test API
-
-```js
-await ThreeDLiteBrowserTestAPI.runAll()
-ThreeDLiteBrowserTestAPI.getHealth()
-ThreeDLiteBrowserTestAPI.getReport()
-ThreeDLiteBrowserTestAPI.getReportJSON()
-await ThreeDLiteBrowserTestAPI.copyReport()
-```
-
-`main` should remain the last browser-confirmed good build.
+Historical subsystem version strings are intentionally preserved.

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>3DLite v3.94.0 L3N GitHub Runtime</title>
+<title>3DLite v3.94.1 L3N GitHub Runtime</title>
 <style>
 :root{
   --bg:#202020;--panel:#2a2a2a;--panel2:#303030;--line:#444;--line2:#555;
@@ -951,7 +951,7 @@ input[type="number"].numericDragging{
     <button class="menuBtn" data-menu="render" id="renderMenuBtn">Render</button>
     <button class="menuBtn" data-menu="help">Help</button>
     <div style="flex:1"></div>
-    <span class="small">3DLite 3.90.0</span>
+    <span class="small" id="threeDLitePublicVersion">3DLite 3.94.1</span>
   </div>
   
   <div id="renderMenuPopup" class="render-menu-popup" aria-hidden="true">
@@ -4161,7 +4161,7 @@ function validateArchitectureCore(){
   return {ok:errors.length===0,errors};
 }
 
-const ThreeDLiteVersion=Object.freeze({name:'3DLite',version:'3.83.7'});
+const ThreeDLiteVersion=Object.freeze({name:'3DLite',version:'3.94.1'});
 const LiteTraceVersion=Object.freeze({name:'LiteTrace Renderer',version:'1.1 RC1'});
 window.ThreeDLiteVersion=ThreeDLiteVersion;
 window.LiteTraceVersion=LiteTraceVersion;
@@ -12202,7 +12202,7 @@ var ViewportDebugLine=Object.freeze({
     const samples=perf?.samples||job?.progress?.currentSamples||0;
     const renderMs=Math.round(perf?.stageMs?.render||0);
     return this.set(
-      `LiteTrace ${LiteTrace?.version||'1.0 RC2'} | 3DLite v3.83.7 | ${engine}`+
+      `LiteTrace ${LiteTrace?.version||'1.0 RC2'} | 3DLite v${ThreeDLiteVersion.version} | ${engine}`+
       ` | renderer=${state}`+
       ` | workers=${workers?.workers??0}/${workers?.configuredSize??0}`+
       ` | tile=${tile??'—'}`+
@@ -21814,7 +21814,7 @@ document.documentElement.dataset.runtimeLearningVersion='3.93.0';
    ============================================================ */
 
 const ThreeDLiteBrowserTestAPI = Object.freeze({
-  version:'3.94.0',
+  version:'3.94.1',
 
   async runAll(){
     return await ThreeDLiteRuntimeLearningEngine.run();
@@ -21988,7 +21988,7 @@ queueMicrotask(()=>{
       });
     }
 
-    ThreeDLiteSubsystemHealth?.set?.('browserTestAPI','READY','v3.94.0 GitHub Pages runtime bridge installed');
+    ThreeDLiteSubsystemHealth?.set?.('browserTestAPI','READY','v3.94.1 GitHub Pages runtime bridge installed');
   }catch(error){
     ThreeDLiteRuntimeTelemetry?.error?.('browser-test-api-install',error);
   }
@@ -21996,15 +21996,39 @@ queueMicrotask(()=>{
 
 /* Stable global metadata for browser automation / Pages checks. */
 window.__3DLiteLiveBuild = Object.freeze({
-  version:'3.94.0',
+  version:'3.94.1',
   channel:'github-pages-dev',
   testApi:'ThreeDLiteBrowserTestAPI',
   reportNode:'#l3nRuntimeMachineReport',
   readyFlag:'data-l3n-runtime-report-ready'
 });
 
-document.documentElement.dataset.runtimeLearningVersion='3.94.0';
 document.documentElement.dataset.browserTestApi='1';
+
+
+/* ============================================================
+   3DLite v3.94.1 — Central Public Version Synchronizer
+   Public UI version is owned by ThreeDLiteVersion.
+   Historical subsystem versions remain unchanged intentionally.
+   ============================================================ */
+const ThreeDLitePublicVersionService=Object.freeze({
+  owner:'ArchitectureCore',
+  version:ThreeDLiteVersion.version,
+  sync(){
+    const value=ThreeDLiteVersion.version;
+    document.title=`3DLite v${value} L3N GitHub Runtime`;
+    const label=document.getElementById('threeDLitePublicVersion');
+    if(label) label.textContent=`3DLite ${value}`;
+    document.documentElement.dataset.appVersion=value;
+    window.__3DLiteAppVersion=value;
+    if(window.__3DLiteLiveBuild && window.__3DLiteLiveBuild.version!==value){
+      window.__3DLiteLiveBuild=Object.freeze({...window.__3DLiteLiveBuild,version:value});
+    }
+    return value;
+  }
+});
+window.ThreeDLitePublicVersionService=ThreeDLitePublicVersionService;
+ThreeDLitePublicVersionService.sync();
 
 /* FINAL BOOTSTRAP: all subsystem declarations/registrations above this line. */
 boot3DLite();
