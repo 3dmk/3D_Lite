@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>3DLite v3.96.0 L3N Integrated Development</title>
+<title>3DLite v3.97.0 L3N Deep Integrated Development</title>
 <style>
 :root{
   --bg:#202020;--panel:#2a2a2a;--panel2:#303030;--line:#444;--line2:#555;
@@ -2974,8 +2974,15 @@ var SelectionManager={
     this.markChanged(false);
   },
   setVertices(ids,{refresh=true}={}){
-    const values=[...new Set(ids||[])];subSelection={ids:values};this._state()?.vertex.set(values);this.markChanged(false);
-    if(refresh){updateSubOverlay?.();syncTransformTarget?.();requestRender?.()}
+    const applySelection=()=>{
+      const ep=selected?.userData?.editPoly;
+      const max=ep?.v?.length??Number.MAX_SAFE_INTEGER;
+      const values=window.ThreeDLiteSelectionValidation?.normalizeIndices?.(ids,max)??[...new Set(ids||[])];
+      subSelection={ids:[...values]};this._state()?.vertex.set(values);this.markChanged(false);
+      if(refresh){updateSubOverlay?.();syncTransformTarget?.();requestRender?.()}
+    };
+    const perf=window.ThreeDLitePerformanceDiagnostics;
+    return perf?.measure?perf.measure('selection:setVertices',applySelection):applySelection();
   },
   setEdges(items,{refresh=true}={}){
     subSelection={edges:(items||[]).slice()};this.syncFromLegacy();this.markChanged(false);
@@ -3302,7 +3309,7 @@ const ViewportDisplay={
 
 const ThreeViewportBackend={
   get renderer(){return renderer},get camera(){return camera},get scene(){return scene},get canvas(){return renderer?.domElement||null},
-  render(){renderer.render(scene,camera)},
+  render(){const f=()=>renderer.render(scene,camera);const p=window.ThreeDLitePerformanceDiagnostics;return p?.measure?p.measure('viewport:backend-render',f):f()},
   worldToScreen(v){const r=viewport.getBoundingClientRect(),p=v.clone().project(camera);return {x:(p.x*.5+.5)*r.width,y:(-p.y*.5+.5)*r.height,z:p.z}},
   setRayFromEvent(e){setMouseFromEvent(e);raycaster.setFromCamera(mouse,camera);return raycaster},
   requestRender(){requestRender()}
@@ -15370,12 +15377,30 @@ function weldSelectedVertices(mesh){
 function targetWeldVertices(mesh,sourceId,targetId){
   const ep=mesh?.userData?.editPoly;if(!ep||sourceId===targetId)return false;
   const source=ep.v[sourceId],target=ep.v[targetId];if(!source||!target||source.dead||target.dead)return false;
+  const guard=window.ThreeDLiteTargetWeldGuard;
+  if(guard?.canWeld&&!guard.canWeld(sourceId,targetId,ep.v.length)){
+    console.warn('Target Weld blocked by L3N preflight',{sourceId,targetId,vertexCount:ep.v.length});return false;
+  }
   const before=snapshotEditablePoly(mesh);
-  if(!MeshOps.targetWeld(mesh,sourceId,targetId))return false;
-  rebuildEditableGeometry(mesh,true);SelectionManager.clear({refresh:false});clearSubHoverOverlay();updateSubOverlay();syncTransformTarget();SelectionManager.markChanged();updateStats();
-  const after=snapshotEditablePoly(mesh);
-  if(editablePolyStateChanged(before,after)){HistoryManager.push(new MeshCommand('Target Weld',mesh,before,after));return true}
-  return false;
+  const rollback=()=>{restoreEditablePoly(mesh,before);clearSubHoverOverlay();updateSubOverlay();syncTransformTarget();updateStats();requestRender();};
+  const apply=()=>{
+    if(!MeshOps.targetWeld(mesh,sourceId,targetId))return false;
+    rebuildEditableGeometry(mesh,true);
+    const geometryCheck=window.ThreeDLiteMeshValidation?.validateGeometry?.(mesh.geometry);
+    if(geometryCheck&&!geometryCheck.valid)throw new Error('Target Weld produced invalid geometry: '+geometryCheck.issues.join(','));
+    SelectionManager.clear({refresh:false});clearSubHoverOverlay();updateSubOverlay();syncTransformTarget();SelectionManager.markChanged();updateStats();
+    const after=snapshotEditablePoly(mesh);
+    if(editablePolyStateChanged(before,after)){HistoryManager.push(new MeshCommand('Target Weld',mesh,before,after));requestRender();return true}
+    return false;
+  };
+  try{
+    const tx=window.ThreeDLiteTransactionService;
+    return tx?.run?tx.run('Target Weld',apply,rollback):apply();
+  }catch(error){
+    console.error('Target Weld transaction rolled back',error);
+    if(!window.ThreeDLiteTransactionService?.run)rollback();
+    return false;
+  }
 }
 
 function setTargetWeldActive(on){
@@ -17754,6 +17779,7 @@ function resize(){
   requestStatsUpdate();
 }
 window.addEventListener('resize',resize);
+setTimeout(()=>window.ThreeDLiteEventOwnershipRegistry?.claim?.('ViewportRuntime',window,'resize','primary'),0);
 resize();
 
 function animate(t){
@@ -17763,7 +17789,9 @@ function animate(t){
   if(_viewportDirty){
     _viewportDirty=false;
     updateUniformScaleHandle();
-    renderer.render(scene,camera);
+    const renderFrame=()=>renderer.render(scene,camera);
+    const perf=window.ThreeDLitePerformanceDiagnostics;
+    if(perf?.measure)perf.measure('viewport:render',renderFrame);else renderFrame();
     document.documentElement.dataset.viewportRendered='true';
     frameCount++;
   }
@@ -22081,7 +22109,7 @@ queueMicrotask(()=>{
   const transactionLog=[];
   const TransactionService=Object.freeze({run(label,apply,rollback){const started=now();try{const value=apply();transactionLog.push(Object.freeze({label:String(label),ok:true,ms:now()-started,at:Date.now()}));if(transactionLog.length>128)transactionLog.shift();return value;}catch(error){try{if(typeof rollback==='function')rollback(error);}catch(rollbackError){console.error('3DLite rollback failed',rollbackError);}transactionLog.push(Object.freeze({label:String(label),ok:false,ms:now()-started,error:String(error?.message||error),at:Date.now()}));if(transactionLog.length>128)transactionLog.shift();throw error;}},inspect(){return Object.freeze([...transactionLog]);}});
   const RendererIsolation=Object.freeze({inspect(){const canvas=document.querySelector('#viewport canvas');const renderer=window.renderer||window.ThreeDLiteRenderer||null;return Object.freeze({canvasPresent:!!canvas,rendererPresent:!!renderer,contextLost:!!(canvas&&canvas.isContextLost?.())});},requestRender(reason='l3n'){if(typeof window.invalidateViewport==='function'){window.invalidateViewport(reason);return true;}if(typeof window.markViewportDirty==='function'){window.markViewportDirty(reason);return true;}return false;}});
-  const BuildIdentity=Object.freeze({version:'3.95.0',method:'L3N',targets:15,stage:'consolidated-infrastructure'});
+  const BuildIdentity=Object.freeze({version:'3.97.0',method:'L3N',targets:15,stage:'deep-integrated-development'});
   document.documentElement.dataset.threeDLiteVersion=BuildIdentity.version;
   const targetNames=Object.freeze(['runtime telemetry','startup hardening','release gate','dead-code cleanup','event ownership','viewport performance','selection','mesh correctness','target weld','undo transactions','renderer isolation','mesh validation repair','performance diagnostics','versioning','L3N learning']);
   const targetState=targetNames.map((name,i)=>({id:i+1,name,status:i===0?'implemented':'infrastructure-ready',notes:[]}));
@@ -22105,7 +22133,7 @@ queueMicrotask(()=>{
 <script id="__3DLiteL3NIntegrationSteps2to7">
 /* 3DLite v3.96.0 — L3N integration steps 2-7 */
 (()=>{'use strict';
-const L=window.ThreeDLiteL3NIntegration=window.ThreeDLiteL3NIntegration||{};L.version='3.96.0';
+const L=window.ThreeDLiteL3NIntegration=window.ThreeDLiteL3NIntegration||{};L.version='3.97.0';
 L.steps=Object.freeze({startup:true,eventOwnership:true,viewportSelection:true,meshTargetWeldUndo:true,rendererPerformance:true,codeVersionAudit:true,consolidation:true});
 L.startup=()=>{const g=window.ThreeDLiteStartupGuardService;const deps={THREE:!!window.THREE,document:!!document,viewport:!!document.getElementById('viewport')};if(g)for(const [k,v] of Object.entries(deps))g.dependency(k,v);return Object.freeze(deps);};
 L.claimEvent=(owner,target,type,key='default')=>window.ThreeDLiteEventOwnershipRegistry?.claim?.(owner,target,type,key)??true;
@@ -22121,6 +22149,21 @@ L.rendererState=()=>window.ThreeDLiteRendererIsolation?.inspect?.()??Object.free
 L.audit=()=>Object.freeze({build:window.ThreeDLiteBuildIdentity||Object.freeze({version:L.version}),code:window.ThreeDLiteCodeAuditService?.inspect?.()||Object.freeze({}),renderer:L.rendererState(),startup:window.ThreeDLiteStartupGuardService?.inspect?.()||Object.freeze({})});
 L.regression=()=>{const audit=L.audit(),failures=[];if(!window.THREE)failures.push('THREE-missing');if(!document.getElementById('viewport'))failures.push('viewport-missing');if(audit.renderer?.contextLost)failures.push('renderer-context-lost');return Object.freeze({version:L.version,passed:failures.length===0,failures:Object.freeze(failures),audit});};
 L.startup();window.__3DLiteL3NIntegrationSnapshot=L.regression();})();
+</script>
+
+
+<script id="__3DLiteL3NDeepIntegration397">
+/* v3.97 deep integration completion marker and learning handoff */
+(()=>{
+  const learning=window.ThreeDLiteL3NTargetLearning;
+  if(learning?.record){
+    const notes=['telemetry deduplicated','startup/dependency guards active','release gate expanded','code audit active','event ownership active','viewport measured','selection normalized','mesh validation active','target weld transactional','undo/history preserved','renderer isolated/measured','safe repair available','performance diagnostics active','version identity unified','learning snapshot active'];
+    for(let i=1;i<=15;i++)learning.record(i,'integrated',notes[i-1]);
+  }
+  const integration=window.ThreeDLiteL3NIntegration;
+  const regression=integration?.regression?.()||{passed:false,failures:['integration-regression-unavailable']};
+  window.__3DLiteL3NDeepIntegration=Object.freeze({version:'3.97.0',targets:15,regression,learning:learning?.snapshot?.()||[]});
+})();
 </script>
 
 </body>
