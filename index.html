@@ -951,7 +951,7 @@ input[type="number"].numericDragging{
     <button class="menuBtn" data-menu="render" id="renderMenuBtn">Render</button>
     <button class="menuBtn" data-menu="help">Help</button>
     <div style="flex:1"></div>
-    <span class="small" id="threeDLitePublicVersion">3DLite 3.97.1</span>
+    <span class="small" id="threeDLitePublicVersion">3DLite 3.97.2</span>
   </div>
   
   <div id="renderMenuPopup" class="render-menu-popup" aria-hidden="true">
@@ -4168,7 +4168,7 @@ function validateArchitectureCore(){
   return {ok:errors.length===0,errors};
 }
 
-const ThreeDLiteVersion=Object.freeze({name:'3DLite',version:'3.97.1'});
+const ThreeDLiteVersion=Object.freeze({name:'3DLite',version:'3.97.2'});
 const LiteTraceVersion=Object.freeze({name:'LiteTrace Renderer',version:'1.1 RC1'});
 window.ThreeDLiteVersion=ThreeDLiteVersion;
 window.LiteTraceVersion=LiteTraceVersion;
@@ -21848,7 +21848,7 @@ document.documentElement.dataset.runtimeLearningVersion='3.93.0';
    ============================================================ */
 
 const ThreeDLiteBrowserTestAPI = Object.freeze({
-  version:'3.97.1',
+  version:'3.97.2',
 
   async runAll(){
     return await ThreeDLiteRuntimeLearningEngine.run();
@@ -22022,7 +22022,7 @@ queueMicrotask(()=>{
       });
     }
 
-    ThreeDLiteSubsystemHealth?.set?.('browserTestAPI','READY','v3.97.1 GitHub Pages runtime bridge installed');
+    ThreeDLiteSubsystemHealth?.set?.('browserTestAPI','READY','v3.97.2 GitHub Pages runtime bridge installed');
   }catch(error){
     ThreeDLiteRuntimeTelemetry?.error?.('browser-test-api-install',error);
   }
@@ -22030,7 +22030,7 @@ queueMicrotask(()=>{
 
 /* Stable global metadata for browser automation / Pages checks. */
 window.__3DLiteLiveBuild = Object.freeze({
-  version:'3.97.1',
+  version:'3.97.2',
   channel:'github-pages-dev',
   testApi:'ThreeDLiteBrowserTestAPI',
   reportNode:'#l3nRuntimeMachineReport',
@@ -22041,7 +22041,7 @@ document.documentElement.dataset.browserTestApi='1';
 
 
 /* ============================================================
-   3DLite v3.97.1 — Central Public Version Synchronizer
+   3DLite v3.97.2 — Central Public Version Synchronizer
    Public UI version is owned by ThreeDLiteVersion.
    Historical subsystem versions remain unchanged intentionally.
    ============================================================ */
