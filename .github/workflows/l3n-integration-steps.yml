@@ -1,0 +1,117 @@
+name: L3N Integration Steps 2-7
+
+on:
+  push:
+    branches: [l3n-dev]
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: l3n-dev
+      - name: Integrate L3N targets into runtime
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text()
+          marker='id="__3DLiteL3NIntegrationSteps2to7"'
+          if marker in s:
+              raise SystemExit(0)
+          block=r'''
+<script id="__3DLiteL3NIntegrationSteps2to7">
+/* 3DLite v3.96.0 — L3N integration steps 2-7 */
+(()=>{
+'use strict';
+const L=window.ThreeDLiteL3NIntegration=window.ThreeDLiteL3NIntegration||{};
+L.version='3.96.0';
+L.steps=Object.freeze({startup:true,eventOwnership:true,viewportSelection:true,meshTargetWeldUndo:true,rendererPerformance:true,codeVersionAudit:true,consolidation:true});
+
+// Step 2: startup + event ownership integration.
+L.startup=()=>{
+ const g=window.ThreeDLiteStartupGuardService;
+ const deps={THREE:!!window.THREE,document:!!document,viewport:!!document.getElementById('viewport')};
+ if(g){for(const [k,v] of Object.entries(deps))g.dependency(k,v);}
+ return Object.freeze(deps);
+};
+L.claimEvent=(owner,target,type,key='default')=>window.ThreeDLiteEventOwnershipRegistry?.claim?.(owner,target,type,key)??true;
+
+// Step 3: viewport + selection integration.
+L.normalizeSelection=(indices,max)=>window.ThreeDLiteSelectionValidation?.normalizeIndices?.(indices,max)??Object.freeze([]);
+L.requestViewport=(reason='l3n-integration')=>window.ThreeDLiteRendererIsolation?.requestRender?.(reason)??false;
+L.measureSelection=(label,fn)=>window.ThreeDLitePerformanceDiagnostics?.measure?.('selection:'+label,fn)??fn();
+
+// Step 4: mesh validation + Target Weld + Undo transaction integration.
+L.validateMesh=g=>window.ThreeDLiteMeshValidation?.validateGeometry?.(g)??Object.freeze({valid:!!g,issues:Object.freeze([])});
+L.targetWeldPreflight=(source,target,geometry)=>window.ThreeDLiteTargetWeldGuard?.preflight?.(source,target,geometry)??Object.freeze({allowed:false});
+L.meshTransaction=(label,apply,rollback)=>window.ThreeDLiteTransactionService?.run?.(label,apply,rollback)??apply();
+L.safeMeshOperation=(label,geometry,apply,rollback)=>{
+ const before=L.validateMesh(geometry);
+ if(!before.valid)throw new Error('3DLite mesh preflight failed: '+before.issues.join(','));
+ return L.meshTransaction(label,()=>window.ThreeDLitePerformanceDiagnostics?.measure?.('mesh:'+label,()=>{
+   const value=apply();
+   const after=L.validateMesh(geometry);
+   if(!after.valid)throw new Error('3DLite mesh postflight failed: '+after.issues.join(','));
+   L.requestViewport('mesh:'+label);
+   return value;
+ })??apply(),rollback);
+};
+
+// Step 5: renderer + performance integration.
+L.measureViewport=(label,fn)=>window.ThreeDLitePerformanceDiagnostics?.measure?.('viewport:'+label,fn)??fn();
+L.rendererState=()=>window.ThreeDLiteRendererIsolation?.inspect?.()??Object.freeze({rendererPresent:false});
+
+// Step 6: code/version audit; diagnostic only, never deletes live code blindly.
+L.audit=()=>Object.freeze({
+ build:window.ThreeDLiteBuildIdentity||Object.freeze({version:L.version}),
+ code:window.ThreeDLiteCodeAuditService?.inspect?.()||Object.freeze({}),
+ renderer:L.rendererState(),
+ startup:window.ThreeDLiteStartupGuardService?.inspect?.()||Object.freeze({})
+});
+
+// Step 7: whole-system consolidation snapshot and regression API.
+L.regression=()=>{
+ const audit=L.audit();
+ const failures=[];
+ if(!window.THREE)failures.push('THREE-missing');
+ if(!document.getElementById('viewport'))failures.push('viewport-missing');
+ if(audit.renderer?.contextLost)failures.push('renderer-context-lost');
+ return Object.freeze({version:L.version,passed:failures.length===0,failures:Object.freeze(failures),audit});
+};
+L.startup();
+window.__3DLiteL3NIntegrationSnapshot=L.regression();
+})();
+</script>
+'''
+          if '</body>' not in s: raise SystemExit('Missing </body>; refusing patch')
+          s=s.replace('</body>',block+'\n</body>',1)
+          s=s.replace('<title>3DLite v3.95.0 L3N 15-Target Development</title>','<title>3DLite v3.96.0 L3N Integrated Development</title>',1)
+          p.write_text(s)
+          PY
+      - name: Validate integrated build
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs=require('fs'); const html=fs.readFileSync('index.html','utf8');
+          if(!html.includes('__3DLiteL3NIntegrationSteps2to7')) throw new Error('integration layer missing');
+          if(!html.includes('3DLite v3.96.0 L3N Integrated Development')) throw new Error('version missing');
+          const re=/<script\b([^>]*)>([\s\S]*?)<\/script>/gi; let m,n=0;
+          while((m=re.exec(html))){n++;if(/\bsrc\s*=/.test(m[1]||''))continue;new Function(m[2]||'');}
+          console.log('Parsed '+n+' script blocks.');
+          NODE
+      - name: Commit integrated build
+        shell: bash
+        run: |
+          if git diff --quiet -- index.html; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'L3N steps 2-7: integrate reliability layers'
+          git push origin HEAD:l3n-dev
