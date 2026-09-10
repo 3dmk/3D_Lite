@@ -1,0 +1,36 @@
+3DLite v3.93.0 — L3N Runtime Learning
+=====================================
+
+- Robust runtime statistics: median, mean, P95, variance
+- Operation profiler
+- Frame monitor using existing RAF telemetry without a second render loop
+- Scene/render counters
+- Local runtime baseline storage
+- Version-to-version runtime comparator
+- Safe temporary-object test harness with editor/history restoration
+- Built-in live tests: startup, create/transform, undo/redo create, mesh integrity, render state
+- Automatic L3N ingestion as runtime-confirmed evidence
+- Automatic regression-test proposal on runtime failure
+- JSON runtime report export
+- Compact Run L3N Runtime Test / Export JSON controls
+
+Use:
+1. Open the HTML in a browser.
+2. Click Run L3N Runtime Test.
+3. Wait for the status to show pass/fail counts.
+4. Click Export JSON.
+5. Provide that JSON report for the next L3N/code improvement cycle.
+
+Static gates:
+- javascript_syntax: PASS
+- duplicate_ids: 0
+- duplicate_top_level_lexical: 0
+- standalone_boot_calls: 1
+- existing_animation_loop_owner_calls: 1
+- external_script_inline_body_violations: 0
+- final_bootstrap_order: PASS
+- runtime_test_button_present: PASS
+- runtime_json_export_present: PASS
+- automatic_l3n_ingestion_present: PASS
+
+Live browser results: PENDING
