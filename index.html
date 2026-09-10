@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>3DLite v3.94.1 L3N GitHub Runtime</title>
+<title>3DLite v3.94.2 L3N Gen3 Pass 1</title>
 <style>
 :root{
   --bg:#202020;--panel:#2a2a2a;--panel2:#303030;--line:#444;--line2:#555;
@@ -20637,12 +20637,18 @@ const ThreeDLiteRuntimeTelemetry = (()=> {
   };
   let lastFrame=0;
   function markFrame(ts=performance.now()){
+    // Multiple RAF callbacks can share one browser frame timestamp. Record the
+    // display frame once so telemetry does not create false 0 ms samples/FPS.
+    if(ts===lastFrame)return false;
     if(lastFrame){
       const dt=ts-lastFrame;
-      metrics.frameTimes.push(dt);
-      if(metrics.frameTimes.length>240)metrics.frameTimes.shift();
+      if(dt>0){
+        metrics.frameTimes.push(dt);
+        if(metrics.frameTimes.length>240)metrics.frameTimes.shift();
+      }
     }
     lastFrame=ts; metrics.lastFrameAt=ts; metrics.frames++;
+    return true;
   }
   function operation(name,duration,meta={}){
     metrics.operations.push({name:String(name),duration:Number(duration)||0,meta,at:Date.now()});
