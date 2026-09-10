@@ -1,0 +1,24 @@
+name: L3N Renderer Fix v3.97.1
+on:
+  push:
+    branches: [l3n-dev]
+    paths: ['.l3n-renderer-fix-trigger']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: l3n-dev
+      - run: python3 tools/l3n_renderer_fix_v3971.py
+      - run: |
+          node -e "const fs=require('fs'),h=fs.readFileSync('index.html','utf8');if(!h.includes(\"version:'3.97.1'\"))process.exit(1);const r=/<script\\b([^>]*)>([\\s\\S]*?)<\\/script>/gi;let m;while((m=r.exec(h))){if(!/\\bsrc\\s*=/.test(m[1]||''))new Function(m[2]||'')}"
+      - run: |
+          if git diff --quiet -- index.html; then exit 0; fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add index.html
+          git commit -m "L3N v3.97.1: fix renderer validation defects"
+          git push origin HEAD:l3n-dev
