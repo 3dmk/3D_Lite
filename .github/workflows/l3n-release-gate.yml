@@ -1,0 +1,83 @@
+name: L3N Release Gate
+
+on:
+  push:
+    branches: [l3n-dev]
+  pull_request:
+    branches: [main]
+
+jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate 3DLite startup structure
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const html = fs.readFileSync('index.html','utf8');
+          const failures = [];
+
+          if (!/<!doctype html>/i.test(html)) failures.push('Missing <!doctype html>');
+          if (!/<html\b/i.test(html) || !/<\/html>/i.test(html)) failures.push('Malformed html root');
+          if (!/<body\b/i.test(html) || !/<\/body>/i.test(html)) failures.push('Malformed body');
+
+          const scriptRe = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
+          let m;
+          let scriptCount = 0;
+          while ((m = scriptRe.exec(html))) {
+            scriptCount++;
+            const attrs = m[1] || '';
+            const body = (m[2] || '').trim();
+            if (/\bsrc\s*=/.test(attrs) && body.length) {
+              failures.push(`External script tag #${scriptCount} contains inline body code`);
+            }
+          }
+
+          const ids = [...html.matchAll(/\bid\s*=\s*["']([^"']+)["']/gi)].map(x=>x[1]);
+          const seen = new Set();
+          const dup = new Set();
+          for (const id of ids) { if (seen.has(id)) dup.add(id); else seen.add(id); }
+          if (dup.size) failures.push('Duplicate IDs: ' + [...dup].join(', '));
+
+          const loopStarts = [...html.matchAll(/requestAnimationFrame\s*\(\s*animate\s*\)/g)].length;
+          if (loopStarts > 1) failures.push(`Multiple animation-loop starts detected: ${loopStarts}`);
+
+          const hasErrorCapture = /unhandledrejection/.test(html) && /window-error/.test(html);
+          if (!hasErrorCapture) failures.push('Runtime error telemetry markers missing');
+
+          if (!/L3N Runtime Learning/.test(html)) failures.push('L3N Runtime Learning block missing');
+          if (!/three(\.min)?\.js|THREE\./i.test(html)) failures.push('Three.js dependency/reference not found');
+
+          const openScripts = (html.match(/<script\b/gi)||[]).length;
+          const closeScripts = (html.match(/<\/script>/gi)||[]).length;
+          if (openScripts !== closeScripts) failures.push(`Unbalanced script tags: ${openScripts} open / ${closeScripts} close`);
+
+          console.log(`Checked ${ids.length} ids and ${scriptCount} script blocks.`);
+          if (failures.length) {
+            console.error('\nL3N RELEASE GATE FAILED');
+            for (const f of failures) console.error(' - ' + f);
+            process.exit(1);
+          }
+          console.log('L3N RELEASE GATE PASSED');
+          NODE
+
+      - name: Record gate summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '## 3DLite L3N Release Gate'
+            echo ''
+            echo '- Branch: `${{ github.ref_name }}`'
+            echo '- Commit: `${{ github.sha }}`'
+            echo '- Gate checks startup structure, duplicate IDs, script integrity, loop ownership, runtime telemetry, and Three.js dependency markers.'
+          } >> "$GITHUB_STEP_SUMMARY"
