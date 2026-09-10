@@ -2,89 +2,26 @@ name: L3N Targets 2-15 Implementation
 
 on:
   push:
-    branches:
-      - l3n-dev
+    branches: [l3n-dev]
 
 permissions:
   contents: write
 
 jobs:
   implement:
-    if: ${{ github.actor != 'github-actions[bot]' }}
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: l3n-dev
-
-      - name: Apply staged reliability and modeling infrastructure
-        shell: bash
-        run: |
-          python3 <<'PY'
-          from pathlib import Path
-          p=Path('index.html')
-          s=p.read_text()
-          marker='id="__3DLiteL3N15TargetLayer"'
-          if marker in s:
-              print('L3N 15-target layer already present.')
-              raise SystemExit(0)
-          block=r'''
-<script id="__3DLiteL3N15TargetLayer">
-(()=>{
-  'use strict';
-  const now=()=>typeof performance!=='undefined'&&performance.now?performance.now():Date.now();
-  const finite=n=>Number.isFinite(Number(n));
-  const startupState={bootClaims:0,finalized:false,issues:[]};
-  const StartupGuard=Object.freeze({claim(owner='unknown'){startupState.bootClaims++;if(startupState.bootClaims>1)startupState.issues.push('multiple-bootstrap-claims:'+owner);return startupState.bootClaims===1;},dependency(name,value){const ok=!!value;if(!ok)startupState.issues.push('missing-dependency:'+name);return ok;},finalize(){startupState.finalized=true;return this.inspect();},inspect(){return Object.freeze({bootClaims:startupState.bootClaims,finalized:startupState.finalized,issues:Object.freeze([...startupState.issues])});}});
-  const CodeAudit=Object.freeze({inspect(){const html=document.documentElement.outerHTML;const names=[...html.matchAll(/\b(?:const|let|var|function|class)\s+(ThreeDLite[A-Za-z0-9_$]+)/g)].map(m=>m[1]);const count=new Map();for(const n of names)count.set(n,(count.get(n)||0)+1);return Object.freeze({threeDLiteDeclarations:names.length,duplicateDeclarations:Object.freeze([...count].filter(([,c])=>c>1).map(([name,count])=>Object.freeze({name,count})))});}});
-  const eventClaims=new Map();
-  const EventOwnership=Object.freeze({claim(owner,target,type,key='default'){const id=[owner,type,key].join(':');if(eventClaims.has(id))return false;eventClaims.set(id,Object.freeze({owner:String(owner),target,type:String(type),key:String(key),at:Date.now()}));return true;},release(owner,type,key='default'){return eventClaims.delete([owner,type,key].join(':'));},inspect(){return Object.freeze([...eventClaims.values()]);}});
-  const perfRows=[];
-  const PerformanceDiagnostics=Object.freeze({budget:Object.freeze({frameMs:16.7,hoverMs:4,selectionMs:8,meshOperationMs:50}),measure(label,fn){const t0=now();try{return fn();}finally{const ms=now()-t0;perfRows.push(Object.freeze({label:String(label),ms,at:Date.now()}));if(perfRows.length>256)perfRows.shift();}},record(label,ms){if(!finite(ms))return false;perfRows.push(Object.freeze({label:String(label),ms:Number(ms),at:Date.now()}));if(perfRows.length>256)perfRows.shift();return true;},inspect(){const rows=[...perfRows];const mean=rows.length?rows.reduce((s,r)=>s+r.ms,0)/rows.length:0;const max=rows.length?Math.max(...rows.map(r=>r.ms)):0;return Object.freeze({samples:rows.length,meanMs:mean,maxMs:max,recent:Object.freeze(rows.slice(-32))});}});
-  const SelectionValidation=Object.freeze({normalizeIndices(indices,maxExclusive){const max=Math.max(0,Number(maxExclusive)||0);return Object.freeze([...new Set((indices||[]).map(Number).filter(i=>Number.isInteger(i)&&i>=0&&i<max))].sort((a,b)=>a-b));},validMode(mode){return ['object','vertex','edge','polygon'].includes(String(mode));}});
-  const MeshValidation=Object.freeze({validateGeometry(geometry){const issues=[];if(!geometry||!geometry.attributes||!geometry.attributes.position)return Object.freeze({valid:false,issues:Object.freeze(['missing-position-attribute'])});const pos=geometry.attributes.position;const count=Number(pos.count)||0;for(let i=0;i<count;i++){if(!finite(pos.getX(i))||!finite(pos.getY(i))||!finite(pos.getZ(i))){issues.push('non-finite-position:'+i);break;}}const idx=geometry.index?.array;if(idx){for(let i=0;i<idx.length;i++){if(!Number.isInteger(Number(idx[i]))||idx[i]<0||idx[i]>=count){issues.push('invalid-index:'+i);break;}}for(let i=0;i+2<idx.length;i+=3){const a=idx[i],b=idx[i+1],c=idx[i+2];if(a===b||b===c||a===c){issues.push('degenerate-triangle:'+i/3);break;}}}return Object.freeze({valid:issues.length===0,vertexCount:count,indexCount:idx?idx.length:0,issues:Object.freeze(issues)});},safeRepairNormals(geometry){if(!geometry||typeof geometry.computeVertexNormals!=='function')return false;geometry.computeVertexNormals();if(geometry.attributes?.normal)geometry.attributes.normal.needsUpdate=true;return true;}});
-  const TargetWeldGuard=Object.freeze({canWeld(source,target,vertexCount){const s=Number(source),t=Number(target),n=Number(vertexCount);return Number.isInteger(s)&&Number.isInteger(t)&&Number.isInteger(n)&&n>0&&s>=0&&t>=0&&s<n&&t<n&&s!==t;},preflight(source,target,geometry){const validation=MeshValidation.validateGeometry(geometry);return Object.freeze({allowed:validation.valid&&this.canWeld(source,target,validation.vertexCount),validation});}});
-  const transactionLog=[];
-  const TransactionService=Object.freeze({run(label,apply,rollback){const started=now();try{const value=apply();transactionLog.push(Object.freeze({label:String(label),ok:true,ms:now()-started,at:Date.now()}));if(transactionLog.length>128)transactionLog.shift();return value;}catch(error){try{if(typeof rollback==='function')rollback(error);}catch(rollbackError){console.error('3DLite rollback failed',rollbackError);}transactionLog.push(Object.freeze({label:String(label),ok:false,ms:now()-started,error:String(error?.message||error),at:Date.now()}));if(transactionLog.length>128)transactionLog.shift();throw error;}},inspect(){return Object.freeze([...transactionLog]);}});
-  const RendererIsolation=Object.freeze({inspect(){const canvas=document.querySelector('#viewport canvas');const renderer=window.renderer||window.ThreeDLiteRenderer||null;return Object.freeze({canvasPresent:!!canvas,rendererPresent:!!renderer,contextLost:!!(canvas&&canvas.isContextLost?.())});},requestRender(reason='l3n'){if(typeof window.invalidateViewport==='function'){window.invalidateViewport(reason);return true;}if(typeof window.markViewportDirty==='function'){window.markViewportDirty(reason);return true;}return false;}});
-  const BuildIdentity=Object.freeze({version:'3.95.0',method:'L3N',targets:15,stage:'consolidated-infrastructure'});
-  document.documentElement.dataset.threeDLiteVersion=BuildIdentity.version;
-  const targetNames=Object.freeze(['runtime telemetry','startup hardening','release gate','dead-code cleanup','event ownership','viewport performance','selection','mesh correctness','target weld','undo transactions','renderer isolation','mesh validation repair','performance diagnostics','versioning','L3N learning']);
-  const targetState=targetNames.map((name,i)=>({id:i+1,name,status:i===0?'implemented':'infrastructure-ready',notes:[]}));
-  const TargetLearning=Object.freeze({record(id,status,note=''){const row=targetState.find(x=>x.id===Number(id));if(!row)return false;row.status=String(status||row.status);if(note)row.notes.push(String(note));if(row.notes.length>16)row.notes.shift();return true;},snapshot(){return Object.freeze(targetState.map(x=>Object.freeze({...x,notes:Object.freeze([...x.notes])})));}});
-  window.ThreeDLiteStartupGuardService=window.ThreeDLiteStartupGuardService||StartupGuard;
-  window.ThreeDLiteCodeAuditService=window.ThreeDLiteCodeAuditService||CodeAudit;
-  window.ThreeDLiteEventOwnershipRegistry=window.ThreeDLiteEventOwnershipRegistry||EventOwnership;
-  window.ThreeDLitePerformanceDiagnostics=window.ThreeDLitePerformanceDiagnostics||PerformanceDiagnostics;
-  window.ThreeDLiteSelectionValidation=window.ThreeDLiteSelectionValidation||SelectionValidation;
-  window.ThreeDLiteMeshValidation=window.ThreeDLiteMeshValidation||MeshValidation;
-  window.ThreeDLiteTargetWeldGuard=window.ThreeDLiteTargetWeldGuard||TargetWeldGuard;
-  window.ThreeDLiteTransactionService=window.ThreeDLiteTransactionService||TransactionService;
-  window.ThreeDLiteRendererIsolation=window.ThreeDLiteRendererIsolation||RendererIsolation;
-  window.ThreeDLiteBuildIdentity=BuildIdentity;
-  window.ThreeDLiteL3NTargetLearning=TargetLearning;
-  window.__3DLiteL3N15TargetSnapshot=Object.freeze({version:BuildIdentity.version,installed:true,targets:TargetLearning.snapshot()});
-})();
-</script>
-'''
-          if '</body>' not in s:
-              raise SystemExit('Missing closing body tag; refusing unsafe patch.')
-          s=s.replace('</body>',block+'\n</body>',1)
-          s=s.replace('<title>3DLite v3.94.2 L3N Gen3 Pass 1</title>','<title>3DLite v3.95.0 L3N 15-Target Development</title>',1)
-          s=s.replace('3DLite v3.93.0 — L3N Runtime Learning','3DLite v3.95.0 — L3N Runtime Learning',1)
-          p.write_text(s)
-          print('Applied consolidated L3N target infrastructure.')
-          PY
-
-      - name: Validate patch markers
-        shell: bash
+      - name: Apply target patch
+        run: python3 tools/l3n_targets_patch.py
+      - name: Verify markers
         run: |
           grep -q '__3DLiteL3N15TargetLayer' index.html
           grep -q '3DLite v3.95.0 L3N 15-Target Development' index.html
-
-      - name: Commit implementation
-        shell: bash
+      - name: Commit patch
         run: |
           if git diff --quiet -- index.html; then exit 0; fi
           git config user.name 'github-actions[bot]'
