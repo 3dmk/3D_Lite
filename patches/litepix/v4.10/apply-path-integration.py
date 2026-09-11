@@ -3,14 +3,17 @@ import re
 p=Path('index.html')
 s=p.read_text(encoding='utf-8')
 
-# Public identity/version.
-s,n=re.subn(r'<title>LitePix v4\.09\.0[^<]*</title>','<title>LitePix v4.10.0 Native Path Integration</title>',s,count=1)
-if n!=1: raise SystemExit('release-blocking: v4.09 title anchor not found')
-pat=r"const\s+LitePixVersion\s*=\s*Object\.freeze\(\{(?P<body>[^;]*?version:'4\.09\.0'[^;]*?)\}\);"
-m=re.search(pat,s)
-if not m: raise SystemExit('release-blocking: v4.09 LitePixVersion anchor not found')
-body=m.group('body').replace("version:'4.09.0'","version:'4.10.0'",1)
-s=s[:m.start()]+"const LitePixVersion=Object.freeze({"+body+"});"+s[m.end():]
+# Public identity/version. Safe on both the v4.09 source and an already-gated v4.10 branch.
+target_title='<title>LitePix v4.10.0 Native Path Integration</title>'
+if target_title not in s:
+    s,n=re.subn(r'<title>LitePix v4\.09\.0[^<]*</title>',target_title,s,count=1)
+    if n!=1: raise SystemExit('release-blocking: v4.09/v4.10 title anchor not found')
+if not re.search(r"const\s+LitePixVersion\s*=\s*Object\.freeze\(\{[^;]*version:'4\.10\.0'[^;]*\}\);",s):
+    pat=r"const\s+LitePixVersion\s*=\s*Object\.freeze\(\{(?P<body>[^;]*?version:'4\.09\.0'[^;]*?)\}\);"
+    m=re.search(pat,s)
+    if not m: raise SystemExit('release-blocking: v4.09/v4.10 LitePixVersion anchor not found')
+    body=m.group('body').replace("version:'4.09.0'","version:'4.10.0'",1)
+    s=s[:m.start()]+"const LitePixVersion=Object.freeze({"+body+"});"+s[m.end():]
 
 # Load native path bridge after optimized runtime.
 loader='<script src="./litepix/path-integration-v4.10.js"></script>'
