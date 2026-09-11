@@ -1,0 +1,536 @@
+
+===== class ProgressiveAccumulator @ 8413 =====
+8393:       ray=new RenderRay(origin,sample.direction,eps,Infinity,rayType,bounce+1);
+8394:     }
+8395: 
+8396:     return radiance;
+8397:   },
+8398: 
+8399:   tracePixel(job,acceleration,compiled,primaryRay,pixelSeed){
+8400:     const primaryHitRecord=acceleration.trace(primaryRay);
+8401:     if(!primaryHitRecord.hit){
+8402:       const env=this.safeColor(RenderCoreD.evaluateEnvironment(job,compiled,primaryRay.direction));
+8403:       return {radiance:env,primaryHit:false,primaryHitRecord:null};
+8404:     }
+8405:     return {
+8406:       radiance:this.trace(job,acceleration,compiled,primaryRay,pixelSeed,primaryHitRecord),
+8407:       primaryHit:true,
+8408:       primaryHitRecord
+8409:     };
+8410:   }
+8411: });
+8412: 
+8413: class ProgressiveAccumulator{
+8414:   constructor(width,height){
+8415:     this.width=width;this.height=height;
+8416:     const n=width*height;
+8417:     this.sum=new Float64Array(n*3);
+8418:     this.mean=new Float64Array(n);
+8419:     this.m2=new Float64Array(n);
+8420:     this.samples=new Uint32Array(n);
+8421:     this.converged=new Uint8Array(n);
+8422:     this.active=n;
+8423:   }
+8424:   add(index,color){
+8425:     const s=++this.samples[index];
+8426:     const o=index*3;
+8427:     this.sum[o]+=color[0];this.sum[o+1]+=color[1];this.sum[o+2]+=color[2];
+8428:     const lum=.2126*color[0]+.7152*color[1]+.0722*color[2];
+8429:     const delta=lum-this.mean[index];
+8430:     this.mean[index]+=delta/s;
+8431:     this.m2[index]+=delta*(lum-this.mean[index]);
+8432:   }
+8433:   variance(index){
+8434:     const s=this.samples[index];
+8435:     return s>1?Math.max(0,this.m2[index]/(s-1)):Infinity;
+8436:   }
+8437:   noise(index){
+8438:     const mean=Math.max(1e-6,Math.abs(this.mean[index]));
+8439:     const s=Math.max(1,this.samples[index]);
+8440:     return Math.sqrt(this.variance(index)/s)/mean;
+8441:   }
+8442:   shouldSample(index,settings){
+8443:     if(!settings.adaptive)return this.samples[index]<settings.maxSamples;
+8444:     if(this.samples[index]<settings.minSamples)return true;
+8445:     if(this.samples[index]>=settings.maxSamples)return false;
+8446:     return this.noise(index)>settings.noiseThreshold;
+8447:   }
+8448:   markConverged(index){
+8449:     if(this.converged[index])return;
+8450:     this.converged[index]=1;this.active=Math.max(0,this.active-1);
+8451:   }
+8452:   resolveRGBA(settings,primaryMask){
+8453:     const rgba=new Uint8ClampedArray(this.width*this.height*4);
+8454:     for(let i=0;i<this.width*this.height;i++){
+8455:       const s=Math.max(1,this.samples[i]),o=i*3,p=i*4;
+8456:       const linear=[this.sum[o]/s,this.sum[o+1]/s,this.sum[o+2]/s];
+8457:       const mapped=RenderColor.linearToSrgb(RenderColor.aces(linear));
+
+===== async render(job @ 5947 =====
+5927:     if(cached)return cached;
+5928:     return RenderAccelerationCache16.put(scene,builder());
+5929:   }
+5930: });
+5931: window.RenderAccelerationCache16=RenderAccelerationCache16;
+5932: window.RenderAccelerationHierarchy16=RenderAccelerationHierarchy16;
+5933: 
+5934: const RenderAccelerationBuilder=Object.freeze({
+5935:   build(renderScene){
+5936:     return RenderAccelerationHierarchy16.build(renderScene,()=>{
+5937:       const packets=RenderGeometryCompiler.compileScene(renderScene);
+5938:       const store=new RenderTriangleStore();
+5939:       packets.forEach((p,i)=>store.addPacket(p,i));
+5940:       store.finalize();
+5941:       return new RenderAccelerationSet(store,new RenderBVH(store,4));
+5942:     });
+5943:   }
+5944: });
+5945: 
+5946: const DiagnosticRenderer=Object.freeze({
+5947:   async render(job,acceleration,onProgress=()=>{}){
+5948:     const width=Math.min(640,Math.max(1,job.progress.resolution[0]));
+5949:     const height=Math.min(360,Math.max(1,job.progress.resolution[1]));
+5950:     const rgba=new Uint8ClampedArray(width*height*4);
+5951:     const cameraSnapshot=job.renderScene.camera;
+5952:     const rowChunk=8;
+5953:     for(let y=0;y<height;y++){
+5954:       if(job.cancelled||job.controlToken16?.cancelled?.())throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
+5955:       while((job.paused||job.controlToken16?.paused?.())&&!job.cancelled)await new Promise(r=>setTimeout(r,20));
+5956:       for(let x=0;x<width;x++){
+5957:         const ray=RenderCameraRayGenerator.ray(cameraSnapshot,x,y,width,height);
+5958:         perf16.addRay(RenderRayType.CAMERA);
+5959:         perf16.addRay(RenderRayType.CAMERA);
+5960:         const hit=acceleration.trace(ray);
+5961:         const o=(y*width+x)*4;
+5962:         if(hit.hit){
+5963:           const n=hit.geometricNormal;
+5964:           rgba[o]=Math.round((n[0]*.5+.5)*255);
+5965:           rgba[o+1]=Math.round((n[1]*.5+.5)*255);
+5966:           rgba[o+2]=Math.round((n[2]*.5+.5)*255);
+5967:           rgba[o+3]=255;
+5968:         }else{
+5969:           rgba[o]=24;rgba[o+1]=24;rgba[o+2]=24;rgba[o+3]=255;
+5970:         }
+5971:       }
+5972:       if(y%rowChunk===0)onProgress((y+1)/height);
+5973:       if(y%rowChunk===0)await new Promise(r=>setTimeout(r,0));
+5974:     }
+5975:     return {width,height,rgba};
+5976:   }
+5977: });
+5978: 
+5979: const RenderGroup4Contract=Object.freeze({
+5980:   owns:Object.freeze([
+5981:     'ray representation','ray/triangle intersection','ray/AABB intersection',
+5982:     'triangle store','binary BVH','camera ray generation','diagnostic normal render'
+5983:   ]),
+5984:   consumes:Object.freeze([
+5985:     'Core A immutable RenderSceneSnapshot','Group 3 RenderGeometryCompiler'
+5986:   ]),
+5987:   doesNotOwn:Object.freeze([
+5988:     'editor scene','MNMesh','selection','transforms','editor materials',
+5989:     'physical BSDF','lights','GI','denoising'
+5990:   ])
+5991: });
+
+===== PathIntegrator.trace( @ 7564 =====
+7544:    3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — CORE D
+7545:    CLEAN GROUP 7 + GROUP 8 CONSOLIDATION
+7546:    ============================================================ */
+7547: 
+7548: var RenderCoreD=Object.freeze({
+7549:   version:'3.90.0-core-d',
+7550: 
+7551:   evaluateSurfaceDirect(job,acceleration,compiled,ray,hit,pixelSeed,options={}){
+7552:     return DirectLightingIntegrator.evaluate(
+7553:       job,acceleration,compiled,ray,hit,pixelSeed,options
+7554:     );
+7555:   },
+7556: 
+7557:   evaluateEnvironment(job,compiled,rayDirection){
+7558:     return EnvironmentSampler.background(
+7559:       job.renderScene,job.settings,compiled.lights,rayDirection
+7560:     );
+7561:   },
+7562: 
+7563:   tracePath(job,acceleration,compiled,ray,pixelSeed,initialHit=null){
+7564:     return PathIntegrator.trace(
+7565:       job,acceleration,compiled,ray,pixelSeed,initialHit
+7566:     );
+7567:   },
+7568: 
+7569:   visible(acceleration,origin,direction,maxDistance){
+7570:     return ShadowVisibility.visible(acceleration,origin,direction,maxDistance);
+7571:   },
+7572: 
+7573:   validate(){
+7574:     const errors=[];
+7575:     const g7=validateRenderGroup7();if(!g7.ok)errors.push(...g7.errors);
+7576:     const g8=validateRenderGroup8();if(!g8.ok)errors.push(...g8.errors);
+7577:     if(typeof this.evaluateSurfaceDirect!=='function')errors.push('Core D direct evaluator missing');
+7578:     if(typeof this.tracePath!=='function')errors.push('Core D path tracer missing');
+7579:     if(typeof this.evaluateEnvironment!=='function')errors.push('Core D environment evaluator missing');
+7580:     return {ok:errors.length===0,errors};
+7581:   }
+7582: });
+7583: window.RenderCoreD=RenderCoreD;
+7584: 
+7585: const RenderGroup7Contract=Object.freeze({
+7586:   owns:Object.freeze([
+7587:     'shadow-ray visibility',
+7588:     'shadow bias',
+7589:     'stochastic area-light sampling',
+7590:     'constant-color dome environment radiance',
+7591:     'direct-light sample accumulation'
+7592:   ]),
+7593:   consumes:Object.freeze([
+7594:     'Core B acceleration trace',
+7595:     'Core C materials and scene lights',
+7596:     'Group 5 PhysicalBSDF'
+7597:   ]),
+7598:   doesNotOwn:Object.freeze([
+7599:     'path GI',
+7600:     'MIS',
+7601:     'adaptive sampling',
+7602:     'HDRI importance sampling',
+7603:     'light cache',
+7604:     'path guiding'
+7605:   ])
+7606: });
+7607: 
+7608: function runRenderGroup7SelfTests(){
+
+===== tracePath(job @ 10469 =====
+10449:   createExecution(job){
+10450:     if(!job?.renderScene)throw new SnapshotError('Missing immutable RenderSceneSnapshot');
+10451:     try{return {job,geometry:RenderCoreB.createExecutionGeometry(job.renderScene)};}
+10452:     catch(err){throw err instanceof RendererError?err:new GeometryCompileError(String(err?.message||err),err);}
+10453:   },
+10454:   async prepareExecution(execution,pool,onProgress=()=>{}){
+10455:     try{execution.prepared=await RenderCoreB.prepareWorkerGeometry(execution.job,pool,execution.geometry,onProgress);return execution;}
+10456:     catch(err){throw err instanceof RendererError?err:new WorkerError(String(err?.message||err),err);}
+10457:   },
+10458:   buildAcceleration(execution){
+10459:     try{execution.acceleration=RenderCoreB.buildAccelerationFromPackets(execution.geometry.accelerationPackets);RendererRuntimeState.accelerationReady=true;return execution;}
+10460:     catch(err){RendererRuntimeState.accelerationReady=false;throw new BVHError(String(err?.message||err),err);}
+10461:   },
+10462:   validate(){const errors=[];const a=RenderCoreA.validate(),b=RenderCoreB.validate(),p3=validateRenderPart3();if(!a.ok)errors.push(...a.errors);if(!b.ok)errors.push(...b.errors);if(!p3.ok)errors.push(...p3.errors);return {ok:errors.length===0,errors};}
+10463: });
+10464: const RenderCore2=Object.freeze({
+10465:   version:'3.90.0-core-2',
+10466:   compileShading(job){try{const c=RenderCoreC.compileScene(job.renderScene,job.settings);return Object.freeze({materials:c.materials,lights:c.lights,settings:job.settings,scene:job.renderScene});}catch(err){throw new MaterialError(String(err?.message||err),err);}},
+10467:   evaluateDirect(job,acceleration,compiled,ray,hit,pixelSeed=1,options={}){return RenderCoreD.evaluateSurfaceDirect(job,acceleration,compiled,ray,hit,pixelSeed,options);},
+10468:   evaluateEnvironment(job,compiled,rayDirection){return RenderCoreD.evaluateEnvironment(job,compiled,rayDirection);},
+10469:   tracePath(job,acceleration,compiled,ray,pixelSeed,initialHit=null){return RenderCoreD.tracePath(job,acceleration,compiled,ray,pixelSeed,initialHit);},
+10470:   validate(){const errors=[];const c=RenderCoreC.validate(),d=RenderCoreD.validate(),p4=validateRenderPart4(),p5=validateRenderPart5();if(!c.ok)errors.push(...c.errors);if(!d.ok)errors.push(...d.errors);if(!p4.ok)errors.push(...p4.errors);if(!p5.ok)errors.push(...p5.errors);return {ok:errors.length===0,errors};}
+10471: });
+10472: const RendererMasterCore=Object.freeze({
+10473:   version:'3.90.0-master-core',
+10474:   createRequest(mode='full',region=null,settingsOverride=null){
+10475:     return RenderCore1.createRequest(mode,region,settingsOverride);
+10476:   },
+10477:   async prepare(job,pool,onProgress=()=>{}){
+10478:     try{window.ThreeDLiteRenderWindow3979?.stage?.(job,'Geometry',0);}catch(_){}
+10479:     let t=RenderProfiler16.begin();
+10480:     let e=RenderCore1.createExecution(job);
+10481:     RenderPerformanceRuntime16.markStage(job,'geometry',t);
+10482:     try{window.ThreeDLiteRenderWindow3979?.stage?.(job,'Geometry',1);}catch(_){}
+10483: 
+10484:     try{window.ThreeDLiteRenderWindow3979?.stage?.(job,'Worker Geometry',0);}catch(_){}
+10485:     t=RenderProfiler16.begin();
+10486:     e=await RenderCore1.prepareExecution(e,pool,onProgress);
+10487:     RenderPerformanceRuntime16.markStage(job,'worker',t);
+10488:     try{window.ThreeDLiteRenderWindow3979?.stage?.(job,'Worker Geometry',1);}catch(_){}
+10489: 
+10490:     try{window.ThreeDLiteRenderWindow3979?.stage?.(job,'BVH',0);}catch(_){}
+10491:     t=RenderProfiler16.begin();
+10492:     e=RenderCore1.buildAcceleration(e);
+10493:     RenderPerformanceRuntime16.markStage(job,'bvh',t);
+10494:     try{window.ThreeDLiteRenderWindow3979?.stage?.(job,'BVH',1);}catch(_){}
+10495: 
+10496:     try{window.ThreeDLiteRenderWindow3979?.stage?.(job,'Shading',0);}catch(_){}
+10497:     t=performance.now();
+10498:     const baseShading=RenderCore2.compileShading(job);
+10499:     e.shading=RenderCoreE.prepareShading(job,e.acceleration,baseShading);
+10500:     RenderPerformanceRuntime16.markStage(job,'shading',t);
+10501:     try{window.ThreeDLiteRenderWindow3979?.stage?.(job,'Shading',1);}catch(_){}
+10502:     return e;
+10503:   },
+10504:   rendererFor(job){return RenderCoreE.rendererFor(job);},
+10505:   validate(){
+10506:     const errors=[];
+10507:     const a=RenderCore1.validate(),b=RenderCore2.validate(),e=RenderCoreE.validate(),p6=validateRenderPart6();
+10508:     if(!a.ok)errors.push(...a.errors);
+10509:     if(!b.ok)errors.push(...b.errors);
+10510:     if(!e.ok)errors.push(...e.errors);
+10511:     if(!p6.ok)errors.push(...p6.errors);
+10512:     if(typeof RenderCore1.createRequest!=='function')errors.push('Core 1 request API missing');
+10513:     if(typeof RenderCore1.createExecution!=='function')errors.push('Core 1 execution API missing');
+
+===== accumulator.add @ 8540 =====
+8520:       })();
+8521:       if(activePixels16.length===0)break;
+8522: 
+8523:       const workQueue16=RenderWorkQueue16.fromIndices(activePixels16,Math.max(32,RenderCoreH.tileSize(job)*4));
+8524:       await workQueue16.run(async batch=>{
+8525:         for(const i of batch){
+8526:           if(job.cancelled||job.controlToken16?.cancelled?.())throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
+8527:           const x=i%width,y=(i/width)|0;
+8528:           const seed=((i+1)^Math.imul(pass+1,0x9E3779B1))>>>0;
+8529:           const jitterX=PathSampler.scalar(seed,pass,20)-.5;
+8530:           const jitterY=PathSampler.scalar(seed,pass,21)-.5;
+8531:           const ray=RenderPart5Core.ray(
+8532:             job.renderScene.camera,
+8533:             rr.x0+x+jitterX,rr.y0+y+jitterY,
+8534:             rr.fullW,rr.fullH
+8535:           );
+8536:           perf16.addRay(RenderRayType.CAMERA);
+8537:           const sample=RenderPart5Core.trace(job,acceleration,compiled,ray,seed);
+8538:           perf16.samples++;
+8539:           primaryMask[i]|=sample.primaryHit?1:0;
+8540:           accumulator.add(i,sample.radiance);
+8541:           if(pass===0){
+8542:             const ph=sample.primaryHitRecord;
+8543:             if(ph?.hit)RenderAOVUtil.writePrimary(aovs,i,RenderAOVUtil.primary(job,acceleration,compiled,ray,ph,seed));
+8544:             else RenderAOVUtil.writePrimary(aovs,i,null);
+8545:           }
+8546:           sampledThisPass++;
+8547:         }
+8548:         perf16.yields++;
+8549:         await new Promise(r=>setTimeout(r,0));
+8550:       });
+8551:       completedPasses=pass+1;
+8552:       const rgba=accumulator.resolveRGBA(settings,primaryMask);
+8553:       job.previewFrame={
+8554:         width,height,rgba,
+8555:         metadata:Object.freeze({
+8556:           renderer:'Group 9 Progressive Path GI',
+8557:           samplesPerPixel:accumulator.averageSamples(),
+8558:           currentPass:completedPasses,
+8559:           maxSamples,
+8560:           adaptive:!!settings.adaptive,
+8561:           noise:accumulator.averageNoise(),
+8562:           activePixels:accumulator.active
+8563:         })
+8564:       };
+8565:       job.progress.currentSamples=Math.round(accumulator.averageSamples());
+8566:       job.progress.maximumSamples=maxSamples;
+8567:       job.progress.noise=accumulator.averageNoise();
+8568:       onProgress(Math.min(1,completedPasses/passLimit));
+8569: 
+8570:       if(!progressive)break;
+8571:       if(settings.adaptive&&completedPasses>=settings.minSamples&&accumulator.active===0)break;
+8572:       if(sampledThisPass===0)break;
+8573:     }
+8574: 
+8575:     const rgba=accumulator.resolveRGBA(settings,primaryMask);
+8576:     for(let i=0;i<width*height;i++){
+8577:       const s=Math.max(1,accumulator.samples[i]),o=i*3;
+8578:       const beauty=[accumulator.sum[o]/s,accumulator.sum[o+1]/s,accumulator.sum[o+2]/s];
+8579:       aovs.set3('Beauty',i,beauty);
+8580:       aovs.set1('Noise',i,Number.isFinite(accumulator.noise(i))?accumulator.noise(i):0);
+8581:       const d=aovs.get('Direct Lighting'),e=aovs.get('Emission');
+8582:       const direct=d?[d[o],d[o+1],d[o+2]]:[0,0,0];
+8583:       const emission=e?[e[o],e[o+1],e[o+2]]:[0,0,0];
+8584:       aovs.set3('Global Illumination',i,[
+
+===== for(let pass @ 8513 =====
+8493:     const rr=RenderRegion14.resolve(job,640,360);
+8494:     const width=rr.width,height=rr.height;
+8495:     const compiled=RenderPart5Core.compile(job);
+8496:     const settings=job.settings;
+8497:     job.lightCache=LightCacheEstimator.enabled(job)?new RenderLightCache(job,acceleration):null;
+8498:     job.lightTree=RenderCoreH.createLightTree(job,compiled);
+8499:     job.pathGuide=RenderCoreH.createPathGuide(job,acceleration);
+8500:     job.progress.gi=settings.secondaryGI==='Light Cache'?'Brute Force + Light Cache':settings.secondaryGI;
+8501:     const accumulator=new ProgressiveAccumulator(width,height);
+8502:     const aovs=new RenderAOVSet(width,height);
+8503:     const primaryMask=new Uint8Array(width*height);
+8504:     const perf16=RenderCoreH.attachPerformance(job);
+8505:     const rowChunk16=RenderCoreH.yieldRows(job);
+8506:     const renderStart16=RenderProfiler16.begin();
+8507:     LiteTraceExecutionContext.activeJob=job;LiteTraceExecutionContext.performance=perf16;
+8508:     const maxSamples=Math.max(1,settings.maxSamples||1);
+8509:     const progressive=settings.progressive!==false;
+8510:     const passLimit=progressive?maxSamples:1;
+8511:     let completedPasses=0;
+8512: 
+8513:     for(let pass=0;pass<passLimit;pass++){
+8514:       if(job.cancelled)throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
+8515:       while(job.paused&&!job.cancelled)await new Promise(r=>setTimeout(r,20));
+8516: 
+8517:       let sampledThisPass=0;
+8518:       const activePixels16=progressive?accumulator.compactActive(settings):(()=>{
+8519:         const a=new Uint32Array(width*height);for(let i=0;i<a.length;i++)a[i]=i;return a;
+8520:       })();
+8521:       if(activePixels16.length===0)break;
+8522: 
+8523:       const workQueue16=RenderWorkQueue16.fromIndices(activePixels16,Math.max(32,RenderCoreH.tileSize(job)*4));
+8524:       await workQueue16.run(async batch=>{
+8525:         for(const i of batch){
+8526:           if(job.cancelled||job.controlToken16?.cancelled?.())throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
+8527:           const x=i%width,y=(i/width)|0;
+8528:           const seed=((i+1)^Math.imul(pass+1,0x9E3779B1))>>>0;
+8529:           const jitterX=PathSampler.scalar(seed,pass,20)-.5;
+8530:           const jitterY=PathSampler.scalar(seed,pass,21)-.5;
+8531:           const ray=RenderPart5Core.ray(
+8532:             job.renderScene.camera,
+8533:             rr.x0+x+jitterX,rr.y0+y+jitterY,
+8534:             rr.fullW,rr.fullH
+8535:           );
+8536:           perf16.addRay(RenderRayType.CAMERA);
+8537:           const sample=RenderPart5Core.trace(job,acceleration,compiled,ray,seed);
+8538:           perf16.samples++;
+8539:           primaryMask[i]|=sample.primaryHit?1:0;
+8540:           accumulator.add(i,sample.radiance);
+8541:           if(pass===0){
+8542:             const ph=sample.primaryHitRecord;
+8543:             if(ph?.hit)RenderAOVUtil.writePrimary(aovs,i,RenderAOVUtil.primary(job,acceleration,compiled,ray,ph,seed));
+8544:             else RenderAOVUtil.writePrimary(aovs,i,null);
+8545:           }
+8546:           sampledThisPass++;
+8547:         }
+8548:         perf16.yields++;
+8549:         await new Promise(r=>setTimeout(r,0));
+8550:       });
+8551:       completedPasses=pass+1;
+8552:       const rgba=accumulator.resolveRGBA(settings,primaryMask);
+8553:       job.previewFrame={
+8554:         width,height,rgba,
+8555:         metadata:Object.freeze({
+8556:           renderer:'Group 9 Progressive Path GI',
+8557:           samplesPerPixel:accumulator.averageSamples(),
+
+===== for(let y=0 @ 6665 =====
+6645:     const n=Math.max(1,Math.min(8,Number(concurrency)||1));
+6646:     for(let w=0;w<n;w++)runners.push((async()=>{
+6647:       for(;;){
+6648:         const batch=this.claim();
+6649:         if(!batch)break;
+6650:         await workerFn(batch,w);
+6651:         this.completed++;
+6652:       }
+6653:     })());
+6654:     await Promise.all(runners);
+6655:     return this.completed;
+6656:   }
+6657: }
+6658: window.RenderWorkQueue16=RenderWorkQueue16;
+6659: 
+6660: var RenderTileScheduler16=Object.freeze({
+6661:   makeTiles(width,height,tileSize){
+6662:     const size=Math.max(4,Math.min(128,Number(tileSize)||16));
+6663:     const tiles=[];
+6664:     let id=0;
+6665:     for(let y=0;y<height;y+=size){
+6666:       for(let x=0;x<width;x+=size){
+6667:         tiles.push(Object.freeze({
+6668:           id:id++,x,y,
+6669:           width:Math.min(size,width-x),
+6670:           height:Math.min(size,height-y)
+6671:         }));
+6672:       }
+6673:     }
+6674:     return tiles;
+6675:   },
+6676:   async runLocal(job,tiles,runTile,onProgress=()=>{}){
+6677:     const total=Math.max(1,tiles.length);
+6678:     for(let i=0;i<tiles.length;i++){
+6679:       if(job.cancelled)throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
+6680:       while(job.paused&&!job.cancelled)await new Promise(r=>setTimeout(r,20));
+6681:       await runTile(tiles[i],i);
+6682:       onProgress((i+1)/total);
+6683:       if((i&1)===1)await new Promise(r=>setTimeout(r,0));
+6684:     }
+6685:   }
+6686: });
+6687: window.RenderTileScheduler16=RenderTileScheduler16;
+6688: 
+6689: /* 3DLite v3.99.1 — LiteTrace execution-context dependency repair */
+6690: var LiteTraceExecutionContext=(function(){
+6691:   const existing=window.LiteTraceExecutionContext;
+6692:   if(existing&&typeof existing==='object')return existing;
+6693:   const ctx={activeJob:null,performance:null};
+6694:   window.LiteTraceExecutionContext=ctx;
+6695:   return ctx;
+6696: })();
+6697: window.__3DLiteLiteTraceExecutionContext3978=true;
+6698: 
+6699: var BasicDirectRenderer=Object.freeze({
+6700:   shade(job,acceleration,materials,lights,ray,hit){
+6701:     const material=RenderMaterialLibrary.resolveHit(job.renderScene,materials,hit);
+6702:     if(material.shading==='unlit'){
+6703:       return RenderColor.add(material.baseColor,RenderColor.mul(material.emissive,material.emissiveIntensity));
+6704:     }
+6705: 
+6706:     const n=SurfaceInterpolator.normal(acceleration,hit);
+6707:     const v=RayMath.mul(ray.direction,-1);
+6708:     let color=RenderColor.mul(material.emissive,material.emissiveIntensity);
+6709: 
+
+===== for(let x=0 @ 9303 =====
+9283:       return dr*dr+dg*dg+db*db;
+9284:     };
+9285:     const guideWeight=(a,b)=>{
+9286:       let wgt=1;
+9287:       if(albedo){
+9288:         const dr=albedo[a*3]-albedo[b*3],dg=albedo[a*3+1]-albedo[b*3+1],db=albedo[a*3+2]-albedo[b*3+2];
+9289:         wgt*=Math.exp(-(dr*dr+dg*dg+db*db)*8);
+9290:       }
+9291:       if(normal){
+9292:         const d=normal[a*3]*normal[b*3]+normal[a*3+1]*normal[b*3+1]+normal[a*3+2]*normal[b*3+2];
+9293:         wgt*=Math.max(0,Math.min(1,(d-.5)*2));
+9294:       }
+9295:       if(depth){
+9296:         const da=depth[a],db=depth[b],scale=Math.max(1e-4,Math.max(Math.abs(da),Math.abs(db)));
+9297:         wgt*=Math.exp(-Math.abs(da-db)/(scale*.03+1e-4));
+9298:       }
+9299:       return wgt;
+9300:     };
+9301: 
+9302:     for(let y=0;y<h;y++){
+9303:       for(let x=0;x<w;x++){
+9304:         const i=y*w+x;
+9305:         let r=0,g=0,b=0,sum=0;
+9306:         for(let oy=-radius;oy<=radius;oy++){
+9307:           const yy=Math.max(0,Math.min(h-1,y+oy));
+9308:           for(let ox=-radius;ox<=radius;ox++){
+9309:             const xx=Math.max(0,Math.min(w-1,x+ox)),j=yy*w+xx;
+9310:             const spatial=Math.exp(-(ox*ox+oy*oy)/(radius===2?3:1.5));
+9311:             const edge=Math.exp(-colorDist(i,j)*2.5);
+9312:             const wt=Math.max(1e-8,spatial*edge*guideWeight(i,j));
+9313:             r+=beauty[j*3]*wt;g+=beauty[j*3+1]*wt;b+=beauty[j*3+2]*wt;sum+=wt;
+9314:           }
+9315:         }
+9316:         const inv=1/Math.max(1e-8,sum);
+9317:         out[i*3]=r*inv;out[i*3+1]=g*inv;out[i*3+2]=b*inv;
+9318:       }
+9319:     }
+9320:     return out;
+9321:   }
+9322: });
+9323: 
+9324: const RenderPresenter13=Object.freeze({
+9325:   linearFrame(data,width,height,settings,metadata={}){
+9326:     if(!data||data.length!==width*height*3)return null;
+9327:     const rgba=new Uint8ClampedArray(width*height*4);
+9328:     for(let i=0;i<width*height;i++){
+9329:       const c=RenderToneMapper13.rgb([data[i*3],data[i*3+1],data[i*3+2]],settings);
+9330:       rgba[i*4]=Math.round(c[0]*255);
+9331:       rgba[i*4+1]=Math.round(c[1]*255);
+9332:       rgba[i*4+2]=Math.round(c[2]*255);
+9333:       rgba[i*4+3]=255;
+9334:     }
+9335:     return {width,height,rgba,metadata:Object.freeze({...metadata})};
+9336:   },
+9337:   frame(job,name){
+9338:     const channels=job?.renderChannels||job?.beautyFrame?.channels;
+9339:     if(!channels)return name==='Beauty'?job?.beautyFrame||null:null;
+9340:     const settings=job.settings||{};
+9341:     if(name==='Beauty'){
+9342:       return this.linearFrame(channels.get('Beauty'),channels.width,channels.height,settings,{channel:'Beauty',group13:true});
+9343:     }
+9344:     if(name==='Denoised Beauty'){
+9345:       const data=RenderDenoiser13.process(channels,settings.denoise||'Off');
+9346:       return this.linearFrame(data,channels.width,channels.height,settings,{channel:'Denoised Beauty',denoise:settings.denoise||'Off',group13:true});
+9347:     }
