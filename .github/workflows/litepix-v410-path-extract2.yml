@@ -1,0 +1,37 @@
+name: LitePix v4.10 Path Extract 2
+on:
+  push:
+    branches: [litepix-v4.10-path-integration]
+    paths: ['.github/workflows/litepix-v410-path-extract2.yml']
+permissions:
+  contents: write
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: litepix-v4.10-path-integration
+          fetch-depth: 0
+      - run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          lines=Path('index.html').read_text(encoding='utf-8').splitlines()
+          terms=['const PathIntegrator','class ProgressiveAccumulator','class ProgressivePathRenderer','async render(job','PathIntegrator.trace(','tracePath(job','accumulator.add','renderSample','for(let pass','for(let y=0','for(let x=0']
+          out=[]; used=set()
+          for term in terms:
+            for i,line in enumerate(lines):
+              if term in line and i not in used:
+                lo=max(0,i-20); hi=min(len(lines),i+45)
+                out.append('\n===== '+term+f' @ {i+1} =====')
+                out.extend(f'{j+1}: {lines[j]}' for j in range(lo,hi))
+                used.update(range(lo,hi))
+                break
+          Path('reports/litepix/v4.10-path-loop-anchors.txt').write_text('\n'.join(out),encoding='utf-8')
+          PY
+      - run: |
+          git config user.name 'LitePix Path Extract'
+          git config user.email 'actions@users.noreply.github.com'
+          git add reports/litepix/v4.10-path-loop-anchors.txt
+          git commit -m 'Extract v4.10 path loop anchors' || exit 0
+          git push origin HEAD:litepix-v4.10-path-integration
