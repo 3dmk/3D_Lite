@@ -1,0 +1,59 @@
+from pathlib import Path
+import re
+p=Path('index.html')
+s=p.read_text(encoding='utf-8')
+
+# Public identity/version. Safe on both the v4.09 source and an already-gated v4.10 branch.
+target_title='<title>LitePix v4.10.0 Native Path Integration</title>'
+if target_title not in s:
+    s,n=re.subn(r'<title>LitePix v4\.09\.0[^<]*</title>',target_title,s,count=1)
+    if n!=1: raise SystemExit('release-blocking: v4.09/v4.10 title anchor not found')
+if not re.search(r"const\s+LitePixVersion\s*=\s*Object\.freeze\(\{[^;]*version:'4\.10\.0'[^;]*\}\);",s):
+    pat=r"const\s+LitePixVersion\s*=\s*Object\.freeze\(\{(?P<body>[^;]*?version:'4\.09\.0'[^;]*?)\}\);"
+    m=re.search(pat,s)
+    if not m: raise SystemExit('release-blocking: v4.09/v4.10 LitePixVersion anchor not found')
+    body=m.group('body').replace("version:'4.09.0'","version:'4.10.0'",1)
+    s=s[:m.start()]+"const LitePixVersion=Object.freeze({"+body+"});"+s[m.end():]
+
+# Load native path bridge after optimized runtime.
+loader='<script src="./litepix/path-integration-v4.10.js"></script>'
+if loader not in s:
+    anchor='<script src="./litepix/runtime-v4.09.js"></script>'
+    if anchor not in s: raise SystemExit('release-blocking: v4.09 runtime loader anchor missing')
+    s=s.replace(anchor,anchor+'\n'+loader,1)
+
+# Instantiate the bridge inside the real Group 9 Path GI execution.
+old="""    const primaryMask=new Uint8Array(width*height);\n    const perf16=RenderCoreH.attachPerformance(job);"""
+new="""    const primaryMask=new Uint8Array(width*height);\n    const litePixPath410=(typeof LitePixPathExecution410==='function')?new LitePixPathExecution410(width,height,{startBlock:32,minBlock:1,maxLevel:6}):null;\n    job.litePixPath410=litePixPath410;\n    const perf16=RenderCoreH.attachPerformance(job);"""
+if new not in s:
+    if s.count(old)!=1: raise SystemExit(f'release-blocking: path bridge init anchor count={s.count(old)}')
+    s=s.replace(old,new,1)
+
+old2="""          accumulator.add(i,sample.radiance);\n          if(pass===0){\n            const ph=sample.primaryHitRecord;"""
+new2="""          accumulator.add(i,sample.radiance);\n          const ph=sample.primaryHitRecord;\n          if(litePixPath410)litePixPath410.record(i,x,y,sample,ph,accumulator);\n          if(pass===0){"""
+if new2 not in s:
+    if s.count(old2)!=1: raise SystemExit(f'release-blocking: path sample hook anchor count={s.count(old2)}')
+    s=s.replace(old2,new2,1)
+
+old3="""      completedPasses=pass+1;\n      const rgba=accumulator.resolveRGBA(settings,primaryMask);"""
+new3="""      completedPasses=pass+1;\n      const litePixPass410=litePixPath410?litePixPath410.completePass(accumulator):null;\n      job.litePixPathStats410=litePixPass410;\n      const rgba=accumulator.resolveRGBA(settings,primaryMask);"""
+if new3 not in s:
+    if s.count(old3)!=1: raise SystemExit(f'release-blocking: pass hook anchor count={s.count(old3)}')
+    s=s.replace(old3,new3,1)
+
+# Patch the Path GI metadata block using its path-specific neighboring fields so Fast metadata cannot match.
+old4="""        secondaryGI:settings.secondaryGI,\n        lightCache:job.lightCache?.stats?.()||null,\n        emissiveTriangleLights:compiled.emissiveTriangles?.triangles?.length||0,\n        diagnostics:RenderPart5Core.diagnostics(job,compiled,acceleration),\n        performance:RenderCoreH.performance(job)\n      })"""
+new4="""        secondaryGI:settings.secondaryGI,\n        lightCache:job.lightCache?.stats?.()||null,\n        emissiveTriangleLights:compiled.emissiveTriangles?.triangles?.length||0,\n        diagnostics:RenderPart5Core.diagnostics(job,compiled,acceleration),\n        performance:RenderCoreH.performance(job),\n        litePixNativePath:litePixPath410?.snapshot?.()||null\n      })"""
+if new4 not in s:
+    if s.count(old4)!=1: raise SystemExit(f'release-blocking: path metadata hook anchor count={s.count(old4)}')
+    s=s.replace(old4,new4,1)
+
+# Finalize only the Path GI renderer: include the unique Global Illumination AOV tail.
+old5="""      aovs.set3('Global Illumination',i,[\n        Math.max(0,beauty[0]-direct[0]-emission[0]),\n        Math.max(0,beauty[1]-direct[1]-emission[1]),\n        Math.max(0,beauty[2]-direct[2]-emission[2])\n      ]);\n    }\n    RenderCoreH.markStage(job,'render',renderStart16);\n    if(LiteTraceExecutionContext.performance===perf16){LiteTraceExecutionContext.activeJob=null;LiteTraceExecutionContext.performance=null;}"""
+new5="""      aovs.set3('Global Illumination',i,[\n        Math.max(0,beauty[0]-direct[0]-emission[0]),\n        Math.max(0,beauty[1]-direct[1]-emission[1]),\n        Math.max(0,beauty[2]-direct[2]-emission[2])\n      ]);\n    }\n    RenderCoreH.markStage(job,'render',renderStart16);\n    job.litePixPathStats410=litePixPath410?.snapshot?.()||job.litePixPathStats410||null;\n    if(litePixPath410)litePixPath410.dispose();\n    if(LiteTraceExecutionContext.performance===perf16){LiteTraceExecutionContext.activeJob=null;LiteTraceExecutionContext.performance=null;}"""
+if new5 not in s:
+    if s.count(old5)!=1: raise SystemExit(f'release-blocking: final path hook anchor count={s.count(old5)}')
+    s=s.replace(old5,new5,1)
+
+p.write_text(s,encoding='utf-8')
+print('LitePix v4.10 native path integration patch applied')

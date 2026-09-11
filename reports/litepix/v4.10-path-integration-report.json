@@ -1,0 +1,87 @@
+{
+  "passed": true,
+  "core": {
+    "title": "LitePix v4.10.0 Core Runtime",
+    "version": "4.10.0",
+    "marker": true,
+    "bridgeType": "function"
+  },
+  "fast": {
+    "wallMs": 163,
+    "engine": "fast",
+    "renderer": "Part 4 Fast Direct",
+    "native": null,
+    "secondaryGI": null,
+    "performance": {
+      "totalMs": 110.60000000000582,
+      "traceMs": 108.5,
+      "actualRays": 0,
+      "raysPerSecond": 0,
+      "samples": 0,
+      "yields": 24,
+      "bvhBuildMs": null
+    }
+  },
+  "path": {
+    "wallMs": 417,
+    "engine": "path",
+    "renderer": "Group 9 Progressive Path GI",
+    "native": {
+      "version": "4.10.0",
+      "mode": "native-path-observer",
+      "samples": 10368,
+      "passes": 2,
+      "primaryHits": 0,
+      "guideWrites": 0,
+      "blockPasses": 2,
+      "gi": {
+        "activeBlocks": 0,
+        "finalizedBlocks": 24,
+        "refinedBlocks": 24,
+        "createdBlocks": 30,
+        "cache": {
+          "records": 0,
+          "hits": 0,
+          "misses": 0,
+          "hitRate": 0,
+          "candidateTests": 0,
+          "cells": 0,
+          "spatialHash": true
+        }
+      },
+      "guide": {
+        "queries": 0,
+        "accepted": 0,
+        "rejected": 0
+      },
+      "spatial": {
+        "accepted": 0,
+        "rejected": 0,
+        "acceptRate": 0
+      },
+      "memory": {
+        "limitBytes": 268435456,
+        "usedBytes": 0,
+        "freeBytes": 268435456,
+        "tags": {
+          "path-gbuffer": 0,
+          "path-reservoir-grid": 0
+        }
+      },
+      "elapsedMs": 390.5
+    },
+    "secondaryGI": "Light Cache",
+    "performance": {
+      "totalMs": 395,
+      "traceMs": 394.5,
+      "actualRays": 10368,
+      "raysPerSecond": 26281,
+      "samples": 10368,
+      "yields": 82,
+      "bvhBuildMs": null
+    }
+  },
+  "pageErrors": [],
+  "consoleErrors": [],
+  "failures": []
+}

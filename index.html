@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LitePix v4.09.0 Optimized All Cores</title>
+<title>LitePix v4.10.0 Native Path Integration</title>
 <style>
 :root{
   --bg:#202020;--panel:#2a2a2a;--panel2:#303030;--line:#444;--line2:#555;
@@ -4185,7 +4185,7 @@ function validateArchitectureCore(){
   return {ok:errors.length===0,errors};
 }
 
-const LitePixVersion=Object.freeze({name:'LitePix',version:'4.09.0',legacyName:'3DLite',legacyVersion:'3.99.6',architecture:'All Cores Optimized'});
+const LitePixVersion=Object.freeze({name:'LitePix',version:'4.10.0',legacyName:'3DLite',legacyVersion:'3.99.6',architecture:'All Cores Optimized'});
 // Compatibility bridge: existing 3DLite services keep working while the renderer migrates to LitePix ownership.
 const ThreeDLiteVersion=LitePixVersion;
 
@@ -8501,6 +8501,8 @@ var PathGIRenderer=Object.freeze({
     const accumulator=new ProgressiveAccumulator(width,height);
     const aovs=new RenderAOVSet(width,height);
     const primaryMask=new Uint8Array(width*height);
+    const litePixPath410=(typeof LitePixPathExecution410==='function')?new LitePixPathExecution410(width,height,{startBlock:32,minBlock:1,maxLevel:6}):null;
+    job.litePixPath410=litePixPath410;
     const perf16=RenderCoreH.attachPerformance(job);
     const rowChunk16=RenderCoreH.yieldRows(job);
     const renderStart16=RenderProfiler16.begin();
@@ -8538,8 +8540,9 @@ var PathGIRenderer=Object.freeze({
           perf16.samples++;
           primaryMask[i]|=sample.primaryHit?1:0;
           accumulator.add(i,sample.radiance);
+          const ph=sample.primaryHitRecord;
+          if(litePixPath410)litePixPath410.record(i,x,y,sample,ph,accumulator);
           if(pass===0){
-            const ph=sample.primaryHitRecord;
             if(ph?.hit)RenderAOVUtil.writePrimary(aovs,i,RenderAOVUtil.primary(job,acceleration,compiled,ray,ph,seed));
             else RenderAOVUtil.writePrimary(aovs,i,null);
           }
@@ -8549,6 +8552,8 @@ var PathGIRenderer=Object.freeze({
         await new Promise(r=>setTimeout(r,0));
       });
       completedPasses=pass+1;
+      const litePixPass410=litePixPath410?litePixPath410.completePass(accumulator):null;
+      job.litePixPathStats410=litePixPass410;
       const rgba=accumulator.resolveRGBA(settings,primaryMask);
       job.previewFrame={
         width,height,rgba,
@@ -8588,6 +8593,8 @@ var PathGIRenderer=Object.freeze({
       ]);
     }
     RenderCoreH.markStage(job,'render',renderStart16);
+    job.litePixPathStats410=litePixPath410?.snapshot?.()||job.litePixPathStats410||null;
+    if(litePixPath410)litePixPath410.dispose();
     if(LiteTraceExecutionContext.performance===perf16){LiteTraceExecutionContext.activeJob=null;LiteTraceExecutionContext.performance=null;}
     job.renderChannels=aovs;
     return {
@@ -8610,7 +8617,8 @@ var PathGIRenderer=Object.freeze({
         lightCache:job.lightCache?.stats?.()||null,
         emissiveTriangleLights:compiled.emissiveTriangles?.triangles?.length||0,
         diagnostics:RenderPart5Core.diagnostics(job,compiled,acceleration),
-        performance:RenderCoreH.performance(job)
+        performance:RenderCoreH.performance(job),
+        litePixNativePath:litePixPath410?.snapshot?.()||null
       })
     };
   }
@@ -23608,5 +23616,6 @@ root.__3DLiteMaterialLinearColor3996=true;
 <script src="./litepix/core7-production.js"></script>
 <script src="./litepix/core8-telemetry-optimization.js"></script>
 <script src="./litepix/runtime-v4.09.js"></script>
+<script src="./litepix/path-integration-v4.10.js"></script>
 </body>
 </html>
