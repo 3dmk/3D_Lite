@@ -41,11 +41,12 @@ jobs:
               const titleOwners=[...document.scripts].map((s,i)=>({i,id:s.id||null,text:s.src?'':s.textContent||''})).filter(s=>s.text.includes(exact)).map(s=>{const at=s.text.indexOf(exact);return {i:s.i,id:s.id,context:s.text.slice(Math.max(0,at-500),Math.min(s.text.length,at+exact.length+500))};});
               return {title:document.title,titleOwners,engine:document.getElementById('rsEngine')?.value,quality:document.getElementById('rsQuality')?.value,telemetry:window.ThreeDLiteLiteTraceTelemetry3992?.snapshot?.()||null};
             });
+            console.log('PRE='+JSON.stringify(pre,null,2));
             await page.evaluate(()=>{
               const set=(id,value)=>{const e=document.getElementById(id);if(!e)return;e.value=String(value);e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));};
               set('rsEngine','fast'); set('rsQuality','Preview'); set('rsWidth',160); set('rsHeight',90);
+              const b=document.getElementById('renderNowBtn'); if(!b) throw new Error('renderNowBtn missing'); b.click();
             });
-            await page.locator('#renderNowBtn').click({timeout:30000});
             await page.waitForFunction(()=>{
               const j=window.RenderFramework?.jobs?.lastJob;
               return !!j && (!!j.finished || !!j.performance || !!window.ThreeDLiteLiteTraceTelemetry3992?.snapshot?.()?.finalPerformance);
