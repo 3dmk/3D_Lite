@@ -1,0 +1,60 @@
+name: v3.99.6 Public Runtime Gate
+
+on:
+  push:
+    branches: [v3.99.6-dark-gi-lighting-fix]
+    paths:
+      - '.github/workflows/v3996-public-runtime-gate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  public-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium probe
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null
+      - name: Verify deployed v3.99.6 material/GI fix
+        shell: bash
+        run: |
+          node <<'NODE'
+          const {chromium}=require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--use-gl=swiftshader','--enable-webgl','--ignore-gpu-blocklist']});
+            const page=await browser.newPage({viewport:{width:1440,height:1000}});
+            const pageErrors=[],consoleErrors=[];
+            page.on('pageerror',e=>pageErrors.push(String(e?.stack||e)));
+            page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
+            const response=await page.goto('https://3dmk.github.io/3D_Lite/?v3996='+Date.now(),{waitUntil:'domcontentloaded',timeout:120000});
+            await page.waitForTimeout(5000);
+            const core=await page.evaluate(()=>{
+              const source=new THREE.MeshStandardMaterial({color:'#808080',emissive:'#202020',roughness:.5,metalness:0});
+              const snap=RenderSceneBoundary.material(source);
+              const compiled=new RenderSurfaceMaterial(snap);
+              const spot=new RenderSceneLight({id:'spot',name:'spot',type:'spot',enabled:true,color:'#ffffff',intensity:10,range:100,size:1,width:1,height:1,coneAngle:45,penumbra:.2,castShadows:false,position:[0,0,10],direction:[0,0,-1]});
+              const sample=DirectLightSampler.sample(spot,[0,0,0]);
+              const brdf=PhysicalBSDF.evaluate(compiled,[0,0,1],[0,0,1],sample.direction);
+              return {title:document.title,version:window.ThreeDLiteVersion?.version||null,marker:window.__3DLiteMaterialLinearColor3996===true,colorSpace:snap.colorSpace||null,source:[source.color.r,source.color.g,source.color.b],compiled:compiled.baseColor,energy:brdf.reduce((a,b)=>a+b,0)*sample.radiance.reduce((a,b)=>a+b,0)};
+            });
+            const f=[];
+            if(response?.status()!==200)f.push('HTTP != 200');
+            if(core.title!=='3DLite v3.99.6 L3N GitHub Runtime'||core.version!=='3.99.6'||!core.marker)f.push('deployed version/marker mismatch');
+            if(core.colorSpace!=='linear')f.push('deployed color space mismatch');
+            if(Math.max(...core.source.map((v,i)=>Math.abs(v-core.compiled[i])))>1e-7)f.push('deployed material color altered');
+            if(!(core.energy>0))f.push('deployed direct energy black');
+            if(pageErrors.length)f.push('page errors '+pageErrors.length);
+            if(consoleErrors.length)f.push('console errors '+consoleErrors.length);
+            console.log(JSON.stringify({status:response?.status(),core,pageErrors,consoleErrors,failures:f},null,2));
+            if(f.length){console.error('v3.99.6 PUBLIC GATE FAILED\n'+f.join('\n'));process.exitCode=1;}else console.log('v3.99.6 PUBLIC GATE PASSED');
+            await browser.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
