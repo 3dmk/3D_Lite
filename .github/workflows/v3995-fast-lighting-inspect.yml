@@ -1,0 +1,37 @@
+name: v3.99.5 Fast Lighting Inspect
+
+on:
+  push:
+    branches: [v3.99.5-fast-direct-lighting-fix]
+    paths:
+      - '.github/workflows/v3995-fast-lighting-inspect.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect Fast Direct lighting code
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          s=Path('index.html').read_text(encoding='utf-8')
+          needles=['BasicDirectRenderer','FastRenderDiagnostics','spot','shadowRay','occluded','attenuation','ndotl','NdotL','normal','light.direction','cone']
+          for n in needles:
+              print('\n###',n)
+              start=0; hits=0
+              while True:
+                  i=s.find(n,start)
+                  if i<0: break
+                  hits+=1
+                  line=s.count('\n',0,i)+1
+                  print(f'-- hit {hits} line {line} --')
+                  print(s[max(0,i-900):min(len(s),i+len(n)+2400)])
+                  start=i+len(n)
+                  if hits>=18: break
+              print('hits',hits)
+          PY
