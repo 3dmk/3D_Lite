@@ -1,1 +1,2123 @@
-MISSING const RenderMIS=Object.freeze(
+===== RenderMIS @ 335296 =====
+(lights||[]).find(l=>l.enabled!==false&&l.type==='dome')||null;},
+  radiance(light,direction){
+    if(!light||light.enabled===false||light.type!=='dome')return [0,0,0];
+    return RenderColor.mul(light.color,light.intensity);
+  },
+  background(renderScene,settings,lights,rayDirection){
+    const dome=this.findDome(lights);
+    if(dome)return this.radiance(dome,rayDirection);
+    return RenderColor.hexToLinear(settings.background||'#202020');
+  }
+});
+
+const ShadowVisibility=Object.freeze({
+  visible(acceleration,origin,direction,maxDistance){
+    try{LiteTraceExecutionContext.performance?.addRay?.(RenderRayType.SHADOW);}catch(_){}
+    const eps=RenderRayPolicy.epsilonForPoint(origin);
+    if(Number.isFinite(maxDistance)&&maxDistance<=eps*2)return true;
+    const o=RayMath.add(origin,RayMath.mul(direction,eps));
+    const limit=Number.isFinite(maxDistance)?Math.max(eps,maxDistance-eps):Infinity;
+    const ray=new RenderRay(o,direction,eps,limit,RenderRayType.SHADOW,0);
+    return !acceleration.occluded(ray);
+  }
+});
+
+const AreaLightSampler=Object.freeze({
+  sample(light,point,u=.5,v=.5){
+    if(light.type==='rectangle'){
+      const lp=LightBasis.pointOnRectangle(light,u,v);
+      return this._local(light,point,lp,RenderLightPolicy.area(light),light.direction);
+    }
+    if(light.type==='disc'){
+      const lp=LightBasis.pointOnDisc(light,u,v);
+      return this._local(light,point,lp,RenderLightPolicy.area(light),light.direction);
+    }
+    if(light.type==='sphere'){
+      const lp=LightBasis.pointOnSphere(light,u,v);
+      const normal=RayMath.normalize(RayMath.sub(lp,light.position));
+      return this._local(light,point,lp,RenderLightPolicy.area(light),normal);
+    }
+    if(light.type==='mesh'){
+      // Part 4 keeps Mesh Light as a rectangular proxy.
+      // True emissive mesh-triangle sampling remains Group 10.
+      const lp=LightBasis.pointOnRectangle(light,u,v);
+      return this._local(light,point,lp,RenderLightPolicy.area(light),light.direction);
+    }
+    return DirectLightSampler.sample(light,point);
+  },
+
+  _local(light,point,lightPoint,area,emitterNormal=null){
+    const to=RayMath.sub(lightPoint,point);
+    const dist=Math.max(RayMath.length(to),1e-6);
+    const dir=RayMath.mul(to,1/dist);
+
+    if(light.range>0&&dist>=light.range){
+      return {kind:'local',direction:dir,distance:dist,radiance:[0,0,0],lightPoint,area};
+    }
+
+    let attenuation=1/(dist*dist);
+    if(light.range>0){
+      const f=Math.max(0,1-dist/light.range);
+      attenuation*=f*f;
+    }
+
+    let emitterCos=1;
+    if(emitterNormal){
+      emitterCos=Math.max(0,RayMath.dot(RayMath.normalize(emitterNormal),RayMath.mul(dir,-1)));
+      if(emitterCos<=0){
+        return {kind:'local',direction:dir,distance:dist,radiance:[0,0,0],lightPoint,area,emitterCos:0};
+      }
+    }
+
+    const safeArea=Math.max(RenderLightPolicy.minArea,area);
+    return {
+      kind:'local',
+      direction:dir,
+      distance:dist,
+      radiance:RenderColor.mul(light.color,light.intensity*attenuation*emitterCos/safeArea),
+      lightPoint,
+      area:safeArea,
+      emitterCos
+    };
+  }
+});
+
+var DirectLightingIntegrator=Object.freeze({
+  samplesFor(light,settings){
+    if(['rectangle','disc','sphere','mesh'].includes(light.type)){
+      const preset=String(settings?.quality||'Preview');
+      if(preset==='Ultra')return 16;
+      if(preset==='High')return 8;
+      if(preset==='Draft')return 1;
+      return 4;
+    }
+    return 1;
+  },
+
+  evaluate(job,acceleration,compiled,ray,hit,pixelSeed=1,options={}){
+    const material=RenderMaterialLibrary.resolveHit(job.renderScene,compiled.materials,hit);
+    const n=SurfaceInterpolator.normal(acceleration,hit);
+    const v=RayMath.mul(ray.direction,-1);
+    const includeEmission=options.includeEmission!==false;
+    const includeDome=options.includeDome!==false;
+    let color=includeEmission?RenderColor.mul(material.emissive,material.emissiveIntensity):[0,0,0];
+
+    if(material.shading==='unlit'){
+      return includeEmission?RenderColor.add(material.baseColor,color):[0,0,0];
+    }
+
+    const emissiveSet=compiled.emissiveTriangles||job.emissiveTriangles||null;
+    if(emissiveSet?.triangles?.length){
+      const es=EmissiveTriangleSet.sample(emissiveSet,pixelSeed,0,hit.position);
+      if(es&&ShadowVisibility.visible(acceleration,hit.position,es.direction,es.distance)){
+        const brdf=PhysicalBSDF.evaluate(material,n,v,es.direction);
+        const bsdfPdf=PathBSDFSampler.pdf(material,n,v,es.direction);
+        const w=RenderMIS.power(es.pdf,bsdfPdf);
+        color=RenderColor.add(color,RenderColor.mul(RenderColor.mul(brdf,es.radiance),w));
+      }
+    }
+
+    for(let li=0;li<compiled.lights.length;li++){
+      const light=compiled.lights[li];
+
+      if(light.type==='dome'){
+        if(includeDome){
+          const ambient=EnvironmentSampler.radiance(light,n);
+          const diffuse=RenderColor.mul(material.baseColor,(1-material.metalness)/Math.PI);
+          color=RenderColor.add(color,RenderColor.mul(RenderColor.mul(diffuse,ambient),Math.PI));
+        }
+        continue;
+      }
+
+      const count=this.samplesFor(light,job.settings);
+      let accum=[0,0,0];
+
+      for(let si=0;si<count;si++){
+        const uv=RenderSampling.sample2D(pixelSeed^(li*2654435761),si);
+        const sample=['rectangle','disc','sphere','mesh'].includes(light.type)
+          ? AreaLightSampler.sample(light,hit.position,uv[0],uv[1])
+          : DirectLightSampler.sample(light,hit.position);
+
+        if(!sample||!sample.direction)continue;
+        if(!sample.radiance||sample.radiance.every(v=>v<=0||!Number.isFinite(v)))continue;
+
+        if(light.castShadows!==false){
+          const visible=ShadowVisibility.visible(acceleration,hit.position,sample.direction,sample.distance);
+          if(!visible)continue;
+        }
+
+        const brdf=PhysicalBSDF.evaluate(material,n,v,sample.direction);
+        accum=RenderColor.add(accum,RenderColor.mul(brdf,sample.radiance));
+      }
+
+      if(count>1)accum=RenderColor.mul(accum,1/count);
+      color=RenderColor.add(color,accum);
+    }
+
+    return color;
+  }
+});
+
+
+/* ============================================================
+   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — CORE D
+   CLEAN GROUP 7 + GROUP 8 CONSOLIDATION
+   ============================================================ */
+
+var RenderCoreD=Object.freeze({
+  version:'3.90.0-core-d',
+
+  evaluateSurfaceDirect(job,acceleration,compiled,ray,hit,pixelSeed,options={}){
+    return DirectLightingIntegrator.evaluate(
+      job,acceleration,compiled,ray,hit,pixelSeed,options
+    );
+  },
+
+  evaluateEnvironment(job,compiled,rayDirection){
+    return EnvironmentSampler.background(
+      job.renderScene,job.settings,compiled.lights,rayDirection
+    );
+  },
+
+  tracePath(job,acceleration,compiled,ray,pixelSeed,initialHit=null){
+    return PathIntegrator.trace(
+      job,acceleration,compiled,ray,pixelSeed,initialHit
+    );
+  },
+
+  visible(acceleration,origin,direction,maxDistance){
+    return ShadowVisibility.visible(acceleration,origin,direction,maxDistance);
+  },
+
+  validate(){
+    const errors=[];
+    const g7=validateRenderGroup7();if(!g7.ok)errors.push(...g7.errors);
+    const g8=validateRenderGroup8();if(!g8.ok)errors.push(...g8.errors);
+    if(typeof this.evaluateSurfaceDirect!=='function')errors.push('Core D direct evaluator missing');
+    if(typeof this.tracePath!=='function')errors.push('Core D path tracer missing');
+    if(typeof this.evaluateEnvironment!=='function')errors.push('Core D environment evaluator missing');
+    return {ok:errors.length===0,errors};
+  }
+});
+window.RenderCoreD=RenderCoreD;
+
+const RenderGroup7Contract=Object.freeze({
+  owns:Object.freeze([
+    'shadow-ray visibility',
+    'shadow bias',
+    'stochastic area-light sampling',
+    'constant-color dome environment radiance',
+    'direct-light sample accumulation'
+  ]),
+  consumes:Object.freeze([
+    'Core B acceleration trace',
+    'Core C materials and scene lights',
+    'Group 5 PhysicalBSDF'
+  ]),
+  doesNotOwn:Object.freeze([
+    'path GI',
+    'MIS',
+    'adaptive sampling',
+    'HDRI importance sampling',
+    'light cache',
+    'path guiding'
+  ])
+});
+
+function runRenderGroup7SelfTests(){
+  const errors=[];
+
+  {
+    const store=new RenderTriangleStore();
+    store.addPacket({
+      objectId:'shadow-test',
+      positions:new Float32Array([-1,-1,0,1,-1,0,0,1,0]),
+      normals:new Float32Array([0,0,1,0,0,1,0,0,1]),
+      uvs:new Float32Array([0,0,1,0,.5,1]),
+      indices:new Uint32Array([0,1,2]),
+      materialIndices:new Uint16Array([0])
+    },0);
+    store.finalize();
+    const acceleration=new RenderAccelerationSet(store,new RenderBVH(store,1));
+    if(ShadowVisibility.visible(acceleration,[0,0,-1],[0,0,1],10)!==false){
+      errors.push('Shadow occlusion test failed');
+    }
+    if(ShadowVisibility.visible(acceleration,[3,3,-1],[0,0,1],10)!==true){
+      errors.push('Shadow clear test failed');
+    }
+    const occRay=new RenderRay([0,0,-1],[0,0,1],1e-4,10);
+    if(acceleration.occluded(occRay)!==true)errors.push('BVH any-hit test failed');
+  }
+
+  {
+    const light=new RenderSceneLight({
+      id:'r',name:'r',type:'rectangle',enabled:true,color:'#ffffff',intensity:10,
+      range:0,size:1,width:2,height:2,coneAngle:90,penumbra:0,castShadows:true,
+      position:[0,0,5],direction:[0,0,-1]
+    });
+    const s=AreaLightSampler.sample(light,[0,0,0],.5,.5);
+    if(!s||Math.abs(s.distance-5)>1e-4||s.radiance.some(x=>!Number.isFinite(x)||x<0)){
+      errors.push('Rectangle area sample failed');
+    }
+  }
+
+  {
+    const a=RenderSampling.sample2D(123,4),b=RenderSampling.sample2D(123,4);
+    if(a[0]!==b[0]||a[1]!==b[1])errors.push('Deterministic sampling test failed');
+  }
+
+  return {ok:errors.length===0,errors};
+}
+window.runRenderGroup7SelfTests=runRenderGroup7SelfTests;
+
+function validateRenderGroup7(){
+  const errors=[];
+  if(typeof ShadowVisibility.visible!=='function')errors.push('ShadowVisibility missing');
+  if(typeof AreaLightSampler.sample!=='function')errors.push('AreaLightSampler missing');
+  if(typeof DirectLightingIntegrator.evaluate!=='function')errors.push('DirectLightingIntegrator missing');
+  if(typeof EnvironmentSampler.background!=='function')errors.push('EnvironmentSampler missing');
+  const tests=runRenderGroup7SelfTests();if(!tests.ok)errors.push(...tests.errors);
+  return {ok:errors.length===0,errors};
+}
+
+Object.assign(window,{
+  RenderSampling,LightBasis,EnvironmentSampler,ShadowVisibility,
+  AreaLightSampler,DirectLightingIntegrator,RenderGroup7Contract
+});
+
+/* ============================================================
+   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 8
+   Path GI Core
+   ============================================================ */
+
+const PathSampler=Object.freeze({
+  scalar(seed,bounce,dimension){
+    return RenderSampling.hash32(
+      ((seed>>>0) ^ Math.imul((bounce+1),0x9E3779B1) ^ Math.imul((dimension+1),0x85EBCA77))>>>0
+    );
+  },
+
+  cosineHemisphere(n,seed,bounce){
+    const u1=this.scalar(seed,bounce,0);
+    const u2=this.scalar(seed,bounce,1);
+    const r=Math.sqrt(u1);
+    const phi=2*Math.PI*u2;
+    const x=r*Math.cos(phi),y=r*Math.sin(phi),z=Math.sqrt(Math.max(0,1-u1));
+
+    const basis=LightBasis.fromDirection(n);
+    return RayMath.normalize(
+      RayMath.add(
+        RayMath.add(RayMath.mul(basis.tangent,x),RayMath.mul(basis.bitangent,y)),
+        RayMath.mul(basis.n,z)
+      )
+    );
+  }
+});
+
+var RenderMIS=Object.freeze({
+  power(a,b){
+    a=Math.max(0,Number(a)||0);b=Math.max(0,Number(b)||0);
+    const aa=a*a,bb=b*b,d=aa+bb;
+    return d>0?aa/d:1;
+  }
+});
+
+const GGXImportanceSampler=Object.freeze({
+  sampleHalfVector(n,roughness,u1,u2){
+    const a=Math.max(.045,roughness);
+    const a2=a*a;
+    const phi=2*Math.PI*u1;
+    const cosTheta=Math.sqrt(Math.max(0,(1-u2)/(1+(a2-1)*u2)));
+    const sinTheta=Math.sqrt(Math.max(0,1-cosTheta*cosTheta));
+    const basis=LightBasis.fromDirection(n);
+    return RayMath.normalize(
+      RayMath.add(
+        RayMath.add(RayMath.mul(basis.tangent,sinTheta*Math.cos(phi)),RayMath.mul(basis.bitangent,sinTheta*Math.sin(phi))),
+        RayMath.mul(basis.n,cosTheta)
+      )
+    );
+  },
+  sampleVisibleHalfVector(n,v,roughness,u1,u2){
+    const a=Math.max(.045,roughness);
+    const basis=LightBasis.fromDirection(n);
+    const vl=[RayMath.dot(v,basis.tangent),RayMath.dot(v,basis.bitangent),Math.max(1e-6,RayMath.dot(v,basis.n))];
+    const vh=RayMath.normalize([a*vl[0],a*vl[1],vl[2]]);
+    const lensq=vh[0]*vh[0]+vh[1]*vh[1];
+    const t1=lensq>1e-12?[-vh[1]/Math.sqrt(lensq),vh[0]/Math.sqrt(lensq),0]:[1,0,0];
+    const t2=RayMath.cross(vh,t1);
+    const r=Math.sqrt(Math.max(0,u1)),phi=2*Math.PI*u2;
+    const p1=r*Math.cos(phi);
+    let p2=r*Math.sin(phi);
+    const mix=.5*(1+vh[2]);
+    p2=(1-mix)*Math.sqrt(Math.max(0,1-p1*p1))+mix*p2;
+    const z=Math.sqrt(Math.max(0,1-p1*p1-p2*p2));
+    const nh=RayMath.add(RayMath.add(RayMath.mul(t1,p1),RayMath.mul(t2,p2)),RayMath.mul(vh,z));
+    const ne=RayMath.normalize([a*nh[0],a*nh[1],Math.max(0,nh[2])]);
+    return RayMath.normalize(RayMath.add(RayMath.add(RayMath.mul(basis.tangent,ne[0]),RayMath.mul(basis.bitangent,ne[1])),RayMath.mul(basis.n,ne[2])));
+  },
+  reflect(i,n){return RayMath.sub(i,RayMath.mul(n,2*RayMath.dot(i,n)));},
+  distribution(nDotH,roughness){
+    const a=Math.max(.045,roughness),a2=a*a;
+    const d=nDotH*nDotH*(a2-1)+1;
+    return a2/(Math.PI*d*d+1e-8);
+  }
+});
+
+const DielectricTransport=Object.freeze({
+  fresnelDielectric(cosI,etaI,etaT){
+    cosI=Math.max(-1,Math.min(1,cosI));
+    let entering=cosI>0;
+    if(!entering){const t=etaI;etaI=etaT;etaT=t;cosI=Math.abs(cosI);}
+    const sinI=Math.sqrt(Math.max(0,1-cosI*cosI));
+    const sinT=etaI/etaT*sinI;
+    if(sinT>=1)return 1;
+    const cosT=Math.sqrt(Math.max(0,1-sinT*sinT));
+    const rs=((etaT*cosI)-(etaI*cosT))/((etaT*cosI)+(etaI*cosT));
+    const rp=((etaI*cosI)-(etaT*cosT))/((etaI*cosI)+(etaT*cosT));
+    return Math.max(0,Math.min(1,(rs*rs+rp*rp)*.5));
+  },
+  refract(i,n,eta){
+    const cosi=Math.max(-1,Math.min(1,RayMath.dot(i,n)));
+    const k=1-eta*eta*(1-cosi*cosi);
+    if(k<0)return null;
+    return RayMath.normalize(RayMath.sub(RayMath.mul(i,eta),RayMath.mul(n,eta*cosi+Math.sqrt(k))));
+  },
+  beerLambert(color,distance,attenuationDistance){
+    if(!Number.isFinite(attenuationDistance)||attenuationDistance<=0||distance<=0)return [1,1,1];
+    return color.map(c=>Math.pow(Math.max(1e-6,c),distance/attenuationDistance));
+  }
+});
+
+var PathBSDFSampler=Object.freeze({
+  pdf(material,n,v,l){
+    const nDotL=Math.max(0,RayMath.dot(n,l));
+    if(nDotL<=0)return 0;
+    const diffusePdf=nDotL/Math.PI;
+    const specProb=Math.max(.08,Math.min(.92,.25+.65*material.metalness+.2*(1-material.roughness)));
+    const h=RayMath.normalize(RayMath.add(v,l));
+    if(!h.every(Number.isFinite))return (1-specProb)*diffusePdf;
+    const nDotH=Math.max(0,RayMath.dot(n,h));
+    const vDotH=Math.max(1e-7,RayMath.dot(v,h));
+    const D=GGXImportanceSampler.distribution(nDotH,material.roughness);
+    const specPdf=(D*nDotH)/(4*vDotH+1e-8);
+    return (1-specProb)*diffusePdf+specProb*specPdf;
+  },
+
+  sample(material,n,v,seed,bounce){
+    if(material.shading==='unlit')return null;
+    const transmission=Math.max(0,Math.min(1,material.transmission||0));
+    const chooseT=PathSampler.scalar(seed,bounce,6);
+
+    if(transmission>0&&chooseT<transmission){
+      const incident=RayMath.mul(v,-1);
+      const entering=RayMath.dot(incident,n)<0;
+      const normal=entering?n:RayMath.mul(n,-1);
+      const etaI=entering?1:material.ior,etaT=entering?material.ior:1;
+      const eta=etaI/etaT;
+      const cosI=Math.abs(RayMath.dot(incident,normal));
+      const F=DielectricTransport.fresnelDielectric(cosI,etaI,etaT);
+      const chooseF=PathSampler.scalar(seed,bounce,16);
+      let direction,lobe,weight;
+      if(chooseF<F){
+        direction=GGXImportanceSampler.reflect(incident,normal);
+        lobe='dielectric-reflect';
+        weight=[1,1,1];
+      }else{
+        direction=DielectricTransport.refract(incident,normal,eta);
+        if(!direction){
+          direction=GGXImportanceSampler.reflect(incident,normal);
+          lobe='dielectric-tir';
+          weight=[1,1,1];
+        }else{
+          lobe='transmission';
+          weight=material.attenuationColor.slice();
+        }
+      }
+      return {direction:RayMath.normalize(direction),pdf:1,weight,lobe,transmission:true};
+    }
+
+    const specProb=Math.max(.08,Math.min(.92,.25+.65*material.metalness+.2*(1-material.roughness)));
+    const choose=PathSampler.scalar(seed,bounce,7);
+    let direction,lobe='diffuse';
+
+    if(choose<specProb){
+      const u1=PathSampler.scalar(seed,bounce,8),u2=PathSampler.scalar(seed,bounce,9);
+      const h=GGXImportanceSampler.sampleVisibleHalfVector(n,v,material.roughness,u1,u2);
+      direction=GGXImportanceSampler.reflect(RayMath.mul(v,-1),h);
+      direction=RayMath.normalize(direction);
+      lobe='ggx';
+      if(RayMath.dot(n,direction)<=0)direction=P
+
+===== RenderMIS @ 342239 =====
+leration,origin,direction,maxDistance){
+    return ShadowVisibility.visible(acceleration,origin,direction,maxDistance);
+  },
+
+  validate(){
+    const errors=[];
+    const g7=validateRenderGroup7();if(!g7.ok)errors.push(...g7.errors);
+    const g8=validateRenderGroup8();if(!g8.ok)errors.push(...g8.errors);
+    if(typeof this.evaluateSurfaceDirect!=='function')errors.push('Core D direct evaluator missing');
+    if(typeof this.tracePath!=='function')errors.push('Core D path tracer missing');
+    if(typeof this.evaluateEnvironment!=='function')errors.push('Core D environment evaluator missing');
+    return {ok:errors.length===0,errors};
+  }
+});
+window.RenderCoreD=RenderCoreD;
+
+const RenderGroup7Contract=Object.freeze({
+  owns:Object.freeze([
+    'shadow-ray visibility',
+    'shadow bias',
+    'stochastic area-light sampling',
+    'constant-color dome environment radiance',
+    'direct-light sample accumulation'
+  ]),
+  consumes:Object.freeze([
+    'Core B acceleration trace',
+    'Core C materials and scene lights',
+    'Group 5 PhysicalBSDF'
+  ]),
+  doesNotOwn:Object.freeze([
+    'path GI',
+    'MIS',
+    'adaptive sampling',
+    'HDRI importance sampling',
+    'light cache',
+    'path guiding'
+  ])
+});
+
+function runRenderGroup7SelfTests(){
+  const errors=[];
+
+  {
+    const store=new RenderTriangleStore();
+    store.addPacket({
+      objectId:'shadow-test',
+      positions:new Float32Array([-1,-1,0,1,-1,0,0,1,0]),
+      normals:new Float32Array([0,0,1,0,0,1,0,0,1]),
+      uvs:new Float32Array([0,0,1,0,.5,1]),
+      indices:new Uint32Array([0,1,2]),
+      materialIndices:new Uint16Array([0])
+    },0);
+    store.finalize();
+    const acceleration=new RenderAccelerationSet(store,new RenderBVH(store,1));
+    if(ShadowVisibility.visible(acceleration,[0,0,-1],[0,0,1],10)!==false){
+      errors.push('Shadow occlusion test failed');
+    }
+    if(ShadowVisibility.visible(acceleration,[3,3,-1],[0,0,1],10)!==true){
+      errors.push('Shadow clear test failed');
+    }
+    const occRay=new RenderRay([0,0,-1],[0,0,1],1e-4,10);
+    if(acceleration.occluded(occRay)!==true)errors.push('BVH any-hit test failed');
+  }
+
+  {
+    const light=new RenderSceneLight({
+      id:'r',name:'r',type:'rectangle',enabled:true,color:'#ffffff',intensity:10,
+      range:0,size:1,width:2,height:2,coneAngle:90,penumbra:0,castShadows:true,
+      position:[0,0,5],direction:[0,0,-1]
+    });
+    const s=AreaLightSampler.sample(light,[0,0,0],.5,.5);
+    if(!s||Math.abs(s.distance-5)>1e-4||s.radiance.some(x=>!Number.isFinite(x)||x<0)){
+      errors.push('Rectangle area sample failed');
+    }
+  }
+
+  {
+    const a=RenderSampling.sample2D(123,4),b=RenderSampling.sample2D(123,4);
+    if(a[0]!==b[0]||a[1]!==b[1])errors.push('Deterministic sampling test failed');
+  }
+
+  return {ok:errors.length===0,errors};
+}
+window.runRenderGroup7SelfTests=runRenderGroup7SelfTests;
+
+function validateRenderGroup7(){
+  const errors=[];
+  if(typeof ShadowVisibility.visible!=='function')errors.push('ShadowVisibility missing');
+  if(typeof AreaLightSampler.sample!=='function')errors.push('AreaLightSampler missing');
+  if(typeof DirectLightingIntegrator.evaluate!=='function')errors.push('DirectLightingIntegrator missing');
+  if(typeof EnvironmentSampler.background!=='function')errors.push('EnvironmentSampler missing');
+  const tests=runRenderGroup7SelfTests();if(!tests.ok)errors.push(...tests.errors);
+  return {ok:errors.length===0,errors};
+}
+
+Object.assign(window,{
+  RenderSampling,LightBasis,EnvironmentSampler,ShadowVisibility,
+  AreaLightSampler,DirectLightingIntegrator,RenderGroup7Contract
+});
+
+/* ============================================================
+   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 8
+   Path GI Core
+   ============================================================ */
+
+const PathSampler=Object.freeze({
+  scalar(seed,bounce,dimension){
+    return RenderSampling.hash32(
+      ((seed>>>0) ^ Math.imul((bounce+1),0x9E3779B1) ^ Math.imul((dimension+1),0x85EBCA77))>>>0
+    );
+  },
+
+  cosineHemisphere(n,seed,bounce){
+    const u1=this.scalar(seed,bounce,0);
+    const u2=this.scalar(seed,bounce,1);
+    const r=Math.sqrt(u1);
+    const phi=2*Math.PI*u2;
+    const x=r*Math.cos(phi),y=r*Math.sin(phi),z=Math.sqrt(Math.max(0,1-u1));
+
+    const basis=LightBasis.fromDirection(n);
+    return RayMath.normalize(
+      RayMath.add(
+        RayMath.add(RayMath.mul(basis.tangent,x),RayMath.mul(basis.bitangent,y)),
+        RayMath.mul(basis.n,z)
+      )
+    );
+  }
+});
+
+var RenderMIS=Object.freeze({
+  power(a,b){
+    a=Math.max(0,Number(a)||0);b=Math.max(0,Number(b)||0);
+    const aa=a*a,bb=b*b,d=aa+bb;
+    return d>0?aa/d:1;
+  }
+});
+
+const GGXImportanceSampler=Object.freeze({
+  sampleHalfVector(n,roughness,u1,u2){
+    const a=Math.max(.045,roughness);
+    const a2=a*a;
+    const phi=2*Math.PI*u1;
+    const cosTheta=Math.sqrt(Math.max(0,(1-u2)/(1+(a2-1)*u2)));
+    const sinTheta=Math.sqrt(Math.max(0,1-cosTheta*cosTheta));
+    const basis=LightBasis.fromDirection(n);
+    return RayMath.normalize(
+      RayMath.add(
+        RayMath.add(RayMath.mul(basis.tangent,sinTheta*Math.cos(phi)),RayMath.mul(basis.bitangent,sinTheta*Math.sin(phi))),
+        RayMath.mul(basis.n,cosTheta)
+      )
+    );
+  },
+  sampleVisibleHalfVector(n,v,roughness,u1,u2){
+    const a=Math.max(.045,roughness);
+    const basis=LightBasis.fromDirection(n);
+    const vl=[RayMath.dot(v,basis.tangent),RayMath.dot(v,basis.bitangent),Math.max(1e-6,RayMath.dot(v,basis.n))];
+    const vh=RayMath.normalize([a*vl[0],a*vl[1],vl[2]]);
+    const lensq=vh[0]*vh[0]+vh[1]*vh[1];
+    const t1=lensq>1e-12?[-vh[1]/Math.sqrt(lensq),vh[0]/Math.sqrt(lensq),0]:[1,0,0];
+    const t2=RayMath.cross(vh,t1);
+    const r=Math.sqrt(Math.max(0,u1)),phi=2*Math.PI*u2;
+    const p1=r*Math.cos(phi);
+    let p2=r*Math.sin(phi);
+    const mix=.5*(1+vh[2]);
+    p2=(1-mix)*Math.sqrt(Math.max(0,1-p1*p1))+mix*p2;
+    const z=Math.sqrt(Math.max(0,1-p1*p1-p2*p2));
+    const nh=RayMath.add(RayMath.add(RayMath.mul(t1,p1),RayMath.mul(t2,p2)),RayMath.mul(vh,z));
+    const ne=RayMath.normalize([a*nh[0],a*nh[1],Math.max(0,nh[2])]);
+    return RayMath.normalize(RayMath.add(RayMath.add(RayMath.mul(basis.tangent,ne[0]),RayMath.mul(basis.bitangent,ne[1])),RayMath.mul(basis.n,ne[2])));
+  },
+  reflect(i,n){return RayMath.sub(i,RayMath.mul(n,2*RayMath.dot(i,n)));},
+  distribution(nDotH,roughness){
+    const a=Math.max(.045,roughness),a2=a*a;
+    const d=nDotH*nDotH*(a2-1)+1;
+    return a2/(Math.PI*d*d+1e-8);
+  }
+});
+
+const DielectricTransport=Object.freeze({
+  fresnelDielectric(cosI,etaI,etaT){
+    cosI=Math.max(-1,Math.min(1,cosI));
+    let entering=cosI>0;
+    if(!entering){const t=etaI;etaI=etaT;etaT=t;cosI=Math.abs(cosI);}
+    const sinI=Math.sqrt(Math.max(0,1-cosI*cosI));
+    const sinT=etaI/etaT*sinI;
+    if(sinT>=1)return 1;
+    const cosT=Math.sqrt(Math.max(0,1-sinT*sinT));
+    const rs=((etaT*cosI)-(etaI*cosT))/((etaT*cosI)+(etaI*cosT));
+    const rp=((etaI*cosI)-(etaT*cosT))/((etaI*cosI)+(etaT*cosT));
+    return Math.max(0,Math.min(1,(rs*rs+rp*rp)*.5));
+  },
+  refract(i,n,eta){
+    const cosi=Math.max(-1,Math.min(1,RayMath.dot(i,n)));
+    const k=1-eta*eta*(1-cosi*cosi);
+    if(k<0)return null;
+    return RayMath.normalize(RayMath.sub(RayMath.mul(i,eta),RayMath.mul(n,eta*cosi+Math.sqrt(k))));
+  },
+  beerLambert(color,distance,attenuationDistance){
+    if(!Number.isFinite(attenuationDistance)||attenuationDistance<=0||distance<=0)return [1,1,1];
+    return color.map(c=>Math.pow(Math.max(1e-6,c),distance/attenuationDistance));
+  }
+});
+
+var PathBSDFSampler=Object.freeze({
+  pdf(material,n,v,l){
+    const nDotL=Math.max(0,RayMath.dot(n,l));
+    if(nDotL<=0)return 0;
+    const diffusePdf=nDotL/Math.PI;
+    const specProb=Math.max(.08,Math.min(.92,.25+.65*material.metalness+.2*(1-material.roughness)));
+    const h=RayMath.normalize(RayMath.add(v,l));
+    if(!h.every(Number.isFinite))return (1-specProb)*diffusePdf;
+    const nDotH=Math.max(0,RayMath.dot(n,h));
+    const vDotH=Math.max(1e-7,RayMath.dot(v,h));
+    const D=GGXImportanceSampler.distribution(nDotH,material.roughness);
+    const specPdf=(D*nDotH)/(4*vDotH+1e-8);
+    return (1-specProb)*diffusePdf+specProb*specPdf;
+  },
+
+  sample(material,n,v,seed,bounce){
+    if(material.shading==='unlit')return null;
+    const transmission=Math.max(0,Math.min(1,material.transmission||0));
+    const chooseT=PathSampler.scalar(seed,bounce,6);
+
+    if(transmission>0&&chooseT<transmission){
+      const incident=RayMath.mul(v,-1);
+      const entering=RayMath.dot(incident,n)<0;
+      const normal=entering?n:RayMath.mul(n,-1);
+      const etaI=entering?1:material.ior,etaT=entering?material.ior:1;
+      const eta=etaI/etaT;
+      const cosI=Math.abs(RayMath.dot(incident,normal));
+      const F=DielectricTransport.fresnelDielectric(cosI,etaI,etaT);
+      const chooseF=PathSampler.scalar(seed,bounce,16);
+      let direction,lobe,weight;
+      if(chooseF<F){
+        direction=GGXImportanceSampler.reflect(incident,normal);
+        lobe='dielectric-reflect';
+        weight=[1,1,1];
+      }else{
+        direction=DielectricTransport.refract(incident,normal,eta);
+        if(!direction){
+          direction=GGXImportanceSampler.reflect(incident,normal);
+          lobe='dielectric-tir';
+          weight=[1,1,1];
+        }else{
+          lobe='transmission';
+          weight=material.attenuationColor.slice();
+        }
+      }
+      return {direction:RayMath.normalize(direction),pdf:1,weight,lobe,transmission:true};
+    }
+
+    const specProb=Math.max(.08,Math.min(.92,.25+.65*material.metalness+.2*(1-material.roughness)));
+    const choose=PathSampler.scalar(seed,bounce,7);
+    let direction,lobe='diffuse';
+
+    if(choose<specProb){
+      const u1=PathSampler.scalar(seed,bounce,8),u2=PathSampler.scalar(seed,bounce,9);
+      const h=GGXImportanceSampler.sampleVisibleHalfVector(n,v,material.roughness,u1,u2);
+      direction=GGXImportanceSampler.reflect(RayMath.mul(v,-1),h);
+      direction=RayMath.normalize(direction);
+      lobe='ggx';
+      if(RayMath.dot(n,direction)<=0)direction=PathSampler.cosineHemisphere(n,seed^(0xA511E9B3>>>0),bounce);
+    }else{
+      direction=PathSampler.cosineHemisphere(n,seed,bounce);
+    }
+
+    const cosTheta=Math.max(0,RayMath.dot(n,direction));
+    if(cosTheta<=0)return null;
+    const value=PhysicalBSDF.evaluate(material,n,v,direction);
+    const pdf=Math.max(this.pdf(material,n,v,direction),1e-8);
+    return {direction,pdf,weight:RenderColor.mul(value,1/pdf),lobe};
+  }
+});
+
+var EmissiveTriangleSet=Object.freeze({
+  compile(job,acceleration,compiled){
+    const store=acceleration?.store;
+    if(!store)return Object.freeze({triangles:Object.freeze([]),totalArea:0});
+    const list=[];let totalArea=0;
+    for(let t=0;t<store.triangleCount();t++){
+      const objectIndex=store.objectIndices[t];
+      const ro=job.renderScene.objects[objectIndex];if(!ro)continue;
+      const matId=ro.materialIds[store.materialIndices[t]]??ro.materialIds[0];
+      const mat=compiled.materials.get(matId);
+      const power=(mat?.emissiveIntensity||0)*Math.max(...(mat?.emissive||[0,0,0]));
+      if(!(power>0))continue;
+      const k=t*3,a=store.vertex(store.triangles[k]),b=store.vertex(store.triangles[k+1]),c=store.vertex(store.triangles[k+2]);
+      const e1=RayMath.sub(b,a),e2=RayMath.sub(c,a);
+      const cross=[e1[1]*e2[2]-e1[2]*e2[1],e1[2]*e2[0]-e1[0]*e2[2],e1[0]*e2[1]-e1[1]*e2[0]];
+      const area=.5*RayMath.length(cross);
+      if(!(area>1e-10))continue;
+      const normal=RayMath.normalize(cross);
+      totalArea+=area;
+      list.push(Object.freeze({triangleIndex:t,objectIndex,material:mat,a,b,c,normal,area,cumulative:totalArea}));
+    }
+    return Object.freeze({triangles:Object.freeze(list),totalArea});
+  },
+  sample(set,seed,bounce,point){
+    if(!set?.triangles?.length||!(set.totalArea>0))return null;
+    const u=PathSampler.scalar(seed,bounce,30)*set.totalArea;
+    let tri=set.triangles[set.triangles.length-1];
+    for(const t of set.triangles){if(u<=t.cumulative){tri=t;break;}}
+    const r1=Math.sqrt(PathSampler.scalar(seed,bounce,31));
+    const r2=PathSampler.scalar(seed,bounce,32);
+    const wa=1-r1,wb=r1*(1-r2),wc=r1*r2;
+    const lp=[
+      tri.a[0]*wa+tri.b[0]*wb+tri.c[0]*wc,
+      tri.a[1]*wa+tri.b[1]*wb+tri.c[1]*wc,
+      tri.a[2]*wa+tri.b[2]*wb+tri.c[2]*wc
+    ];
+    const to=RayMath.sub(lp,point),distance=Math.max(1e-6,RayMath.length(to)),direction=RayMath.mul(to,1/distance);
+    const cosEmitter=Math.max(0,RayMath.dot(tri.normal,RayMath.mul(direction,-1)));
+    if(cosEmitter<=0)return null;
+    const pdfArea=1/set.totalArea;
+    const pdfSolid=pdfArea*(distance*distance)/Math.max(1e-6,cosEmitter);
+    const radiance=RenderColor.mul(tri.material.emissive,tri.material.emissiveIntensity);
+    return {triangle:tri,point:lp,direction,distance,cosEmitter,pdf:pdfSolid,radiance};
+  }
+});
+
+const LightTreePolicy=Object.freeze({
+  threshold:6,
+  enabled(job,compiled){
+    return !!job?.settings?.lightTree && (compiled?.lights?.filter?.(l=>l.type!=='dome').length||0)>=this.threshold;
+  },
+  luminance(c){return .2126*c[0]+.7152*c[1]+.0722*c[2]},
+  area(light){
+    if(light.type==='rectangle'||light.type==='mesh')return Math.max(.01,light.width*light.height);
+    if(light.type==='disc')return Math.max(.01,Math.PI*Math.pow(light.size*.5,2));
+    if(light.type==='sphere')return Math.max(.01,4*Math.PI*Math.pow(light.size*.5,2));
+    return 1;
+  },
+  power(light){
+    const base=Math.max(1e-8,this.luminance(light.color||[1,1,1])*(light.intensity||0));
+    return base*Math.sqrt(this.area(light));
+  }
+});
+
+class RenderLightTree{
+  constructor(lights){
+    this.lights=(lights||[])
+      .map((light,sourceIndex)=>({light,sourceIndex}))
+      .filter(x=>x.light.type!=='dome')
+      .map((x,index)=>({...x,index}));
+    this.nodes=[];
+    this.root=this.lights.length?this.build(this.lights):-1;
+  }
+  bounds(items){
+    let mn=[Infinity,Infinity,Infinity],mx=[-Infinity,-Infinity,-Infinity],power=0,infinite=false;
+    for(const it of items){
+      const l=it.light;power+=LightTreePolicy.power(l);
+      if(l.type==='sun'){infinite=true;continue;}
+      const p=l.position||[0,0,0],r=Math.max(.001,(l.size||Math.max(l.width||0,l.height||0)||1)*.5);
+      mn=RayMath.min3(mn,[p[0]-r,p[1]-r,p[2]-r]);
+      mx=RayMath.max3(mx,[p[0]+r,p[1]+r,p[2]+r]);
+    }
+    if(!Number.isFinite(mn[0]))mn=[0,0,0],mx=[0,0,0];
+    return {min:mn,max:mx,power:Math.max(1e-8,power),infinite};
+  }
+  build(items){
+    const b=this.bounds(items),id=this.nodes.length;
+    if(items.length===1){
+      this.nodes.push(Object.freeze({...b,left:-1,right:-1,leaf:true,lightIndex:items[0].index}));
+      return id;
+    }
+    const ext=RayMath.sub(b.max,b.min);let axis=0;if(ext[1]>ext[axis])axis=1;if(ext[2]>ext[axis])axis=2;
+    const sorted=items.slice().sort((a,c)=>(a.light.position?.[axis]||0)-(c.light.position?.[axis]||0));
+    const mid=Math.max(1,Math.floor(sorted.length/2));
+    this.nodes.push(null);
+    const left=this.build(sorted.slice(0,mid)),right=this.build(sorted.slice(mid));
+    this.nodes[id]=Object.freeze({...b,left,right,leaf:false,lightIndex:-1});
+    return id;
+  }
+  distanceToBounds(point,node){
+    if(node.infinite)return 0;
+    let d2=0;
+    for(let a=0;a<3;a++){
+      const v=point[a];
+      const q=v<node.min[a]?node.min[a]-v:v>node.max[a]?v-node.max[a]:0;
+      d2+=q*q;
+    }
+    return Math.sqrt(d2);
+  }
+  score(point,node){
+    if(node.infinite)return node.power;
+    const d=this.distanceToBounds(point,node);
+    const ex=Math.max(1e-6,node.max[0]-node.min[0]);
+    const ey=Math.max(1e-6,node.max[1]-node.min[1]);
+    const ez=Math.max(1e-6,node.max[2]-node.min[2]);
+    const radius=.5*Math.sqrt(ex*ex+ey*ey+ez*ez);
+    const solidAngle=Math.min(1,(radius*radius)/Math.max(1e-6,d*d+radius*radius));
+    return node.power*(.25+.75*solidAngle)/(1+d*d);
+  }
+  sample(point,seed){
+    if(this.root<0)return null;
+    let node=this.nodes[this.root],pdf=1,depth=0,state=seed>>>0;
+    while(!node.leaf){
+      const a=this.nodes[node.left],b=this.nodes[node.right];
+      const sa=this.score(point,a),sb=this.score(point,b),sum=sa+sb;
+      let pa=sum>0?sa/sum:.5;
+      pa=Math.max(.02,Math.min(.98,pa));
+      state=RenderSampling.hash32(state+0x9E3779B9+depth);
+      const u=(state>>>0)/4294967296;
+      if(u<pa){pdf*=pa;node=a;}else{pdf*=1-pa;node=b;}
+      depth++;
+    }
+    const entry=this.lights[node.lightIndex];
+    const light=entry?.light||null;
+    if(light?.direction&&light?.position){
+      const toPoint=RayMath.normalize(RayMath.sub(point,light.position));
+      const facing=Math.max(.05,Math.abs(RayMath.dot(RayMath.normalize(light.direction),toPoint)));
+      pdf=Math.max(1e-8,pdf*facing);
+    }
+    return {light,sourceIndex:entry?.sourceIndex??node.lightIndex,pdf:Math.max(1e-8,Math.min(1,pdf)),depth};
+  }
+  stats(){
+    return Object.freeze({lights:this.lights.length,nodes:this.nodes.length,depth:this.maxDepth(this.root)});
+  }
+  maxDepth(id){
+    if(id<0)return 0;const n=this.nodes[id];if(n.leaf
+
+===== RenderMIS @ 361804 =====
+,normal);if(!g)return null;
+    const d=this.sampleCone(g.direction,normal,seed,bounce);if(!d)return null;
+    this.samples++;this.guided++;
+    return {direction:d,pdf:this.pdf(position,normal,d),confidence:g.confidence};
+  }
+  stats(){return Object.freeze({cells:this.cells.size,updates:this.updates,samples:this.samples,guided:this.guided,fallbacks:this.fallbacks,cellSize:this.cellSize});}
+}
+
+const GuidedBSDFSampler=Object.freeze({
+  sample(job,material,n,v,position,seed,bounce){
+    const field=job?.pathGuide;
+    if(!PathGuidePolicy.enabled(job)||!field)return PathBSDFSampler.sample(material,n,v,seed,bounce);
+    const guide=field.lookup(position,n);
+    if(!guide)return PathBSDFSampler.sample(material,n,v,seed,bounce);
+
+    const mix=Math.min(PathGuidePolicy.maxMix,.15+.3*guide.confidence);
+    const choose=PathSampler.scalar(seed,bounce,42);
+    let direction,lobe='guided';
+    if(choose<mix){
+      const gs=field.sample(position,n,seed,bounce);
+      if(!gs)return PathBSDFSampler.sample(material,n,v,seed,bounce);
+      direction=gs.direction;
+    }else{
+      const bs=PathBSDFSampler.sample(material,n,v,seed,bounce);
+      if(!bs||bs.transmission)return bs;
+      direction=bs.direction;lobe=bs.lobe;
+    }
+    const bsdfPdf=PathBSDFSampler.pdf(material,n,v,direction);
+    const guidePdf=field.pdf(position,n,direction);
+    const pdf=Math.max(1e-8,(1-mix)*bsdfPdf+mix*guidePdf);
+    const value=PhysicalBSDF.evaluate(material,n,v,direction);
+    return {direction,pdf,weight:RenderColor.mul(value,1/pdf),lobe,guided:true};
+  }
+});
+
+
+const Group9DirectMIS=Object.freeze({
+  lightPdf(light,sample){
+    if(!light||!sample)return 0;
+    if(['point','spot','sun'].includes(light.type))return Infinity; // delta lights: light sampling owns the event
+    if(['rectangle','disc','sphere','mesh'].includes(light.type)){
+      const area=Math.max(RenderLightPolicy.minArea,Number(sample.area)||RenderLightPolicy.area(light));
+      const distance=Math.max(1e-6,Number(sample.distance)||1);
+      const cosEmitter=Math.max(1e-6,Number(sample.emitterCos)||1);
+      return (distance*distance)/(area*cosEmitter);
+    }
+    return 0;
+  },
+
+  evaluate(job,acceleration,compiled,ray,hit,pixelSeed=1){
+    const material=RenderMaterialLibrary.resolveHit(job.renderScene,compiled.materials,hit);
+    const n=SurfaceInterpolator.normal(acceleration,hit);
+    const v=RayMath.mul(ray.direction,-1);
+    let color=RenderColor.mul(material.emissive,material.emissiveIntensity);
+    const maxShadowRays=Math.max(1,Math.min(4096,Number(job?.settings?.maxShadowRaysPerHit)||1024));
+    let shadowRays=0;
+
+    if(material.shading==='unlit')return RenderColor.add(material.baseColor,color);
+
+    const useTree=LightTreePolicy.enabled(job,compiled)&&job.lightTree;
+    const selected=useTree?job.lightTree.sample(hit.position,pixelSeed^0x51ED270B):null;
+    const candidates=selected
+      ? [{light:selected.light,sourceIndex:selected.sourceIndex,selectionPdf:selected.pdf}]
+      : compiled.lights.map((light,sourceIndex)=>({light,sourceIndex,selectionPdf:1}));
+
+    for(const candidate of candidates){
+      const light=candidate.light;
+      if(!light||light.type==='dome')continue;
+
+      const li=candidate.sourceIndex;
+      const selectionPdf=Math.max(1e-8,candidate.selectionPdf||1);
+      const count=DirectLightingIntegrator.samplesFor(light,job.settings);
+      let accum=[0,0,0];
+
+      for(let si=0;si<count;si++){
+        const uv=RenderSampling.sample2D(pixelSeed^(li*2654435761),si);
+        const sample=['rectangle','disc','sphere','mesh'].includes(light.type)
+          ? AreaLightSampler.sample(light,hit.position,uv[0],uv[1])
+          : DirectLightSampler.sample(light,hit.position);
+
+        if(!sample?.direction||!sample.radiance||sample.radiance.every(x=>x<=0||!Number.isFinite(x)))continue;
+        if(light.castShadows!==false){
+          if(shadowRays>=maxShadowRays)break;
+          shadowRays++;
+          if(!ShadowVisibility.visible(acceleration,hit.position,sample.direction,sample.distance))continue;
+        }
+
+        const scaledRadiance=useTree?RenderColor.mul(sample.radiance,1/selectionPdf):sample.radiance;
+        const brdf=PhysicalBSDF.evaluate(material,n,v,sample.direction);
+        const bsdfPdf=PathBSDFSampler.pdf(material,n,v,sample.direction);
+        const conditionalPdf=this.lightPdf(light,sample);
+        const lightPdf=Number.isFinite(conditionalPdf)?conditionalPdf*selectionPdf:conditionalPdf;
+        const weight=Number.isFinite(lightPdf)?RenderMIS.power(lightPdf,bsdfPdf):1;
+        accum=RenderColor.add(accum,RenderColor.mul(RenderColor.mul(brdf,scaledRadiance),weight));
+      }
+
+      if(count>1)accum=RenderColor.mul(accum,1/count);
+      color=RenderColor.add(color,accum);
+    }
+    return color;
+  }
+});
+
+const LightCachePolicy=Object.freeze({
+  sceneScale(acceleration){
+    const root=acceleration?.bvh?.root;
+    const node=(root!=null&&root>=0)?acceleration.bvh.nodes[root]:null;
+    if(!node)return 1;
+    const d=RayMath.sub(node.max,node.min);
+    return Math.max(1e-4,RayMath.length(d));
+  },
+  radius(job,acceleration){
+    const q=String(job?.settings?.quality||'Preview');
+    const divisor=q==='Ultra'?64:q==='High'?48:q==='Draft'?20:32;
+    return Math.max(RenderRayPolicy.epsilonForPoint([0,0,0])*32,this.sceneScale(acceleration)/divisor);
+  },
+  probes(job){
+    const q=String(job?.settings?.quality||'Preview');
+    return q==='Ultra'?16:q==='High'?12:q==='Draft'?3:8;
+  },
+  maxRecords(job){
+    const q=String(job?.settings?.quality||'Preview');
+    return q==='Ultra'?12000:q==='High'?8000:q==='Draft'?1500:4000;
+  },
+  retraceEvery(job){
+    const q=String(job?.settings?.quality||'Preview');
+    return q==='Ultra'?8:q==='High'?12:q==='Draft'?32:16;
+  },
+  normalThreshold:.75
+});
+
+class RenderLightCache{
+  constructor(job,acceleration){
+    this.radius=LightCachePolicy.radius(job,acceleration);
+    this.cellSize=this.radius;
+    this.maxRecords=LightCachePolicy.maxRecords(job);
+    this.records=[];
+    this.grid=new Map();
+    this.hits=0;this.misses=0;this.inserts=0;this.rejected=0;this.retraces=0;this.refreshes=0;
+  }
+  key(ix,iy,iz){return ix+','+iy+','+iz}
+  cell(p){return [Math.floor(p[0]/this.cellSize),Math.floor(p[1]/this.cellSize),Math.floor(p[2]/this.cellSize)]}
+  insert(position,normal,radiance){
+    if(this.records.length>=this.maxRecords){this.rejected++;return false;}
+    if(!position?.every(Number.isFinite)||!normal?.every(Number.isFinite)||!radiance?.every(v=>Number.isFinite(v)&&v>=0)){this.rejected++;return false;}
+    const rec=Object.freeze({position:position.slice(),normal:RayMath.normalize(normal),radiance:radiance.slice()});
+    const id=this.records.length;this.records.push(rec);this.inserts++;
+    const c=this.cell(position),k=this.key(c[0],c[1],c[2]);
+    let bucket=this.grid.get(k);if(!bucket)this.grid.set(k,bucket=[]);
+    bucket.push(id);return true;
+  }
+  query(position,normal){
+    const c=this.cell(position);let sum=[0,0,0],ws=0;
+    for(let z=-1;z<=1;z++)for(let y=-1;y<=1;y++)for(let x=-1;x<=1;x++){
+      const bucket=this.grid.get(this.key(c[0]+x,c[1]+y,c[2]+z));if(!bucket)continue;
+      for(const id of bucket){
+        const r=this.records[id];
+        const delta=RayMath.sub(r.position,position),dist=RayMath.length(delta);
+        if(dist>this.radius)continue;
+        const nd=RayMath.dot(r.normal,normal);if(nd<LightCachePolicy.normalThreshold)continue;
+        const w=(1-dist/this.radius)*Math.max(.05,nd);
+        sum=RenderColor.add(sum,RenderColor.mul(r.radiance,w));ws+=w;
+      }
+    }
+    if(ws>0){this.hits++;return RenderColor.mul(sum,1/ws);}
+    this.misses++;return null;
+  }
+  refreshNearest(position,normal,radiance){
+    const c=this.cell(position);let best=-1,bestD=Infinity;
+    for(let z=-1;z<=1;z++)for(let y=-1;y<=1;y++)for(let x=-1;x<=1;x++){
+      const bucket=this.grid.get(this.key(c[0]+x,c[1]+y,c[2]+z));if(!bucket)continue;
+      for(const id of bucket){
+        const r=this.records[id],d=RayMath.length(RayMath.sub(r.position,position));
+        if(d<this.radius&&d<bestD&&RayMath.dot(r.normal,normal)>=LightCachePolicy.normalThreshold){best=id;bestD=d;}
+      }
+    }
+    if(best<0)return this.insert(position,normal,radiance);
+    const old=this.records[best];
+    this.records[best]=Object.freeze({
+      position:old.position,normal:old.normal,
+      radiance:[
+        old.radiance[0]*.75+radiance[0]*.25,
+        old.radiance[1]*.75+radiance[1]*.25,
+        old.radiance[2]*.75+radiance[2]*.25
+      ]
+    });
+    this.refreshes++;return true;
+  }
+  stats(){return Object.freeze({records:this.records.length,hits:this.hits,misses:this.misses,inserts:this.inserts,rejected:this.rejected,retraces:this.retraces,refreshes:this.refreshes,radius:this.radius});}
+}
+
+const LightCacheEstimator=Object.freeze({
+  enabled(job){return job?.settings?.globalIllumination!==false&&job?.settings?.secondaryGI==='Light Cache';},
+  cacheable(material){return material&&material.shading!=='unlit'&&(material.transmission||0)<.05&&(material.metalness||0)<.95;},
+
+  probe(job,acceleration,compiled,hit,n,material,seed,bounce){
+    const count=LightCachePolicy.probes(job);
+    let incoming=[0,0,0];
+    for(let i=0;i<count;i++){
+      const d=PathSampler.cosineHemisphere(n,seed^Math.imul(i+1,0x85EBCA77),bounce+17);
+      const origin=PathIntegrator.offsetOrigin(hit,n,d);
+      const eps=RenderRayPolicy.epsilonForPoint(origin);
+      const probeRay=new RenderRay(origin,d,eps,Infinity,RenderRayType.DIFFUSE,bounce+1);
+      try{LiteTraceExecutionContext.performance?.addProbe?.();}catch(_){}
+      const ph=acceleration.trace(probeRay);
+      let li;
+      if(!ph.hit){
+        li=PathIntegrator.safeColor(RenderCoreD.evaluateEnvironment(job,compiled,d));
+      }else{
+        li=PathIntegrator.safeColor(Group9DirectMIS.evaluate(job,acceleration,compiled,probeRay,ph,seed^Math.imul(i+3,0x9E3779B9)));
+      }
+      incoming=RenderColor.add(incoming,li);
+    }
+    incoming=RenderColor.mul(incoming,1/Math.max(1,count));
+    const diffuse=RenderColor.mul(material.baseColor,Math.max(0,1-material.metalness));
+    return RenderColor.mul(diffuse,incoming);
+  },
+
+  estimate(job,acceleration,compiled,hit,n,material,seed,bounce){
+    const cache=job.lightCache;if(!cache||!this.cacheable(material))return null;
+    const found=cache.query(hit.position,n);
+    if(found){
+      const cadence=LightCachePolicy.retraceEvery(job);
+      if(cadence>0&&cache.hits%cadence===0){
+        cache.retraces++;
+        const fresh=this.probe(job,acceleration,compiled,hit,n,material,seed^0xB5297A4D,bounce);
+        cache.refreshNearest(hit.position,n,fresh);
+        return RenderColor.mul(RenderColor.add(RenderColor.mul(found,.75),RenderColor.mul(fresh,.25)),1);
+      }
+      return found;
+    }
+
+    const outgoing=this.probe(job,acceleration,compiled,hit,n,material,seed,bounce);
+    cache.insert(hit.position,n,outgoing);
+    return outgoing;
+  }
+});
+
+var PathIntegrator=Object.freeze({
+  maxDepth(job){
+    return Math.max(1,Math.min(16,Number(job?.settings?.maxBounces)||5));
+  },
+
+  finiteColor(c){
+    return Array.isArray(c)&&c.length===3&&c.every(v=>Number.isFinite(v)&&v>=0);
+  },
+
+  safeColor(c){
+    return this.finiteColor(c)?c:[0,0,0];
+  },
+
+  offsetOrigin(hit,n,direction){
+    const sign=RayMath.dot(direction,n)>=0?1:-1;
+    const eps=RenderRayPolicy.epsilonForPoint(hit.position);
+    return RayMath.add(hit.position,RayMath.mul(n,eps*sign));
+  },
+
+  trace(job,acceleration,compiled,primaryRay,pixelSeed,initialHit=null){
+    let radiance=[0,0,0];
+    let throughput=[1,1,1];
+    let ray=primaryRay;
+    let previousGuide=null;
+    const maxDepth=this.maxDepth(job);
+    const maxPathRays=Math.max(1,Math.min(4096,Number(job?.settings?.maxPathRays)||64));
+    let pathRays=1;
+
+    for(let bounce=0;bounce<maxDepth;bounce++){
+      const hit=(bounce===0&&initialHit)?initialHit:acceleration.trace(ray);
+
+      if(!hit.hit){
+        const env=this.safeColor(RenderCoreD.evaluateEnvironment(job,compiled,ray.direction));
+        radiance=RenderColor.add(radiance,RenderColor.mul(throughput,env));
+        if(previousGuide&&job.pathGuide){
+          const w=Math.max(0,.2126*env[0]+.7152*env[1]+.0722*env[2]);
+          job.pathGuide.record(previousGuide.position,previousGuide.normal,previousGuide.direction,w);
+        }
+        break;
+      }
+
+      const material=RenderMaterialLibrary.resolveHit(job.renderScene,compiled.materials,hit);
+      const n=SurfaceInterpolator.normal(acceleration,hit);
+      const v=RayMath.mul(ray.direction,-1);
+
+      // Next-event direct lighting at each hit. Dome is excluded here because
+      // environment energy is accounted for by path miss evaluation.
+      const direct=Group9DirectMIS.evaluate(
+        job,acceleration,compiled,ray,hit,pixelSeed^(bounce*0x9E3779B9)
+      );
+      const safeDirect=this.safeColor(direct);
+      radiance=RenderColor.add(radiance,RenderColor.mul(throughput,safeDirect));
+
+      if(previousGuide&&job.pathGuide){
+        const w=Math.max(0,.2126*safeDirect[0]+.7152*safeDirect[1]+.0722*safeDirect[2]);
+        job.pathGuide.record(previousGuide.position,previousGuide.normal,previousGuide.direction,w);
+      }
+
+      if(bounce>=1){
+        if(job?.settings?.secondaryGI==='None')break;
+        if(LightCacheEstimator.enabled(job)){
+          const cachedTail=LightCacheEstimator.estimate(job,acceleration,compiled,hit,n,material,pixelSeed,bounce);
+          if(cachedTail){
+            radiance=RenderColor.add(radiance,RenderColor.mul(throughput,cachedTail));
+            break;
+          }
+        }
+      }
+
+      if(material.shading==='unlit')break;
+
+      const sample=GuidedBSDFSampler.sample(job,material,n,v,hit.position,pixelSeed,bounce);
+      if(!sample)break;
+
+      throughput=RenderColor.mul(throughput,sample.weight);
+
+      if(!this.finiteColor(throughput))break;
+      if(Math.max(throughput[0],throughput[1],throughput[2])<1e-6)break;
+
+      // Russian roulette after the first few bounces. Survival probability tracks path throughput.
+      if(bounce>=2){
+        const survive=Math.max(.08,Math.min(.95,Math.max(throughput[0],throughput[1],throughput[2])));
+        if(PathSampler.scalar(pixelSeed,bounce,15)>survive)break;
+        throughput=RenderColor.mul(throughput,1/survive);
+      }
+
+      if(sample.transmission&&material.thickness>0){
+        throughput=RenderColor.mul(
+          throughput,
+          DielectricTransport.beerLambert(material.attenuationColor,material.thickness,material.attenuationDistance)
+        );
+      }
+
+      previousGuide=(!sample.transmission&&job.pathGuide&&RayMath.dot(n,sample.direction)>0)
+        ? {position:hit.position.slice(),normal:n.slice(),direction:sample.direction.slice()}
+        : null;
+
+      if(pathRays>=maxPathRays)break;
+      pathRays++;
+      const origin=this.offsetOrigin(hit,n,sample.direction);
+      const eps=RenderRayPolicy.epsilonForPoint(origin);
+      const rayType=sample.transmission?RenderRayType.TRANSMISSION:(sample.lobe==='ggx'?RenderRayType.GLOSSY:RenderRayType.DIFFUSE);
+      RenderCoreH.attachPerformance(job).addRay(rayType);
+      ray=new RenderRay(origin,sample.direction,eps,Infinity,rayType,bounce+1);
+    }
+
+    return radiance;
+  },
+
+  tracePixel(job,acceleration,compiled,primaryRay,pixelSeed){
+    const primaryHitRecord=acceleration.trace(primaryRay);
+    if(!primaryHitRecord.hit){
+      const env=this.safeColor(RenderCoreD.evaluateEnvironment(job,compiled,primaryRay.direction));
+      return {radiance:env,primaryHit:false,primaryHitRecord:null};
+    }
+    return {
+      radiance:this.trace(job,acceleration,compiled,primaryRay,pixelSeed,primaryHitRecord),
+      primaryHit:true,
+      primaryHitRecord
+    };
+  }
+});
+
+class ProgressiveAccumulator{
+  constructor(width,height){
+    this.width=width;this.height=height;
+    const n=width*height;
+    this.sum=new Float64Array(n*3);
+    this.mean=new Float64Array(n);
+    this.m2=new Float64Array(n);
+    this.samples=new Uint32Array(n);
+    this.converged=new Uint8Array(n);
+    this.active=n;
+  }
+  add(index,color){
+    const s=++this.samples[index];
+    const o=index*3;
+    this.sum[o]+=color[0];this.sum[o+1]+=color[1];this.sum[o+2]+=color[2];
+    const lum=.2126*color[0]+.7152*color[1]+.0722*color[2];
+    const delta=lum-this.mean[index];
+    this.mean[index]+=delta/s;
+    this.m2[index]+=delta*(lum-this.mean[index]);
+  }
+  variance(index){
+    const s=this.samples[index];
+    return s>1?Math.max(0,this.m2[index]/(s-1)):Infinity;
+  }
+  noise(index){
+    const mean=Math.max(1e-6,Math.abs(this.mean[index]));
+    const s=Math.max(1,this.samples[index]);
+    return Math.sqrt(this.variance(index)/s)/mean;
+  }
+  shouldSample(index,settings){
+    if(!settings.adaptive)return this.samples[index]<settings.maxSamples;
+    if(this.samples[index]<settings.minSamples)return true;
+    if(this.samples[index]>=settings.maxSamples)return false;
+    return this.noise(index)>settings.noiseThreshold;
+  }
+  markConverged(index){
+    if(this.converged[index])return;
+    this.
+
+===== RenderMIS @ 384791 =====
+    Math.max(0,beauty[2]-direct[2]-emission[2])
+      ]);
+    }
+    RenderCoreH.markStage(job,'render',renderStart16);
+    if(LiteTraceExecutionContext.performance===perf16){LiteTraceExecutionContext.activeJob=null;LiteTraceExecutionContext.performance=null;}
+    job.renderChannels=aovs;
+    return {
+      width,height,rgba,
+      channels:aovs,
+      metadata:Object.freeze({
+        renderer:'Group 9 Progressive Path GI',
+        samplesPerPixel:accumulator.averageSamples(),
+        passes:completedPasses,
+        maxBounces:PathIntegrator.maxDepth(job),
+        estimator:'Path GI + direct NEE + power-heuristic MIS',
+        mis:true,
+        adaptive:!!settings.adaptive,
+        progressive:!!settings.progressive,
+        russianRoulette:true,
+        importanceSampling:'GGX + cosine mixture',
+        noise:accumulator.averageNoise(),
+        transmission:true,
+        secondaryGI:settings.secondaryGI,
+        lightCache:job.lightCache?.stats?.()||null,
+        emissiveTriangleLights:compiled.emissiveTriangles?.triangles?.length||0,
+        diagnostics:RenderPart5Core.diagnostics(job,compiled,acceleration),
+        performance:RenderCoreH.performance(job)
+      })
+    };
+  }
+});
+
+const RenderGroup8Contract=Object.freeze({
+  owns:Object.freeze([
+    'multi-bounce path integration',
+    'path throughput',
+    'secondary-ray spawning',
+    'cosine hemisphere BSDF sampling baseline',
+    'environment contribution on path miss',
+    'path-GI render mode'
+  ]),
+  consumes:Object.freeze([
+    'Core B ray/BVH tracing',
+    'Core C physical materials and lights',
+    'Group 7 shadow visibility and direct-light sampling'
+  ]),
+  doesNotOwn:Object.freeze([
+    'progressive accumulation',
+    'adaptive sampling',
+    'MIS',
+    'Light Cache',
+    'denoising',
+    'path guiding'
+  ])
+});
+
+function runRenderGroup8SelfTests(){
+  const errors=[];
+
+  {
+    const n=[0,0,1];
+    const d=PathSampler.cosineHemisphere(n,123,0);
+    if(!Number.isFinite(d[0]+d[1]+d[2])||RayMath.dot(n,d)<-1e-6){
+      errors.push('Cosine hemisphere sample failed');
+    }
+  }
+
+  {
+    const mat=new RenderSurfaceMaterial({
+      id:'p8',name:'p8',shading:'physical',baseColor:[.8,.8,.8],
+      roughness:.6,metalness:0,opacity:1,emissive:[0,0,0],emissiveIntensity:0
+    });
+    const smp=PathBSDFSampler.sample(mat,[0,0,1],[0,0,1],456,1);
+    if(!smp||!Number.isFinite(smp.pdf)||smp.pdf<=0||smp.weight.some(x=>!Number.isFinite(x)||x<0)){
+      errors.push('Path BSDF sample failed');
+    }
+  }
+
+  {
+    const fakeJob={settings:{maxBounces:99}};
+    if(PathIntegrator.maxDepth(fakeJob)!==16)errors.push('Path depth clamp failed');
+  }
+
+  return {ok:errors.length===0,errors};
+}
+window.runRenderGroup8SelfTests=runRenderGroup8SelfTests;
+
+function validateRenderGroup8(){
+  const errors=[];
+  if(typeof PathSampler.cosineHemisphere!=='function')errors.push('PathSampler missing');
+  if(typeof PathBSDFSampler.sample!=='function')errors.push('PathBSDFSampler missing');
+  if(typeof PathIntegrator.trace!=='function')errors.push('PathIntegrator missing');
+  if(typeof PathGIRenderer.render!=='function')errors.push('PathGIRenderer missing');
+  const tests=runRenderGroup8SelfTests();if(!tests.ok)errors.push(...tests.errors);
+  return {ok:errors.length===0,errors};
+}
+
+Object.assign(window,{
+  PathSampler,PathBSDFSampler,PathIntegrator,PathGIRenderer,RenderGroup8Contract
+});
+
+
+/* ============================================================
+   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 9 GEN3
+   PROGRESSIVE + MIS + ADAPTIVE + RR + GGX IMPORTANCE
+   ============================================================ */
+const RenderGroup9Contract=Object.freeze({
+  owns:Object.freeze([
+    'progressive sample accumulation',
+    'per-pixel variance/noise estimation',
+    'adaptive convergence',
+    'MIS weighting for direct NEE vs BSDF sampling',
+    'Russian roulette path termination',
+    'GGX/cosine mixed BSDF importance sampling',
+    'progressive framebuffer preview'
+  ]),
+  consumes:Object.freeze([
+    'Part 5 Path GI',
+    'Part 4 light/shadow/environment services',
+    'Core B acceleration',
+    'Part 6 framebuffer/settings/progress UI'
+  ]),
+  doesNotOwn:Object.freeze([
+    'transmission/refraction',
+    'true emissive triangle-light sampling',
+    'Light Cache',
+    'denoising',
+    'AOV architecture',
+    'Light Tree',
+    'path guiding'
+  ])
+});
+
+function runRenderGroup9SelfTests(){
+  const errors=[];
+  const expect=(c,m)=>{if(!c)errors.push(m);};
+
+  try{
+    const w=RenderMIS.power(.5,.5);
+    expect(Math.abs(w-.5)<1e-9,'MIS equal-PDF power heuristic failed');
+    expect(RenderMIS.power(1,0)===1,'MIS zero competitor failed');
+  }catch(e){errors.push('MIS test: '+String(e?.message||e));}
+
+  try{
+    const n=[0,0,1];
+    const h=GGXImportanceSampler.sampleHalfVector(n,.25,.37,.61);
+    expect(h.every(Number.isFinite)&&RayMath.dot(n,h)>=0,'GGX half-vector sample failed');
+    const D=GGXImportanceSampler.distribution(.8,.25);
+    expect(Number.isFinite(D)&&D>0,'GGX distribution failed');
+  }catch(e){errors.push('GGX test: '+String(e?.message||e));}
+
+  try{
+    const mat=new RenderSurfaceMaterial({
+      id:'g9',name:'g9',shading:'physical',baseColor:[.7,.6,.5],
+      roughness:.2,metalness:.8,opacity:1,emissive:[0,0,0],emissiveIntensity:0
+    });
+    const s=PathBSDFSampler.sample(mat,[0,0,1],[0,0,1],12345,0);
+    expect(!!s&&s.pdf>0&&Number.isFinite(s.pdf),'Mixed BSDF sampler failed');
+    expect(s.weight.every(v=>Number.isFinite(v)&&v>=0),'Mixed BSDF weight invalid');
+  }catch(e){errors.push('BSDF importance test: '+String(e?.message||e));}
+
+  try{
+    const a=new ProgressiveAccumulator(2,1);
+    a.add(0,[1,1,1]);a.add(0,[1,1,1]);
+    a.add(1,[0,0,0]);a.add(1,[2,2,2]);
+    expect(a.samples[0]===2&&a.samples[1]===2,'Accumulator sample count failed');
+    expect(a.noise(0)===0,'Stable pixel noise should be zero');
+    expect(Number.isFinite(a.noise(1))&&a.noise(1)>0,'Variable pixel noise estimation failed');
+  }catch(e){errors.push('Accumulator test: '+String(e?.message||e));}
+
+  try{
+    const s=RenderSettingsPolicy.sanitize({
+      ...new RenderSettingsModel().clone(),
+      progressive:true,adaptive:true,minSamples:4,maxSamples:32,noiseThreshold:.02
+    });
+    expect(s.progressive&&s.adaptive,'Sampling toggles lost');
+    expect(s.minSamples===4&&s.maxSamples===32&&Math.abs(s.noiseThreshold-.02)<1e-9,'Sampling settings lost');
+  }catch(e){errors.push('Sampling settings test: '+String(e?.message||e));}
+
+  try{
+    const fake={type:'rectangle',width:2,height:2};
+    const pdf=Group9DirectMIS.lightPdf(fake,{area:4,distance:2,emitterCos:1});
+    expect(Math.abs(pdf-1)<1e-9,'Area light solid-angle PDF conversion failed');
+  }catch(e){errors.push('Direct MIS PDF test: '+String(e?.message||e));}
+
+  return {ok:errors.length===0,errors};
+}
+
+function validateRenderGroup9(){
+  const errors=[];
+  if(typeof RenderMIS?.power!=='function')errors.push('MIS helper missing');
+  if(typeof GGXImportanceSampler?.sampleHalfVector!=='function')errors.push('GGX importance sampler missing');
+  if(typeof PathBSDFSampler?.pdf!=='function')errors.push('BSDF PDF missing');
+  if(typeof Group9DirectMIS?.evaluate!=='function')errors.push('Direct MIS evaluator missing');
+  if(typeof ProgressiveAccumulator!=='function')errors.push('Progressive accumulator missing');
+  if(typeof PathGIRenderer?.render!=='function')errors.push('Progressive Path renderer missing');
+  const t=runRenderGroup9SelfTests();if(!t.ok)errors.push(...t.errors);
+  return {ok:errors.length===0,errors};
+}
+
+const RenderGroup9Core=Object.freeze({
+  version:'3.79.22-group9-gen3',
+  validate:validateRenderGroup9,
+  mis:RenderMIS,
+  ggx:GGXImportanceSampler,
+  directMIS:Group9DirectMIS
+});
+Object.assign(window,{
+  RenderMIS,GGXImportanceSampler,Group9DirectMIS,ProgressiveAccumulator,
+  RenderGroup9Contract,runRenderGroup9SelfTests,validateRenderGroup9,RenderGroup9Core
+});
+
+
+/* ============================================================
+   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 10 GEN3
+   TRANSMISSION + REFRACTION + EMISSIVE GI
+   ============================================================ */
+const RenderGroup10Contract=Object.freeze({
+  owns:Object.freeze([
+    'dielectric Fresnel transport',
+    'refraction and total-internal-reflection handling',
+    'transmission ray classification',
+    'basic absorption/attenuation transport',
+    'emissive triangle extraction',
+    'emissive triangle next-event sampling'
+  ]),
+  consumes:Object.freeze([
+    'Group 9 path sampling, MIS and progressive accumulation',
+    'Core B triangle store and acceleration',
+    'Core C material compilation',
+    'Part 4 shadow visibility'
+  ]),
+  doesNotOwn:Object.freeze([
+    'nested dielectric medium stacks',
+    'spectral dispersion',
+    'thin-film interference',
+    'caustic-specialized sampling',
+    'Light Cache',
+    'denoising',
+    'Light Tree',
+    'path guiding'
+  ])
+});
+
+function runRenderGroup10SelfTests(){
+  const errors=[];
+  const expect=(c,m)=>{if(!c)errors.push(m);};
+
+  try{
+    const F=DielectricTransport.fresnelDielectric(1,1,1.5);
+    expect(Number.isFinite(F)&&F>0&&F<.1,'Normal-incidence dielectric Fresnel failed');
+    expect(DielectricTransport.fresnelDielectric(.01,1.5,1)>.5,'High-angle internal Fresnel failed');
+  }catch(e){errors.push('Fresnel test: '+String(e?.message||e));}
+
+  try{
+    const r=DielectricTransport.refract([0,0,-1],[0,0,1],1/1.5);
+    expect(r&&r.every(Number.isFinite)&&r[2]<-.99,'Normal-incidence refraction failed');
+    const tir=DielectricTransport.refract([.99,0,.141067],[0,0,-1],1.5);
+    expect(tir===null||tir.every(Number.isFinite),'TIR handling produced invalid direction');
+  }catch(e){errors.push('Refraction test: '+String(e?.message||e));}
+
+  try{
+    const a=DielectricTransport.beerLambert([.25,.5,1],2,2);
+    expect(a.every(Number.isFinite),'Absorption produced non-finite values');
+    expect(Math.abs(a[0]-.25)<1e-6&&Math.abs(a[2]-1)<1e-6,'Absorption distance scaling failed');
+  }catch(e){errors.push('Absorption test: '+String(e?.message||e));}
+
+  try{
+    const m=new RenderSurfaceMaterial({
+      id:'glass',name:'Glass',shading:'physical',baseColor:[1,1,1],
+      roughness:.1,metalness:0,opacity:1,transparent:true,
+      transmission:1,ior:1.5,thickness:2,attenuationColor:[.8,.9,1],attenuationDistance:5,
+      emissive:[0,0,0],emissiveIntensity:0
+    });
+    expect(m.transmission===1&&Math.abs(m.ior-1.5)<1e-9&&m.thickness===2,'Transmission material fields failed');
+    const s=PathBSDFSampler.sample(m,[0,0,1],[0,0,1],9,0);
+    expect(s&&s.transmission===true&&s.direction.every(Number.isFinite),'Transmission BSDF sample failed');
+  }catch(e){errors.push('Transmission material test: '+String(e?.message||e));}
+
+  try{
+    const mat=new RenderSurfaceMaterial({
+      id:'emit',name:'Emit',shading:'physical',baseColor:[.5,.5,.5],roughness:.5,metalness:0,
+      opacity:1,transmission:0,ior:1.5,thickness:0,attenuationColor:[1,1,1],
+      emissive:[1,.5,.25],emissiveIntensity:10
+    });
+    const lib={get:id=>id==='emit'?mat:null};
+    const scene={objects:[{materialIds:['emit']}]};
+    const store=new RenderTriangleStore();
+    store.addPacket({
+      objectId:'o',positions:new Float32Array([-1,-1,0,1,-1,0,0,1,0]),
+      normals:new Float32Array([0,0,1,0,0,1,0,0,1]),
+      uvs:new Float32Array(6),indices:new Uint32Array([0,1,2]),materialIndices:new Uint16Array([0])
+    },0);store.finalize();
+    const acc={store};
+    const set=EmissiveTriangleSet.compile({renderScene:scene},acc,{materials:lib});
+    expect(set.triangles.length===1&&set.totalArea>0,'Emissive triangle extraction failed');
+    const sample=EmissiveTriangleSet.sample(set,7,0,[0,0,2]);
+    expect(sample&&sample.pdf>0&&sample.radiance.some(v=>v>0),'Emissive triangle sampling failed');
+  }catch(e){errors.push('Emissive GI test: '+String(e?.message||e));}
+
+  return {ok:errors.length===0,errors};
+}
+
+function validateRenderGroup10(){
+  const errors=[];
+  if(typeof DielectricTransport?.refract!=='function')errors.push('Dielectric refraction missing');
+  if(typeof DielectricTransport?.fresnelDielectric!=='function')errors.push('Dielectric Fresnel missing');
+  if(typeof EmissiveTriangleSet?.compile!=='function')errors.push('Emissive triangle compiler missing');
+  if(typeof EmissiveTriangleSet?.sample!=='function')errors.push('Emissive triangle sampler missing');
+  if(typeof PathBSDFSampler?.sample!=='function')errors.push('Path BSDF sampler missing');
+  const t=runRenderGroup10SelfTests();if(!t.ok)errors.push(...t.errors);
+  return {ok:errors.length===0,errors};
+}
+
+const RenderGroup10Core=Object.freeze({
+  version:'3.79.23-group10-gen3',
+  validate:validateRenderGroup10,
+  dielectric:DielectricTransport,
+  emissiveTriangles:EmissiveTriangleSet
+});
+Object.assign(window,{
+  DielectricTransport,EmissiveTriangleSet,
+  RenderGroup10Contract,runRenderGroup10SelfTests,validateRenderGroup10,RenderGroup10Core
+});
+
+
+/* ============================================================
+   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — CORE E GEN1
+   CLEAN GROUP 9 + GROUP 10 CONSOLIDATION
+   ============================================================ */
+const RenderCoreEContract=Object.freeze({
+  combines:Object.freeze(['Group 9','Group 10']),
+  owns:Object.freeze([
+    'progressive path-render sampling policy',
+    'adaptive convergence policy',
+    'MIS coordination',
+    'GGX/cosine BSDF proposal coordination',
+    'Russian roulette policy',
+    'dielectric transmission/refraction transport',
+    'emissive triangle GI preparation'
+  ]),
+  consumes:Object.freeze([
+    'Core B acceleration',
+    'Core C material/light compilation',
+    'Core D path/direct-light services',
+    'Part 6 framebuffer/settings progress'
+  ]),
+  doesNotOwn:Object.freeze([
+    'editor geometry or selection',
+    'Light Cache',
+    'AOV architecture',
+    'denoising',
+    'Light Tree',
+    'path guiding'
+  ])
+});
+
+function runRenderCoreESelfTests(){
+  const errors=[];
+  const expect=(c,m)=>{if(!c)errors.push(m);};
+
+  try{
+    const s=RenderSettingsPolicy.sanitize({
+      ...new RenderSettingsModel().clone(),
+      engine:'path',progressive:true,adaptive:true,minSamples:4,maxSamples:32,
+      noiseThreshold:.02,maxBounces:6
+    });
+    expect(s.progressive&&s.adaptive,'Core E lost Group 9 sampling settings');
+    expect(s.minSamples===4&&s.maxSamples===32,'Core E sample range mismatch');
+    expect(s.maxBounces===6,'Core E bounce policy mismatch');
+  }catch(e){errors.push('Core E settings: '+String(e?.message||e));}
+
+  try{
+    const glass=new RenderSurfaceMaterial({
+      id:'ce-glass',name:'Core E Glass',shading:'physical',baseColor:[1,1,1],
+      roughness:.15,metalness:0,opacity:1,transparent:true,transmission:1,ior:1.5,
+      thickness:1,attenuationColor:[.9,.95,1],attenuationDistance:4,
+      emissive:[0,0,0],emissiveIntensity:0
+    });
+    const sample=PathBSDFSampler.sample(glass,[0,0,1],[0,0,1],1337,0);
+    expect(sample&&sample.direction.every(Number.isFinite),'Core E transmissive BSDF failed');
+  }catch(e){errors.push('Core E transport: '+String(e?.message||e));}
+
+  try{
+    const r=RenderCoreE.rendererFor({settings:{engine:'path',globalIllumination:true}});
+    expect(r===PathGIRenderer,'Core E Path renderer routing failed');
+    const f=RenderCoreE.rendererFor({settings:{engine:'fast',globalIllumination:true}});
+    expect(f===BasicDirectRenderer,'Core E Fast renderer routing failed');
+  }catch(e){errors.push('Core E routing: '+String(e?.message||e));}
+
+  try{
+    expect(RenderCoreEContract.combines.includes('Group 9')&&RenderCoreEContract.combines.includes('Group 10'),
+      'Core E group ownership declaration failed');
+    expect(!RenderCoreEContract.owns.includes('Light Cache'),'Core E illegally owns Group 11 Light Cache');
+  }catch(e){errors.push('Core E contract: '+String(e?.message||e));}
+
+  return {ok:errors.length===0,errors};
+}
+
+var RenderCoreE=Object.freeze({
+  version:'3.90.0-core-e-carried-forward',
+
+  prepareShading(job,acceleration,baseShading){
+    if(!job?.renderScene)throw new RenderExecutionError('Core E requires immutable RenderScene');
+    if(!acceleration?.store)throw new RenderExecutionError('Core E requires acceleration geometry');
+    if(!baseShading?.materials||!baseShading?.lights)throw new RenderExecutionError('Core E requires compiled shading');
+    const emissiveTriangles=EmissiveTriangleSet.compile(job,acceleration,baseShading);
+    return Object.freeze({...baseShading,emissiveTriangles});
+  },
+
+  rendererFor(job){
+    return (job?.settings?.engine==='path'&&job?.settings?.globalIllumination)?PathGIRenderer:BasicDirectRenderer;
+  },
+
+  diagnostics(job,shading){
+    return Object.freeze({
+      progressive:!!job?.settings?.progressive,
+      adaptive:!!job?.settings?.adaptive,
+      minSamples:job?.settings?.minSamples??1,
+      maxSamples:job?.settings?.maxSamples??1,
+      noiseThreshold:job?.settings?.noiseThreshold??0,
+      maxBounces:job?.settings?.maxBounces??1,
+      emiss
+
+===== RenderMIS @ 384898 =====
+erStart16);
+    if(LiteTraceExecutionContext.performance===perf16){LiteTraceExecutionContext.activeJob=null;LiteTraceExecutionContext.performance=null;}
+    job.renderChannels=aovs;
+    return {
+      width,height,rgba,
+      channels:aovs,
+      metadata:Object.freeze({
+        renderer:'Group 9 Progressive Path GI',
+        samplesPerPixel:accumulator.averageSamples(),
+        passes:completedPasses,
+        maxBounces:PathIntegrator.maxDepth(job),
+        estimator:'Path GI + direct NEE + power-heuristic MIS',
+        mis:true,
+        adaptive:!!settings.adaptive,
+        progressive:!!settings.progressive,
+        russianRoulette:true,
+        importanceSampling:'GGX + cosine mixture',
+        noise:accumulator.averageNoise(),
+        transmission:true,
+        secondaryGI:settings.secondaryGI,
+        lightCache:job.lightCache?.stats?.()||null,
+        emissiveTriangleLights:compiled.emissiveTriangles?.triangles?.length||0,
+        diagnostics:RenderPart5Core.diagnostics(job,compiled,acceleration),
+        performance:RenderCoreH.performance(job)
+      })
+    };
+  }
+});
+
+const RenderGroup8Contract=Object.freeze({
+  owns:Object.freeze([
+    'multi-bounce path integration',
+    'path throughput',
+    'secondary-ray spawning',
+    'cosine hemisphere BSDF sampling baseline',
+    'environment contribution on path miss',
+    'path-GI render mode'
+  ]),
+  consumes:Object.freeze([
+    'Core B ray/BVH tracing',
+    'Core C physical materials and lights',
+    'Group 7 shadow visibility and direct-light sampling'
+  ]),
+  doesNotOwn:Object.freeze([
+    'progressive accumulation',
+    'adaptive sampling',
+    'MIS',
+    'Light Cache',
+    'denoising',
+    'path guiding'
+  ])
+});
+
+function runRenderGroup8SelfTests(){
+  const errors=[];
+
+  {
+    const n=[0,0,1];
+    const d=PathSampler.cosineHemisphere(n,123,0);
+    if(!Number.isFinite(d[0]+d[1]+d[2])||RayMath.dot(n,d)<-1e-6){
+      errors.push('Cosine hemisphere sample failed');
+    }
+  }
+
+  {
+    const mat=new RenderSurfaceMaterial({
+      id:'p8',name:'p8',shading:'physical',baseColor:[.8,.8,.8],
+      roughness:.6,metalness:0,opacity:1,emissive:[0,0,0],emissiveIntensity:0
+    });
+    const smp=PathBSDFSampler.sample(mat,[0,0,1],[0,0,1],456,1);
+    if(!smp||!Number.isFinite(smp.pdf)||smp.pdf<=0||smp.weight.some(x=>!Number.isFinite(x)||x<0)){
+      errors.push('Path BSDF sample failed');
+    }
+  }
+
+  {
+    const fakeJob={settings:{maxBounces:99}};
+    if(PathIntegrator.maxDepth(fakeJob)!==16)errors.push('Path depth clamp failed');
+  }
+
+  return {ok:errors.length===0,errors};
+}
+window.runRenderGroup8SelfTests=runRenderGroup8SelfTests;
+
+function validateRenderGroup8(){
+  const errors=[];
+  if(typeof PathSampler.cosineHemisphere!=='function')errors.push('PathSampler missing');
+  if(typeof PathBSDFSampler.sample!=='function')errors.push('PathBSDFSampler missing');
+  if(typeof PathIntegrator.trace!=='function')errors.push('PathIntegrator missing');
+  if(typeof PathGIRenderer.render!=='function')errors.push('PathGIRenderer missing');
+  const tests=runRenderGroup8SelfTests();if(!tests.ok)errors.push(...tests.errors);
+  return {ok:errors.length===0,errors};
+}
+
+Object.assign(window,{
+  PathSampler,PathBSDFSampler,PathIntegrator,PathGIRenderer,RenderGroup8Contract
+});
+
+
+/* ============================================================
+   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 9 GEN3
+   PROGRESSIVE + MIS + ADAPTIVE + RR + GGX IMPORTANCE
+   ============================================================ */
+const RenderGroup9Contract=Object.freeze({
+  owns:Object.freeze([
+    'progressive sample accumulation',
+    'per-pixel variance/noise estimation',
+    'adaptive convergence',
+    'MIS weighting for direct NEE vs BSDF sampling',
+    'Russian roulette path termination',
+    'GGX/cosine mixed BSDF importance sampling',
+    'progressive framebuffer preview'
+  ]),
+  consumes:Object.freeze([
+    'Part 5 Path GI',
+    'Part 4 light/shadow/environment services',
+    'Core B acceleration',
+    'Part 6 framebuffer/settings/progress UI'
+  ]),
+  doesNotOwn:Object.freeze([
+    'transmission/refraction',
+    'true emissive triangle-light sampling',
+    'Light Cache',
+    'denoising',
+    'AOV architecture',
+    'Light Tree',
+    'path guiding'
+  ])
+});
+
+function runRenderGroup9SelfTests(){
+  const errors=[];
+  const expect=(c,m)=>{if(!c)errors.push(m);};
+
+  try{
+    const w=RenderMIS.power(.5,.5);
+    expect(Math.abs(w-.5)<1e-9,'MIS equal-PDF power heuristic failed');
+    expect(RenderMIS.power(1,0)===1,'MIS zero competitor failed');
+  }catch(e){errors.push('MIS test: '+String(e?.message||e));}
+
+  try{
+    const n=[0,0,1];
+    const h=GGXImportanceSampler.sampleHalfVector(n,.25,.37,.61);
+    expect(h.every(Number.isFinite)&&RayMath.dot(n,h)>=0,'GGX half-vector sample failed');
+    const D=GGXImportanceSampler.distribution(.8,.25);
+    expect(Number.isFinite(D)&&D>0,'GGX distribution failed');
+  }catch(e){errors.push('GGX test: '+String(e?.message||e));}
+
+  try{
+    const mat=new RenderSurfaceMaterial({
+      id:'g9',name:'g9',shading:'physical',baseColor:[.7,.6,.5],
+      roughness:.2,metalness:.8,opacity:1,emissive:[0,0,0],emissiveIntensity:0
+    });
+    const s=PathBSDFSampler.sample(mat,[0,0,1],[0,0,1],12345,0);
+    expect(!!s&&s.pdf>0&&Number.isFinite(s.pdf),'Mixed BSDF sampler failed');
+    expect(s.weight.every(v=>Number.isFinite(v)&&v>=0),'Mixed BSDF weight invalid');
+  }catch(e){errors.push('BSDF importance test: '+String(e?.message||e));}
+
+  try{
+    const a=new ProgressiveAccumulator(2,1);
+    a.add(0,[1,1,1]);a.add(0,[1,1,1]);
+    a.add(1,[0,0,0]);a.add(1,[2,2,2]);
+    expect(a.samples[0]===2&&a.samples[1]===2,'Accumulator sample count failed');
+    expect(a.noise(0)===0,'Stable pixel noise should be zero');
+    expect(Number.isFinite(a.noise(1))&&a.noise(1)>0,'Variable pixel noise estimation failed');
+  }catch(e){errors.push('Accumulator test: '+String(e?.message||e));}
+
+  try{
+    const s=RenderSettingsPolicy.sanitize({
+      ...new RenderSettingsModel().clone(),
+      progressive:true,adaptive:true,minSamples:4,maxSamples:32,noiseThreshold:.02
+    });
+    expect(s.progressive&&s.adaptive,'Sampling toggles lost');
+    expect(s.minSamples===4&&s.maxSamples===32&&Math.abs(s.noiseThreshold-.02)<1e-9,'Sampling settings lost');
+  }catch(e){errors.push('Sampling settings test: '+String(e?.message||e));}
+
+  try{
+    const fake={type:'rectangle',width:2,height:2};
+    const pdf=Group9DirectMIS.lightPdf(fake,{area:4,distance:2,emitterCos:1});
+    expect(Math.abs(pdf-1)<1e-9,'Area light solid-angle PDF conversion failed');
+  }catch(e){errors.push('Direct MIS PDF test: '+String(e?.message||e));}
+
+  return {ok:errors.length===0,errors};
+}
+
+function validateRenderGroup9(){
+  const errors=[];
+  if(typeof RenderMIS?.power!=='function')errors.push('MIS helper missing');
+  if(typeof GGXImportanceSampler?.sampleHalfVector!=='function')errors.push('GGX importance sampler missing');
+  if(typeof PathBSDFSampler?.pdf!=='function')errors.push('BSDF PDF missing');
+  if(typeof Group9DirectMIS?.evaluate!=='function')errors.push('Direct MIS evaluator missing');
+  if(typeof ProgressiveAccumulator!=='function')errors.push('Progressive accumulator missing');
+  if(typeof PathGIRenderer?.render!=='function')errors.push('Progressive Path renderer missing');
+  const t=runRenderGroup9SelfTests();if(!t.ok)errors.push(...t.errors);
+  return {ok:errors.length===0,errors};
+}
+
+const RenderGroup9Core=Object.freeze({
+  version:'3.79.22-group9-gen3',
+  validate:validateRenderGroup9,
+  mis:RenderMIS,
+  ggx:GGXImportanceSampler,
+  directMIS:Group9DirectMIS
+});
+Object.assign(window,{
+  RenderMIS,GGXImportanceSampler,Group9DirectMIS,ProgressiveAccumulator,
+  RenderGroup9Contract,runRenderGroup9SelfTests,validateRenderGroup9,RenderGroup9Core
+});
+
+
+/* ============================================================
+   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 10 GEN3
+   TRANSMISSION + REFRACTION + EMISSIVE GI
+   ============================================================ */
+const RenderGroup10Contract=Object.freeze({
+  owns:Object.freeze([
+    'dielectric Fresnel transport',
+    'refraction and total-internal-reflection handling',
+    'transmission ray classification',
+    'basic absorption/attenuation transport',
+    'emissive triangle extraction',
+    'emissive triangle next-event sampling'
+  ]),
+  consumes:Object.freeze([
+    'Group 9 path sampling, MIS and progressive accumulation',
+    'Core B triangle store and acceleration',
+    'Core C material compilation',
+    'Part 4 shadow visibility'
+  ]),
+  doesNotOwn:Object.freeze([
+    'nested dielectric medium stacks',
+    'spectral dispersion',
+    'thin-film interference',
+    'caustic-specialized sampling',
+    'Light Cache',
+    'denoising',
+    'Light Tree',
+    'path guiding'
+  ])
+});
+
+function runRenderGroup10SelfTests(){
+  const errors=[];
+  const expect=(c,m)=>{if(!c)errors.push(m);};
+
+  try{
+    const F=DielectricTransport.fresnelDielectric(1,1,1.5);
+    expect(Number.isFinite(F)&&F>0&&F<.1,'Normal-incidence dielectric Fresnel failed');
+    expect(DielectricTransport.fresnelDielectric(.01,1.5,1)>.5,'High-angle internal Fresnel failed');
+  }catch(e){errors.push('Fresnel test: '+String(e?.message||e));}
+
+  try{
+    const r=DielectricTransport.refract([0,0,-1],[0,0,1],1/1.5);
+    expect(r&&r.every(Number.isFinite)&&r[2]<-.99,'Normal-incidence refraction failed');
+    const tir=DielectricTransport.refract([.99,0,.141067],[0,0,-1],1.5);
+    expect(tir===null||tir.every(Number.isFinite),'TIR handling produced invalid direction');
+  }catch(e){errors.push('Refraction test: '+String(e?.message||e));}
+
+  try{
+    const a=DielectricTransport.beerLambert([.25,.5,1],2,2);
+    expect(a.every(Number.isFinite),'Absorption produced non-finite values');
+    expect(Math.abs(a[0]-.25)<1e-6&&Math.abs(a[2]-1)<1e-6,'Absorption distance scaling failed');
+  }catch(e){errors.push('Absorption test: '+String(e?.message||e));}
+
+  try{
+    const m=new RenderSurfaceMaterial({
+      id:'glass',name:'Glass',shading:'physical',baseColor:[1,1,1],
+      roughness:.1,metalness:0,opacity:1,transparent:true,
+      transmission:1,ior:1.5,thickness:2,attenuationColor:[.8,.9,1],attenuationDistance:5,
+      emissive:[0,0,0],emissiveIntensity:0
+    });
+    expect(m.transmission===1&&Math.abs(m.ior-1.5)<1e-9&&m.thickness===2,'Transmission material fields failed');
+    const s=PathBSDFSampler.sample(m,[0,0,1],[0,0,1],9,0);
+    expect(s&&s.transmission===true&&s.direction.every(Number.isFinite),'Transmission BSDF sample failed');
+  }catch(e){errors.push('Transmission material test: '+String(e?.message||e));}
+
+  try{
+    const mat=new RenderSurfaceMaterial({
+      id:'emit',name:'Emit',shading:'physical',baseColor:[.5,.5,.5],roughness:.5,metalness:0,
+      opacity:1,transmission:0,ior:1.5,thickness:0,attenuationColor:[1,1,1],
+      emissive:[1,.5,.25],emissiveIntensity:10
+    });
+    const lib={get:id=>id==='emit'?mat:null};
+    const scene={objects:[{materialIds:['emit']}]};
+    const store=new RenderTriangleStore();
+    store.addPacket({
+      objectId:'o',positions:new Float32Array([-1,-1,0,1,-1,0,0,1,0]),
+      normals:new Float32Array([0,0,1,0,0,1,0,0,1]),
+      uvs:new Float32Array(6),indices:new Uint32Array([0,1,2]),materialIndices:new Uint16Array([0])
+    },0);store.finalize();
+    const acc={store};
+    const set=EmissiveTriangleSet.compile({renderScene:scene},acc,{materials:lib});
+    expect(set.triangles.length===1&&set.totalArea>0,'Emissive triangle extraction failed');
+    const sample=EmissiveTriangleSet.sample(set,7,0,[0,0,2]);
+    expect(sample&&sample.pdf>0&&sample.radiance.some(v=>v>0),'Emissive triangle sampling failed');
+  }catch(e){errors.push('Emissive GI test: '+String(e?.message||e));}
+
+  return {ok:errors.length===0,errors};
+}
+
+function validateRenderGroup10(){
+  const errors=[];
+  if(typeof DielectricTransport?.refract!=='function')errors.push('Dielectric refraction missing');
+  if(typeof DielectricTransport?.fresnelDielectric!=='function')errors.push('Dielectric Fresnel missing');
+  if(typeof EmissiveTriangleSet?.compile!=='function')errors.push('Emissive triangle compiler missing');
+  if(typeof EmissiveTriangleSet?.sample!=='function')errors.push('Emissive triangle sampler missing');
+  if(typeof PathBSDFSampler?.sample!=='function')errors.push('Path BSDF sampler missing');
+  const t=runRenderGroup10SelfTests();if(!t.ok)errors.push(...t.errors);
+  return {ok:errors.length===0,errors};
+}
+
+const RenderGroup10Core=Object.freeze({
+  version:'3.79.23-group10-gen3',
+  validate:validateRenderGroup10,
+  dielectric:DielectricTransport,
+  emissiveTriangles:EmissiveTriangleSet
+});
+Object.assign(window,{
+  DielectricTransport,EmissiveTriangleSet,
+  RenderGroup10Contract,runRenderGroup10SelfTests,validateRenderGroup10,RenderGroup10Core
+});
+
+
+/* ============================================================
+   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — CORE E GEN1
+   CLEAN GROUP 9 + GROUP 10 CONSOLIDATION
+   ============================================================ */
+const RenderCoreEContract=Object.freeze({
+  combines:Object.freeze(['Group 9','Group 10']),
+  owns:Object.freeze([
+    'progressive path-render sampling policy',
+    'adaptive convergence policy',
+    'MIS coordination',
+    'GGX/cosine BSDF proposal coordination',
+    'Russian roulette policy',
+    'dielectric transmission/refraction transport',
+    'emissive triangle GI preparation'
+  ]),
+  consumes:Object.freeze([
+    'Core B acceleration',
+    'Core C material/light compilation',
+    'Core D path/direct-light services',
+    'Part 6 framebuffer/settings progress'
+  ]),
+  doesNotOwn:Object.freeze([
+    'editor geometry or selection',
+    'Light Cache',
+    'AOV architecture',
+    'denoising',
+    'Light Tree',
+    'path guiding'
+  ])
+});
+
+function runRenderCoreESelfTests(){
+  const errors=[];
+  const expect=(c,m)=>{if(!c)errors.push(m);};
+
+  try{
+    const s=RenderSettingsPolicy.sanitize({
+      ...new RenderSettingsModel().clone(),
+      engine:'path',progressive:true,adaptive:true,minSamples:4,maxSamples:32,
+      noiseThreshold:.02,maxBounces:6
+    });
+    expect(s.progressive&&s.adaptive,'Core E lost Group 9 sampling settings');
+    expect(s.minSamples===4&&s.maxSamples===32,'Core E sample range mismatch');
+    expect(s.maxBounces===6,'Core E bounce policy mismatch');
+  }catch(e){errors.push('Core E settings: '+String(e?.message||e));}
+
+  try{
+    const glass=new RenderSurfaceMaterial({
+      id:'ce-glass',name:'Core E Glass',shading:'physical',baseColor:[1,1,1],
+      roughness:.15,metalness:0,opacity:1,transparent:true,transmission:1,ior:1.5,
+      thickness:1,attenuationColor:[.9,.95,1],attenuationDistance:4,
+      emissive:[0,0,0],emissiveIntensity:0
+    });
+    const sample=PathBSDFSampler.sample(glass,[0,0,1],[0,0,1],1337,0);
+    expect(sample&&sample.direction.every(Number.isFinite),'Core E transmissive BSDF failed');
+  }catch(e){errors.push('Core E transport: '+String(e?.message||e));}
+
+  try{
+    const r=RenderCoreE.rendererFor({settings:{engine:'path',globalIllumination:true}});
+    expect(r===PathGIRenderer,'Core E Path renderer routing failed');
+    const f=RenderCoreE.rendererFor({settings:{engine:'fast',globalIllumination:true}});
+    expect(f===BasicDirectRenderer,'Core E Fast renderer routing failed');
+  }catch(e){errors.push('Core E routing: '+String(e?.message||e));}
+
+  try{
+    expect(RenderCoreEContract.combines.includes('Group 9')&&RenderCoreEContract.combines.includes('Group 10'),
+      'Core E group ownership declaration failed');
+    expect(!RenderCoreEContract.owns.includes('Light Cache'),'Core E illegally owns Group 11 Light Cache');
+  }catch(e){errors.push('Core E contract: '+String(e?.message||e));}
+
+  return {ok:errors.length===0,errors};
+}
+
+var RenderCoreE=Object.freeze({
+  version:'3.90.0-core-e-carried-forward',
+
+  prepareShading(job,acceleration,baseShading){
+    if(!job?.renderScene)throw new RenderExecutionError('Core E requires immutable RenderScene');
+    if(!acceleration?.store)throw new RenderExecutionError('Core E requires acceleration geometry');
+    if(!baseShading?.materials||!baseShading?.lights)throw new RenderExecutionError('Core E requires compiled shading');
+    const emissiveTriangles=EmissiveTriangleSet.compile(job,acceleration,baseShading);
+    return Object.freeze({...baseShading,emissiveTriangles});
+  },
+
+  rendererFor(job){
+    return (job?.settings?.engine==='path'&&job?.settings?.globalIllumination)?PathGIRenderer:BasicDirectRenderer;
+  },
+
+  diagnostics(job,shading){
+    return Object.freeze({
+      progressive:!!job?.settings?.progressive,
+      adaptive:!!job?.settings?.adaptive,
+      minSamples:job?.settings?.minSamples??1,
+      maxSamples:job?.settings?.maxSamples??1,
+      noiseThreshold:job?.settings?.noiseThreshold??0,
+      maxBounces:job?.settings?.maxBounces??1,
+      emissiveTriangles:shading?.emissiveTriangles?.triangles?.length||0,
+      transmission:true,
+      mis:true,
+   
