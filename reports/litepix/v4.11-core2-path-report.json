@@ -1,0 +1,71 @@
+{
+  "passed": false,
+  "core": {
+    "title": "LitePix v4.11.0 Core Runtime",
+    "version": "4.11.0",
+    "marker": true,
+    "adapterType": "function"
+  },
+  "fast": {
+    "wallMs": 272,
+    "engine": "fast",
+    "renderer": "Part 4 Fast Direct",
+    "performance": {
+      "totalMs": 248.3000000000029,
+      "traceMs": 246.10000000000582,
+      "actualRays": 0,
+      "raysPerSecond": 0,
+      "samples": 0,
+      "yields": 60,
+      "bvhBuildMs": null
+    },
+    "secondaryGI": null,
+    "core2": null
+  },
+  "legacy": {
+    "wallMs": 1983,
+    "engine": "path",
+    "renderer": "Group 9 Progressive Path GI",
+    "performance": {
+      "totalMs": 1976.9000000000015,
+      "traceMs": 1976.4000000000015,
+      "actualRays": 28800,
+      "raysPerSecond": 14572,
+      "samples": 28800,
+      "yields": 450,
+      "bvhBuildMs": null
+    },
+    "secondaryGI": "Light Cache",
+    "core2": null
+  },
+  "core2": {
+    "wallMs": 1958,
+    "engine": "path",
+    "renderer": "Group 9 Progressive Path GI",
+    "performance": {
+      "totalMs": 1949.800000000003,
+      "traceMs": 1949.199999999997,
+      "actualRays": 28800,
+      "raysPerSecond": 14775,
+      "samples": 28800,
+      "yields": 450,
+      "bvhBuildMs": null
+    },
+    "secondaryGI": "Light Cache",
+    "core2": null
+  },
+  "comparison": {
+    "maxPixelDiff": 0,
+    "meanPixelDiff": 0,
+    "traceSpeedup": 1.0139544428483502,
+    "legacyTraceMs": 1976.4000000000015,
+    "core2TraceMs": 1949.199999999997,
+    "legacyWallMs": 1983,
+    "core2WallMs": 1958
+  },
+  "pageErrors": [],
+  "consoleErrors": [],
+  "failures": [
+    "Core2 BVH did not own real path traversal"
+  ]
+}
