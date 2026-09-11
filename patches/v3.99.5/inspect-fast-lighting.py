@@ -1,6 +1,6 @@
 from pathlib import Path
 s=Path('index.html').read_text(encoding='utf-8')
-needles=['ShadowVisibility','DirectLightSampler','DirectLightingIntegrator=','var DirectLightingIntegrator','const DirectLightingIntegrator','evaluate(job,acceleration,compiled,ray,hit','SurfaceInterpolator','PhysicalBSDF','class RenderAccelerationSet','var RenderAccelerationSet','occluded(ray)','trace(ray)']
+needles=['LightSnapshotTools','getWorldDirection','getWorldQuaternion','renderLight.direction','direction:direction','direction:dir','new RenderLightSnapshot','RenderLightSnapshot','lights.push','snapshotLight']
 out=[]
 for n in needles:
     out.append('\n### '+n)
@@ -11,8 +11,8 @@ for n in needles:
         hits+=1
         line=s.count('\n',0,i)+1
         out.append(f'-- hit {hits} line {line} --')
-        out.append(s[max(0,i-1800):min(len(s),i+len(n)+5200)])
+        out.append(s[max(0,i-1700):min(len(s),i+len(n)+4600)])
         start=i+len(n)
-        if hits>=6: break
+        if hits>=8: break
     out.append('hits '+str(hits))
 Path('patches/v3.99.5/fast-lighting-inspection.txt').write_text('\n'.join(out),encoding='utf-8')
