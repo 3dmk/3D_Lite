@@ -17,12 +17,12 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           s=Path('index.html').read_text(encoding='utf-8').splitlines()
-          terms=['class RenderBVH','const RenderBVH','intersect(ray','intersectAny','traceClosest','class PathIntegrator','const PathIntegrator','PathIntegrator=','acceleration.intersect','acceleration.closest','RenderTriangle']
+          terms=['class RenderAccelerationSet','var RenderAccelerationSet','trace(ray)','occluded(','class RenderBVH','var PathIntegrator=Object.freeze','buildAccelerationFromPackets','const acceleration=','let acceleration=','createAcceleration']
           out=[]; seen=set()
           for term in terms:
             for i,line in enumerate(s):
               if term in line:
-                lo=max(0,i-30); hi=min(len(s),i+90)
+                lo=max(0,i-35); hi=min(len(s),i+120)
                 key=(lo,hi)
                 if key not in seen:
                   out.append('\n===== '+term+f' @ {i+1} =====')
@@ -36,5 +36,5 @@ jobs:
           git config user.name 'LitePix v4.11 Inspect'
           git config user.email 'actions@users.noreply.github.com'
           git add reports/litepix/v4.11-bvh-inspect.txt
-          git commit -m 'Inspect v4.11 BVH/path traversal anchors' || exit 0
+          git commit -m 'Expand v4.11 BVH/path traversal anchors' || exit 0
           git push origin HEAD:litepix-v4.11-core2-bvh-path
