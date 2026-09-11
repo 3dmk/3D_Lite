@@ -29,7 +29,7 @@ jobs:
           assert 'material-index-out-of-range' in s
           assert 'this.mesh(obj,ids.length)' in s
           assert 'gr.materialIndex=safe' in s
-          assert s.lower().count('<script') == s.lower().count('</script>')
+          assert s.count('id="__3DLiteMaterialIndexGuard3974"') == 1
           print('static sanity passed')
           PY
       - name: Commit updated index
