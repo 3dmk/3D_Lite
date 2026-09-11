@@ -14,23 +14,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Locate GI renderer ownership and counters
+      - name: Print exact GI telemetry sources
         shell: bash
         run: |
           python3 <<'PY'
           from pathlib import Path
           s=Path('index.html').read_text(encoding='utf-8')
-          needles=['Path','GI','globalIllumination','Brute Force','Light Cache','maxBounces','Russian','rr','bounce','pathRays','secondaryRays','tracePath','PathRenderer','GIPath','renderer:\'']
+          needles=['rsPrimaryGI','rsSecondaryGI','primaryGI','secondaryGI','PathTracePart7Renderer','class PathTraceRenderEngine','RenderCoreH.performance(job)',"performance?.ray('path')"]
           for n in needles:
               print('\n###',n)
               start=0; shown=0
-              while shown<15:
+              while shown<12:
                   i=s.find(n,start)
                   if i<0: break
                   shown+=1
                   line=s.count('\n',0,i)+1
                   print(f'-- hit {shown} line {line} --')
-                  print(s[max(0,i-450):min(len(s),i+len(n)+900)])
+                  print(s[max(0,i-1000):min(len(s),i+len(n)+2200)])
                   start=i+len(n)
               print('count shown',shown)
           PY
