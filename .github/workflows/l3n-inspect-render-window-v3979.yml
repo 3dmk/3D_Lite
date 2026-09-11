@@ -1,0 +1,26 @@
+name: L3N v3.97.9 Render Window Inspect
+on:
+  push:
+    branches: [l3n-dev]
+    paths: ['.l3n-inspect-render-window-v3979-trigger']
+permissions:
+  contents: write
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: l3n-dev
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Inspect
+        run: python tools/inspect_render_window_v3979.py
+      - name: Commit context
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tools/render_window_context_v3979.txt
+          git commit -m 'Inspect v3.97.9 render window context' || true
+          git push origin HEAD:l3n-dev
