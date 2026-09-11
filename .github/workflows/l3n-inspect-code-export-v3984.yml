@@ -1,0 +1,25 @@
+name: L3N Inspect Code Export v3.98.4
+on:
+  push:
+    branches: [l3n-dev]
+    paths:
+      - '.l3n-inspect-code-export-v3984-trigger'
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect render window UI anchors
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('index.html').read_text(errors='ignore').splitlines()
+          needles=['l3nRenderDebugListBtn','renderFrameWindow','Debug List','ThreeDLiteRenderWindow3979','rfResetView3979','ThreeDLiteVersion']
+          for n in needles:
+            print('\n###',n)
+            hits=[i for i,l in enumerate(s) if n in l]
+            for i in hits[:12]:
+              a=max(0,i-8); b=min(len(s),i+18)
+              for j in range(a,b): print(f'{j+1}: {s[j]}')
+              print('---')
+          PY
