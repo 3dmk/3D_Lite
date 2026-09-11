@@ -10,7 +10,7 @@ class LitePixRayBudget445{
     this.cache=new Map();this.requestedShadowTests=0;this.tracedShadowRays=0;this.reusedShadowTests=0;
     this.requestedLightSamples=0;this.selectedLightSamples=0;this.cacheRejects=0;this.maxEntries=262144;
     this.sceneScale=this._sceneScale(acceleration);
-    const divisor=this.quality==='Ultra'?512:this.quality==='High'?384:this.quality==='Draft'?160:256;
+    const divisor=this.quality==='Ultra'?384:this.quality==='High'?192:this.quality==='Draft'?64:96;
     this.cellSize=Math.max(1e-5,this.sceneScale/divisor);
     this.directionBins=this.quality==='Ultra'?128:this.quality==='High'?96:this.quality==='Draft'?32:64;
   }
