@@ -1,947 +1,73 @@
 
-===== class RenderAccelerationSet @ 5875 =====
-5840:     const fov=Math.max(1,Math.min(179,Number.isFinite(Number(s.fov))?Number(s.fov):50));
-5841:     const aspect=Math.max(1e-6,Number.isFinite(Number(s.aspect))?Number(s.aspect):1);
-5842:     const near=Math.max(RenderRayPolicy.epsilonForPoint(position),Number.isFinite(Number(s.near))?Number(s.near):1e-4);
-5843:     const far=(Number.isFinite(Number(s.far))&&Number(s.far)>near)?Number(s.far):Infinity;
-5844:     return {type:'Perspective',position,quaternion:q,up,fov,aspect,near,far};
-5845:   },
-5846:   outputAspect(width,height){
-5847:     width=Math.max(1,Number(width)||1);height=Math.max(1,Number(height)||1);
-5848:     return width/height;
-5849:   }
-5850: });
-5851: 
-5852: const RenderCameraRayGenerator=Object.freeze({
-5853:   rotateByQuaternion(v,q){
-5854:     const x=v[0],y=v[1],z=v[2],qx=q[0],qy=q[1],qz=q[2],qw=q[3];
-5855:     const ix=qw*x+qy*z-qz*y,iy=qw*y+qz*x-qx*z,iz=qw*z+qx*y-qy*x,iw=-qx*x-qy*y-qz*z;
-5856:     return [
-5857:       ix*qw+iw*-qx+iy*-qz-iz*-qy,
-5858:       iy*qw+iw*-qy+iz*-qx-ix*-qz,
-5859:       iz*qw+iw*-qz+ix*-qy-iy*-qx
-5860:     ];
-5861:   },
-5862:   ray(cameraSnapshot,px,py,width,height){
-5863:     const c=RenderCameraPolicy.sanitize(cameraSnapshot);
-5864:     width=Math.max(1,Number(width)||1);height=Math.max(1,Number(height)||1);
-5865:     const nx=((px+.5)/width)*2-1;
-5866:     const ny=1-((py+.5)/height)*2;
-5867:     const aspect=Math.max(1e-6,width/height);
-5868:     const fovRad=c.fov*Math.PI/180,tan=Math.tan(fovRad*.5);
-5869:     const local=RayMath.normalize([nx*aspect*tan,ny*tan,-1]);
-5870:     const world=RayMath.normalize(this.rotateByQuaternion(local,c.quaternion));
-5871:     return new RenderRay(c.position,world,c.near,c.far,RenderRayType.CAMERA,0);
-5872:   }
-5873: });
-5874: 
-5875: var RenderAccelerationSet = class RenderAccelerationSet{
-5876:   constructor(store,bvh){
-5877:     this.store=store;this.bvh=bvh;
-5878:     this.vertexCount=store.positions.length/3;
-5879:     this.triangleCount=store.triangleCount();
-5880:     this.nodeCount=bvh.nodes.length;
-5881:     this.stats=Object.freeze({geometry:store.stats,bvh:bvh.stats()});
-5882:     Object.freeze(this);
-5883:   }
-5884:   trace(ray){return this.bvh.intersect(ray)}
-5885:   occluded(ray){return this.bvh.anyHit(ray)}
-5886: }
-5887: 
-5888: 
-5889: const RenderAccelerationCache16={
-5890:   geometryRevision:null,
-5891:   acceleration:null,
-5892:   hits:0,
-5893:   misses:0,
-5894:   reset(){this.geometryRevision=null;this.acceleration=null;this.hits=0;this.misses=0;},
-5895:   invalidate(){this.geometryRevision=null;this.acceleration=null;},
-5896:   revision(scene){
-5897:     const m=scene?.metadata||{};
-5898:     return [m.sceneRevision??'s?',m.geometryRevision??'g?',m.materialRevision??'m?',m.lightRevision??'l?',scene?.objects?.length||0,
-5899:       ...(scene?.objects||[]).map(o=>`${o.id}:${o.visible!==false?1:0}:${o.mesh?.positions?.length||0}:${o.mesh?.indices?.length||0}`)
-5900:     ].join('|');
-5901:   },
-5902:   get(scene){
-5903:     const rev=this.revision(scene);
-5904:     if(this.acceleration&&this.geometryRevision===rev){this.hits++;return this.acceleration;}
-5905:     this.misses++;return null;
-5906:   },
-5907:   put(scene,acceleration){
-5908:     this.geometryRevision=this.revision(scene);
-5909:     this.acceleration=acceleration;
-5910:     return acceleration;
-5911:   },
-5912:   stats(){return Object.freeze({geometryRevision:this.geometryRevision,hits:this.hits,misses:this.misses,reused:!!this.acceleration});}
-5913: };
-5914: 
-5915: /*
-5916:   BLAS/TLAS boundary:
-5917:   - object mesh geometry revisions feed BLAS-equivalent cached acceleration data;
-5918:   - scene/object transform revisions are intentionally kept outside this cache key
-5919:     so a future TLAS can update instances without rebuilding object geometry.
-5920:   Current browser renderer still uses the proven binary RenderAccelerationSet.
-5921: */
-5922: const RenderAccelerationHierarchy16=Object.freeze({
-5923:   mode:'geometry-revision acceleration cache; TLAS/BLAS boundary reserved',
-5924:   cache:RenderAccelerationCache16,
-5925:   build(scene,builder){
-5926:     const cached=RenderAccelerationCache16.get(scene);
-5927:     if(cached)return cached;
-5928:     return RenderAccelerationCache16.put(scene,builder());
-5929:   }
-5930: });
-5931: window.RenderAccelerationCache16=RenderAccelerationCache16;
-5932: window.RenderAccelerationHierarchy16=RenderAccelerationHierarchy16;
-5933: 
-5934: const RenderAccelerationBuilder=Object.freeze({
-5935:   build(renderScene){
-5936:     return RenderAccelerationHierarchy16.build(renderScene,()=>{
-5937:       const packets=RenderGeometryCompiler.compileScene(renderScene);
-5938:       const store=new RenderTriangleStore();
-5939:       packets.forEach((p,i)=>store.addPacket(p,i));
-5940:       store.finalize();
-5941:       return new RenderAccelerationSet(store,new RenderBVH(store,4));
-5942:     });
-5943:   }
-5944: });
-5945: 
-5946: const DiagnosticRenderer=Object.freeze({
-5947:   async render(job,acceleration,onProgress=()=>{}){
-5948:     const width=Math.min(640,Math.max(1,job.progress.resolution[0]));
-5949:     const height=Math.min(360,Math.max(1,job.progress.resolution[1]));
-5950:     const rgba=new Uint8ClampedArray(width*height*4);
-5951:     const cameraSnapshot=job.renderScene.camera;
-5952:     const rowChunk=8;
-5953:     for(let y=0;y<height;y++){
-5954:       if(job.cancelled||job.controlToken16?.cancelled?.())throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
-5955:       while((job.paused||job.controlToken16?.paused?.())&&!job.cancelled)await new Promise(r=>setTimeout(r,20));
-5956:       for(let x=0;x<width;x++){
-5957:         const ray=RenderCameraRayGenerator.ray(cameraSnapshot,x,y,width,height);
-5958:         perf16.addRay(RenderRayType.CAMERA);
-5959:         perf16.addRay(RenderRayType.CAMERA);
-5960:         const hit=acceleration.trace(ray);
-5961:         const o=(y*width+x)*4;
-5962:         if(hit.hit){
-5963:           const n=hit.geometricNormal;
-5964:           rgba[o]=Math.round((n[0]*.5+.5)*255);
-5965:           rgba[o+1]=Math.round((n[1]*.5+.5)*255);
-5966:           rgba[o+2]=Math.round((n[2]*.5+.5)*255);
-5967:           rgba[o+3]=255;
-5968:         }else{
-5969:           rgba[o]=24;rgba[o+1]=24;rgba[o+2]=24;rgba[o+3]=255;
-5970:         }
-5971:       }
-5972:       if(y%rowChunk===0)onProgress((y+1)/height);
-5973:       if(y%rowChunk===0)await new Promise(r=>setTimeout(r,0));
-5974:     }
-5975:     return {width,height,rgba};
-5976:   }
-5977: });
-5978: 
-5979: const RenderGroup4Contract=Object.freeze({
-5980:   owns:Object.freeze([
-5981:     'ray representation','ray/triangle intersection','ray/AABB intersection',
-5982:     'triangle store','binary BVH','camera ray generation','diagnostic normal render'
-5983:   ]),
-5984:   consumes:Object.freeze([
-5985:     'Core A immutable RenderSceneSnapshot','Group 3 RenderGeometryCompiler'
-5986:   ]),
-5987:   doesNotOwn:Object.freeze([
-5988:     'editor scene','MNMesh','selection','transforms','editor materials',
-5989:     'physical BSDF','lights','GI','denoising'
-5990:   ])
-5991: });
-5992: 
-5993: 
-5994: function runRenderGroup4SelfTests(){
-
-===== trace(ray) @ 5884 =====
-5849:   }
-5850: });
-5851: 
-5852: const RenderCameraRayGenerator=Object.freeze({
-5853:   rotateByQuaternion(v,q){
-5854:     const x=v[0],y=v[1],z=v[2],qx=q[0],qy=q[1],qz=q[2],qw=q[3];
-5855:     const ix=qw*x+qy*z-qz*y,iy=qw*y+qz*x-qx*z,iz=qw*z+qx*y-qy*x,iw=-qx*x-qy*y-qz*z;
-5856:     return [
-5857:       ix*qw+iw*-qx+iy*-qz-iz*-qy,
-5858:       iy*qw+iw*-qy+iz*-qx-ix*-qz,
-5859:       iz*qw+iw*-qz+ix*-qy-iy*-qx
-5860:     ];
-5861:   },
-5862:   ray(cameraSnapshot,px,py,width,height){
-5863:     const c=RenderCameraPolicy.sanitize(cameraSnapshot);
-5864:     width=Math.max(1,Number(width)||1);height=Math.max(1,Number(height)||1);
-5865:     const nx=((px+.5)/width)*2-1;
-5866:     const ny=1-((py+.5)/height)*2;
-5867:     const aspect=Math.max(1e-6,width/height);
-5868:     const fovRad=c.fov*Math.PI/180,tan=Math.tan(fovRad*.5);
-5869:     const local=RayMath.normalize([nx*aspect*tan,ny*tan,-1]);
-5870:     const world=RayMath.normalize(this.rotateByQuaternion(local,c.quaternion));
-5871:     return new RenderRay(c.position,world,c.near,c.far,RenderRayType.CAMERA,0);
-5872:   }
-5873: });
-5874: 
-5875: var RenderAccelerationSet = class RenderAccelerationSet{
-5876:   constructor(store,bvh){
-5877:     this.store=store;this.bvh=bvh;
-5878:     this.vertexCount=store.positions.length/3;
-5879:     this.triangleCount=store.triangleCount();
-5880:     this.nodeCount=bvh.nodes.length;
-5881:     this.stats=Object.freeze({geometry:store.stats,bvh:bvh.stats()});
-5882:     Object.freeze(this);
-5883:   }
-5884:   trace(ray){return this.bvh.intersect(ray)}
-5885:   occluded(ray){return this.bvh.anyHit(ray)}
-5886: }
-5887: 
-5888: 
-5889: const RenderAccelerationCache16={
-5890:   geometryRevision:null,
-5891:   acceleration:null,
-5892:   hits:0,
-5893:   misses:0,
-5894:   reset(){this.geometryRevision=null;this.acceleration=null;this.hits=0;this.misses=0;},
-5895:   invalidate(){this.geometryRevision=null;this.acceleration=null;},
-5896:   revision(scene){
-5897:     const m=scene?.metadata||{};
-5898:     return [m.sceneRevision??'s?',m.geometryRevision??'g?',m.materialRevision??'m?',m.lightRevision??'l?',scene?.objects?.length||0,
-5899:       ...(scene?.objects||[]).map(o=>`${o.id}:${o.visible!==false?1:0}:${o.mesh?.positions?.length||0}:${o.mesh?.indices?.length||0}`)
-5900:     ].join('|');
-5901:   },
-5902:   get(scene){
-5903:     const rev=this.revision(scene);
-5904:     if(this.acceleration&&this.geometryRevision===rev){this.hits++;return this.acceleration;}
-5905:     this.misses++;return null;
-5906:   },
-5907:   put(scene,acceleration){
-5908:     this.geometryRevision=this.revision(scene);
-5909:     this.acceleration=acceleration;
-5910:     return acceleration;
-5911:   },
-5912:   stats(){return Object.freeze({geometryRevision:this.geometryRevision,hits:this.hits,misses:this.misses,reused:!!this.acceleration});}
-5913: };
-5914: 
-5915: /*
-5916:   BLAS/TLAS boundary:
-5917:   - object mesh geometry revisions feed BLAS-equivalent cached acceleration data;
-5918:   - scene/object transform revisions are intentionally kept outside this cache key
-5919:     so a future TLAS can update instances without rebuilding object geometry.
-5920:   Current browser renderer still uses the proven binary RenderAccelerationSet.
-5921: */
-5922: const RenderAccelerationHierarchy16=Object.freeze({
-5923:   mode:'geometry-revision acceleration cache; TLAS/BLAS boundary reserved',
-5924:   cache:RenderAccelerationCache16,
-5925:   build(scene,builder){
-5926:     const cached=RenderAccelerationCache16.get(scene);
-5927:     if(cached)return cached;
-5928:     return RenderAccelerationCache16.put(scene,builder());
-5929:   }
-5930: });
-5931: window.RenderAccelerationCache16=RenderAccelerationCache16;
-5932: window.RenderAccelerationHierarchy16=RenderAccelerationHierarchy16;
-5933: 
-5934: const RenderAccelerationBuilder=Object.freeze({
-5935:   build(renderScene){
-5936:     return RenderAccelerationHierarchy16.build(renderScene,()=>{
-5937:       const packets=RenderGeometryCompiler.compileScene(renderScene);
-5938:       const store=new RenderTriangleStore();
-5939:       packets.forEach((p,i)=>store.addPacket(p,i));
-5940:       store.finalize();
-5941:       return new RenderAccelerationSet(store,new RenderBVH(store,4));
-5942:     });
-5943:   }
-5944: });
-5945: 
-5946: const DiagnosticRenderer=Object.freeze({
-5947:   async render(job,acceleration,onProgress=()=>{}){
-5948:     const width=Math.min(640,Math.max(1,job.progress.resolution[0]));
-5949:     const height=Math.min(360,Math.max(1,job.progress.resolution[1]));
-5950:     const rgba=new Uint8ClampedArray(width*height*4);
-5951:     const cameraSnapshot=job.renderScene.camera;
-5952:     const rowChunk=8;
-5953:     for(let y=0;y<height;y++){
-5954:       if(job.cancelled||job.controlToken16?.cancelled?.())throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
-5955:       while((job.paused||job.controlToken16?.paused?.())&&!job.cancelled)await new Promise(r=>setTimeout(r,20));
-5956:       for(let x=0;x<width;x++){
-5957:         const ray=RenderCameraRayGenerator.ray(cameraSnapshot,x,y,width,height);
-5958:         perf16.addRay(RenderRayType.CAMERA);
-5959:         perf16.addRay(RenderRayType.CAMERA);
-5960:         const hit=acceleration.trace(ray);
-5961:         const o=(y*width+x)*4;
-5962:         if(hit.hit){
-5963:           const n=hit.geometricNormal;
-5964:           rgba[o]=Math.round((n[0]*.5+.5)*255);
-5965:           rgba[o+1]=Math.round((n[1]*.5+.5)*255);
-5966:           rgba[o+2]=Math.round((n[2]*.5+.5)*255);
-5967:           rgba[o+3]=255;
-5968:         }else{
-5969:           rgba[o]=24;rgba[o+1]=24;rgba[o+2]=24;rgba[o+3]=255;
-5970:         }
-5971:       }
-5972:       if(y%rowChunk===0)onProgress((y+1)/height);
-5973:       if(y%rowChunk===0)await new Promise(r=>setTimeout(r,0));
-5974:     }
-5975:     return {width,height,rgba};
-5976:   }
-5977: });
-5978: 
-5979: const RenderGroup4Contract=Object.freeze({
-5980:   owns:Object.freeze([
-5981:     'ray representation','ray/triangle intersection','ray/AABB intersection',
-5982:     'triangle store','binary BVH','camera ray generation','diagnostic normal render'
-5983:   ]),
-5984:   consumes:Object.freeze([
-5985:     'Core A immutable RenderSceneSnapshot','Group 3 RenderGeometryCompiler'
-5986:   ]),
-5987:   doesNotOwn:Object.freeze([
-5988:     'editor scene','MNMesh','selection','transforms','editor materials',
-5989:     'physical BSDF','lights','GI','denoising'
-5990:   ])
-5991: });
-5992: 
-5993: 
-5994: function runRenderGroup4SelfTests(){
-5995:   const errors=[],approx=(a,b,e=1e-5)=>Math.abs(a-b)<=e;
-5996:   try{
-5997:     let ray=new RenderRay([0,0,1],[0,0,-1]);
-5998:     let hit=TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]);
-5999:     if(!hit.hit||!approx(hit.t,1)||!hit.frontFace||!hit.orientedGeometricNormal)errors.push('Triangle front-face hit failed');
-6000: 
-6001:     ray=new RenderRay([0,0,-1],[0,0,1]);
-6002:     hit=TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]);
-6003:     if(!hit.hit||hit.frontFace)errors.push('Triangle back-face classification failed');
-
-===== occluded( @ 5885 =====
-5850: });
-5851: 
-5852: const RenderCameraRayGenerator=Object.freeze({
-5853:   rotateByQuaternion(v,q){
-5854:     const x=v[0],y=v[1],z=v[2],qx=q[0],qy=q[1],qz=q[2],qw=q[3];
-5855:     const ix=qw*x+qy*z-qz*y,iy=qw*y+qz*x-qx*z,iz=qw*z+qx*y-qy*x,iw=-qx*x-qy*y-qz*z;
-5856:     return [
-5857:       ix*qw+iw*-qx+iy*-qz-iz*-qy,
-5858:       iy*qw+iw*-qy+iz*-qx-ix*-qz,
-5859:       iz*qw+iw*-qz+ix*-qy-iy*-qx
-5860:     ];
-5861:   },
-5862:   ray(cameraSnapshot,px,py,width,height){
-5863:     const c=RenderCameraPolicy.sanitize(cameraSnapshot);
-5864:     width=Math.max(1,Number(width)||1);height=Math.max(1,Number(height)||1);
-5865:     const nx=((px+.5)/width)*2-1;
-5866:     const ny=1-((py+.5)/height)*2;
-5867:     const aspect=Math.max(1e-6,width/height);
-5868:     const fovRad=c.fov*Math.PI/180,tan=Math.tan(fovRad*.5);
-5869:     const local=RayMath.normalize([nx*aspect*tan,ny*tan,-1]);
-5870:     const world=RayMath.normalize(this.rotateByQuaternion(local,c.quaternion));
-5871:     return new RenderRay(c.position,world,c.near,c.far,RenderRayType.CAMERA,0);
-5872:   }
-5873: });
-5874: 
-5875: var RenderAccelerationSet = class RenderAccelerationSet{
-5876:   constructor(store,bvh){
-5877:     this.store=store;this.bvh=bvh;
-5878:     this.vertexCount=store.positions.length/3;
-5879:     this.triangleCount=store.triangleCount();
-5880:     this.nodeCount=bvh.nodes.length;
-5881:     this.stats=Object.freeze({geometry:store.stats,bvh:bvh.stats()});
-5882:     Object.freeze(this);
-5883:   }
-5884:   trace(ray){return this.bvh.intersect(ray)}
-5885:   occluded(ray){return this.bvh.anyHit(ray)}
-5886: }
-5887: 
-5888: 
-5889: const RenderAccelerationCache16={
-5890:   geometryRevision:null,
-5891:   acceleration:null,
-5892:   hits:0,
-5893:   misses:0,
-5894:   reset(){this.geometryRevision=null;this.acceleration=null;this.hits=0;this.misses=0;},
-5895:   invalidate(){this.geometryRevision=null;this.acceleration=null;},
-5896:   revision(scene){
-5897:     const m=scene?.metadata||{};
-5898:     return [m.sceneRevision??'s?',m.geometryRevision??'g?',m.materialRevision??'m?',m.lightRevision??'l?',scene?.objects?.length||0,
-5899:       ...(scene?.objects||[]).map(o=>`${o.id}:${o.visible!==false?1:0}:${o.mesh?.positions?.length||0}:${o.mesh?.indices?.length||0}`)
-5900:     ].join('|');
-5901:   },
-5902:   get(scene){
-5903:     const rev=this.revision(scene);
-5904:     if(this.acceleration&&this.geometryRevision===rev){this.hits++;return this.acceleration;}
-5905:     this.misses++;return null;
-5906:   },
-5907:   put(scene,acceleration){
-5908:     this.geometryRevision=this.revision(scene);
-5909:     this.acceleration=acceleration;
-5910:     return acceleration;
-5911:   },
-5912:   stats(){return Object.freeze({geometryRevision:this.geometryRevision,hits:this.hits,misses:this.misses,reused:!!this.acceleration});}
-5913: };
-5914: 
-5915: /*
-5916:   BLAS/TLAS boundary:
-5917:   - object mesh geometry revisions feed BLAS-equivalent cached acceleration data;
-5918:   - scene/object transform revisions are intentionally kept outside this cache key
-5919:     so a future TLAS can update instances without rebuilding object geometry.
-5920:   Current browser renderer still uses the proven binary RenderAccelerationSet.
-5921: */
-5922: const RenderAccelerationHierarchy16=Object.freeze({
-5923:   mode:'geometry-revision acceleration cache; TLAS/BLAS boundary reserved',
-5924:   cache:RenderAccelerationCache16,
-5925:   build(scene,builder){
-5926:     const cached=RenderAccelerationCache16.get(scene);
-5927:     if(cached)return cached;
-5928:     return RenderAccelerationCache16.put(scene,builder());
-5929:   }
-5930: });
-5931: window.RenderAccelerationCache16=RenderAccelerationCache16;
-5932: window.RenderAccelerationHierarchy16=RenderAccelerationHierarchy16;
-5933: 
-5934: const RenderAccelerationBuilder=Object.freeze({
-5935:   build(renderScene){
-5936:     return RenderAccelerationHierarchy16.build(renderScene,()=>{
-5937:       const packets=RenderGeometryCompiler.compileScene(renderScene);
-5938:       const store=new RenderTriangleStore();
-5939:       packets.forEach((p,i)=>store.addPacket(p,i));
-5940:       store.finalize();
-5941:       return new RenderAccelerationSet(store,new RenderBVH(store,4));
-5942:     });
-5943:   }
-5944: });
-5945: 
-5946: const DiagnosticRenderer=Object.freeze({
-5947:   async render(job,acceleration,onProgress=()=>{}){
-5948:     const width=Math.min(640,Math.max(1,job.progress.resolution[0]));
-5949:     const height=Math.min(360,Math.max(1,job.progress.resolution[1]));
-5950:     const rgba=new Uint8ClampedArray(width*height*4);
-5951:     const cameraSnapshot=job.renderScene.camera;
-5952:     const rowChunk=8;
-5953:     for(let y=0;y<height;y++){
-5954:       if(job.cancelled||job.controlToken16?.cancelled?.())throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
-5955:       while((job.paused||job.controlToken16?.paused?.())&&!job.cancelled)await new Promise(r=>setTimeout(r,20));
-5956:       for(let x=0;x<width;x++){
-5957:         const ray=RenderCameraRayGenerator.ray(cameraSnapshot,x,y,width,height);
-5958:         perf16.addRay(RenderRayType.CAMERA);
-5959:         perf16.addRay(RenderRayType.CAMERA);
-5960:         const hit=acceleration.trace(ray);
-5961:         const o=(y*width+x)*4;
-5962:         if(hit.hit){
-5963:           const n=hit.geometricNormal;
-5964:           rgba[o]=Math.round((n[0]*.5+.5)*255);
-5965:           rgba[o+1]=Math.round((n[1]*.5+.5)*255);
-5966:           rgba[o+2]=Math.round((n[2]*.5+.5)*255);
-5967:           rgba[o+3]=255;
-5968:         }else{
-5969:           rgba[o]=24;rgba[o+1]=24;rgba[o+2]=24;rgba[o+3]=255;
-5970:         }
-5971:       }
-5972:       if(y%rowChunk===0)onProgress((y+1)/height);
-5973:       if(y%rowChunk===0)await new Promise(r=>setTimeout(r,0));
-5974:     }
-5975:     return {width,height,rgba};
-5976:   }
-5977: });
-5978: 
-5979: const RenderGroup4Contract=Object.freeze({
-5980:   owns:Object.freeze([
-5981:     'ray representation','ray/triangle intersection','ray/AABB intersection',
-5982:     'triangle store','binary BVH','camera ray generation','diagnostic normal render'
-5983:   ]),
-5984:   consumes:Object.freeze([
-5985:     'Core A immutable RenderSceneSnapshot','Group 3 RenderGeometryCompiler'
-5986:   ]),
-5987:   doesNotOwn:Object.freeze([
-5988:     'editor scene','MNMesh','selection','transforms','editor materials',
-5989:     'physical BSDF','lights','GI','denoising'
-5990:   ])
-5991: });
-5992: 
-5993: 
-5994: function runRenderGroup4SelfTests(){
-5995:   const errors=[],approx=(a,b,e=1e-5)=>Math.abs(a-b)<=e;
-5996:   try{
-5997:     let ray=new RenderRay([0,0,1],[0,0,-1]);
-5998:     let hit=TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]);
-5999:     if(!hit.hit||!approx(hit.t,1)||!hit.frontFace||!hit.orientedGeometricNormal)errors.push('Triangle front-face hit failed');
-6000: 
-6001:     ray=new RenderRay([0,0,-1],[0,0,1]);
-6002:     hit=TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]);
-6003:     if(!hit.hit||hit.frontFace)errors.push('Triangle back-face classification failed');
-6004: 
-
-===== class RenderBVH @ 5660 =====
-5625:       const nx=aby*acz-abz*acy,ny=abz*acx-abx*acz,nz=abx*acy-aby*acx;
-5626:       if(nx*nx+ny*ny+nz*nz<1e-20){this.stats.rejectedDegenerate++;continue;}
-5627:       this.triangles.push(baseVertex+ia,baseVertex+ib,baseVertex+ic);
-5628:       this.materialIndices.push(packet.materialIndices?.[t/3]||0);
-5629:       this.objectIndices.push(objectIndex);
-5630:       this.stats.acceptedTriangles++;
-5631:     }
-5632:     this.objectIds[objectIndex]=packet.objectId;
-5633:   }
-5634:   finalize(){
-5635:     this.positions=new Float32Array(this.positions);
-5636:     this.normals=new Float32Array(this.normals);
-5637:     this.uvs=new Float32Array(this.uvs);
-5638:     this.triangles=new Uint32Array(this.triangles);
-5639:     this.materialIndices=new Uint16Array(this.materialIndices);
-5640:     this.objectIndices=new Uint32Array(this.objectIndices);
-5641:     Object.freeze(this.objectIds);Object.freeze(this.stats);
-5642:     return this;
-5643:   }
-5644:   triangleCount(){return this.triangles.length/3}
-5645:   vertex(i){const p=i*3;return [this.positions[p],this.positions[p+1],this.positions[p+2]]}
-5646:   triangleBounds(t){
-5647:     const k=t*3,a=this.vertex(this.triangles[k]),b=this.vertex(this.triangles[k+1]),c=this.vertex(this.triangles[k+2]);
-5648:     return {min:RayMath.min3(a,RayMath.min3(b,c)),max:RayMath.max3(a,RayMath.max3(b,c)),
-5649:       centroid:[(a[0]+b[0]+c[0])/3,(a[1]+b[1]+c[1])/3,(a[2]+b[2]+c[2])/3]};
-5650:   }
-5651: }
-5652: 
-5653: class BVHNode{
-5654:   constructor(min,max,left=-1,right=-1,start=0,count=0){
-5655:     this.min=min;this.max=max;this.left=left;this.right=right;this.start=start;this.count=count;
-5656:   }
-5657:   get leaf(){return this.count>0}
-5658: }
-5659: 
-5660: var RenderBVH = class RenderBVH{
-5661:   constructor(store,maxLeafSize=4){
-5662:     this.store=store;
-5663:     this.maxLeafSize=Math.max(1,maxLeafSize|0);
-5664:     this.nodes=[];
-5665:     this.primitiveIndices=Uint32Array.from({length:store.triangleCount()},(_,i)=>i);
-5666:     this._boundsCache=Array.from({length:store.triangleCount()},(_,i)=>store.triangleBounds(i));
-5667:     if(store.triangleCount())this.root=this._build(0,store.triangleCount());
-5668:     else this.root=-1;
-5669:   }
-5670:   _rangeBounds(start,end){
-5671:     let mn=[Infinity,Infinity,Infinity],mx=[-Infinity,-Infinity,-Infinity],cmn=[Infinity,Infinity,Infinity],cmx=[-Infinity,-Infinity,-Infinity];
-5672:     for(let i=start;i<end;i++){
-5673:       const b=this._boundsCache[this.primitiveIndices[i]];
-5674:       mn=RayMath.min3(mn,b.min);mx=RayMath.max3(mx,b.max);
-5675:       cmn=RayMath.min3(cmn,b.centroid);cmx=RayMath.max3(cmx,b.centroid);
-5676:     }
-5677:     return {min:mn,max:mx,cmin:cmn,cmax:cmx};
-5678:   }
-5679:   _surfaceArea(min,max){
-5680:     const x=Math.max(0,max[0]-min[0]),y=Math.max(0,max[1]-min[1]),z=Math.max(0,max[2]-min[2]);
-5681:     return 2*(x*y+y*z+z*x);
-5682:   }
-5683:   _sahSplit(start,end,rb){
-5684:     const count=end-start;
-5685:     if(count<8)return null;
-5686:     let best=null,bestCost=Infinity;
-5687:     const binsN=12;
-5688:     const parentArea=Math.max(1e-12,this._surfaceArea(rb.min,rb.max));
-5689:     const leafCost=count;
-5690:     for(let axis=0;axis<3;axis++){
-5691:       const lo=rb.cmin[axis],hi=rb.cmax[axis],span=hi-lo;
-5692:       if(!(span>1e-12))continue;
-5693:       const bins=Array.from({length:binsN},()=>({count:0,min:[Infinity,Infinity,Infinity],max:[-Infinity,-Infinity,-Infinity]}));
-5694:       for(let i=start;i<end;i++){
-5695:         const pi=this.primitiveIndices[i],b=this._boundsCache[pi];
-5696:         const bi=Math.min(binsN-1,Math.max(0,Math.floor(((b.centroid[axis]-lo)/span)*binsN)));
-5697:         const bn=bins[bi];bn.count++;bn.min=RayMath.min3(bn.min,b.min);bn.max=RayMath.max3(bn.max,b.max);
-5698:       }
-5699:       const leftC=[],rightC=[],leftB=[],rightB=[];
-5700:       let c=0,mn=[Infinity,Infinity,Infinity],mx=[-Infinity,-Infinity,-Infinity];
-5701:       for(let i=0;i<binsN;i++){c+=bins[i].count;if(bins[i].count){mn=RayMath.min3(mn,bins[i].min);mx=RayMath.max3(mx,bins[i].max);}leftC[i]=c;leftB[i]={min:mn.slice(),max:mx.slice()};}
-5702:       c=0;mn=[Infinity,Infinity,Infinity];mx=[-Infinity,-Infinity,-Infinity];
-5703:       for(let i=binsN-1;i>=0;i--){c+=bins[i].count;if(bins[i].count){mn=RayMath.min3(mn,bins[i].min);mx=RayMath.max3(mx,bins[i].max);}rightC[i]=c;rightB[i]={min:mn.slice(),max:mx.slice()};}
-5704:       for(let i=0;i<binsN-1;i++){
-5705:         if(!leftC[i]||!rightC[i+1])continue;
-5706:         const splitCost=1+(
-5707:           this._surfaceArea(leftB[i].min,leftB[i].max)*leftC[i]+
-5708:           this._surfaceArea(rightB[i+1].min,rightB[i+1].max)*rightC[i+1]
-5709:         )/parentArea;
-5710:         if(splitCost<bestCost){bestCost=splitCost;best={axis,threshold:lo+span*((i+1)/binsN),cost:splitCost};}
-5711:       }
-5712:     }
-5713:     return best&&bestCost<leafCost?best:null;
-5714:   }
-5715:   _build(start,end){
-5716:     const rb=this._rangeBounds(start,end);
-5717:     const nodeIndex=this.nodes.length;
-5718:     this.nodes.push(null);
-5719:     const count=end-start;
-5720:     if(count<=this.maxLeafSize){
-5721:       this.nodes[nodeIndex]=new BVHNode(rb.min,rb.max,-1,-1,start,count);
-5722:       return nodeIndex;
-5723:     }
-5724:     const ext=RayMath.sub(rb.cmax,rb.cmin);
-5725:     let axis=0;if(ext[1]>ext[axis])axis=1;if(ext[2]>ext[axis])axis=2;
-5726:     const sah=this._sahSplit(start,end,rb);
-5727:     if(sah)axis=sah.axis;
-5728:     const sorted=new Array(end-start);for(let si=0;si<sorted.length;si++)sorted[si]=this.primitiveIndices[start+si];
-5729:     sorted.sort((a,b)=>this._boundsCache[a].centroid[axis]-this._boundsCache[b].centroid[axis]);
-5730:     this.primitiveIndices.set(sorted,start);
-5731:     let mid=start+Math.floor(count/2);
-5732:     if(sah){
-5733:       let split=start;
-5734:       while(split<end&&this._boundsCache[this.primitiveIndices[split]].centroid[axis]<sah.threshold)split++;
-5735:       if(split>start&&split<end)mid=split;
-5736:     }
-5737:     if(mid===start||mid===end){
-5738:       this.nodes[nodeIndex]=new BVHNode(rb.min,rb.max,-1,-1,start,count);
-5739:       return nodeIndex;
-5740:     }
-5741:     const left=this._build(start,mid),right=this._build(mid,end);
-5742:     this.nodes[nodeIndex]=new BVHNode(rb.min,rb.max,left,right,0,0);
-5743:     return nodeIndex;
-5744:   }
-5745:   intersect(ray){
-5746:     const best=new RenderHit();
-5747:     if(this.root<0)return best;
-5748:     const stack=[this.root];stack.length=1; // traversal stack retained; avoids unsafe structural rewrite
-5749:     while(stack.length){
-5750:       const ni=stack.pop(),node=this.nodes[ni];
-5751:       if(!AABBIntersector.intersect(ray,node.min,node.max,best.t))continue;
-5752:       if(node.leaf){
-5753:         for(let i=node.start;i<node.start+node.count;i++){
-5754:           const tri=this.primitiveIndices[i],k=tri*3;
-5755:           const p0=this.store.vertex(this.store.triangles[k]);
-5756:           const p1=this.store.vertex(this.store.triangles[k+1]);
-5757:           const p2=this.store.vertex(this.store.triangles[k+2]);
-5758:           const before=best.t;
-5759:           TriangleIntersector.intersect(ray,p0,p1,p2,best);
-5760:           if(best.t<before){
-5761:             best.triangleIndex=tri;
-5762:             best.objectIndex=this.store.objectIndices[tri];
-5763:             best.materialIndex=this.store.materialIndices[tri];
-5764:           }
-5765:         }
-5766:       }else{
-5767:         const left=this.nodes[node.left],right=this.nodes[node.right];
-5768:         const lt=AABBIntersector.entry(ray,left.min,left.max,best.t);
-5769:         const rt=AABBIntersector.entry(ray,right.min,right.max,best.t);
-5770:         const lh=Number.isFinite(lt),rh=Number.isFinite(rt);
-5771:         if(lh&&rh){
-5772:           if(lt<=rt)stack.push(node.right,node.left);else stack.push(node.left,node.right);
-5773:         }else if(lh)stack.push(node.left);
-5774:         else if(rh)stack.push(node.right);
-5775:       }
-5776:     }
-5777:     return best;
-5778:   }
-5779:   stats(){
-
-===== var PathIntegrator=Object.freeze @ 8290 =====
-8255:       try{LiteTraceExecutionContext.performance?.addProbe?.();}catch(_){}
-8256:       const ph=acceleration.trace(probeRay);
-8257:       let li;
-8258:       if(!ph.hit){
-8259:         li=PathIntegrator.safeColor(RenderCoreD.evaluateEnvironment(job,compiled,d));
-8260:       }else{
-8261:         li=PathIntegrator.safeColor(Group9DirectMIS.evaluate(job,acceleration,compiled,probeRay,ph,seed^Math.imul(i+3,0x9E3779B9)));
-8262:       }
-8263:       incoming=RenderColor.add(incoming,li);
-8264:     }
-8265:     incoming=RenderColor.mul(incoming,1/Math.max(1,count));
-8266:     const diffuse=RenderColor.mul(material.baseColor,Math.max(0,1-material.metalness));
-8267:     return RenderColor.mul(diffuse,incoming);
-8268:   },
-8269: 
-8270:   estimate(job,acceleration,compiled,hit,n,material,seed,bounce){
-8271:     const cache=job.lightCache;if(!cache||!this.cacheable(material))return null;
-8272:     const found=cache.query(hit.position,n);
-8273:     if(found){
-8274:       const cadence=LightCachePolicy.retraceEvery(job);
-8275:       if(cadence>0&&cache.hits%cadence===0){
-8276:         cache.retraces++;
-8277:         const fresh=this.probe(job,acceleration,compiled,hit,n,material,seed^0xB5297A4D,bounce);
-8278:         cache.refreshNearest(hit.position,n,fresh);
-8279:         return RenderColor.mul(RenderColor.add(RenderColor.mul(found,.75),RenderColor.mul(fresh,.25)),1);
-8280:       }
-8281:       return found;
-8282:     }
-8283: 
-8284:     const outgoing=this.probe(job,acceleration,compiled,hit,n,material,seed,bounce);
-8285:     cache.insert(hit.position,n,outgoing);
-8286:     return outgoing;
-8287:   }
-8288: });
-8289: 
-8290: var PathIntegrator=Object.freeze({
-8291:   maxDepth(job){
-8292:     return Math.max(1,Math.min(16,Number(job?.settings?.maxBounces)||5));
-8293:   },
-8294: 
-8295:   finiteColor(c){
-8296:     return Array.isArray(c)&&c.length===3&&c.every(v=>Number.isFinite(v)&&v>=0);
-8297:   },
-8298: 
-8299:   safeColor(c){
-8300:     return this.finiteColor(c)?c:[0,0,0];
-8301:   },
-8302: 
-8303:   offsetOrigin(hit,n,direction){
-8304:     const sign=RayMath.dot(direction,n)>=0?1:-1;
-8305:     const eps=RenderRayPolicy.epsilonForPoint(hit.position);
-8306:     return RayMath.add(hit.position,RayMath.mul(n,eps*sign));
-8307:   },
-8308: 
-8309:   trace(job,acceleration,compiled,primaryRay,pixelSeed,initialHit=null){
-8310:     let radiance=[0,0,0];
-8311:     let throughput=[1,1,1];
-8312:     let ray=primaryRay;
-8313:     let previousGuide=null;
-8314:     const maxDepth=this.maxDepth(job);
-8315:     const maxPathRays=Math.max(1,Math.min(4096,Number(job?.settings?.maxPathRays)||64));
-8316:     let pathRays=1;
-8317: 
-8318:     for(let bounce=0;bounce<maxDepth;bounce++){
-8319:       const hit=(bounce===0&&initialHit)?initialHit:acceleration.trace(ray);
-8320: 
-8321:       if(!hit.hit){
-8322:         const env=this.safeColor(RenderCoreD.evaluateEnvironment(job,compiled,ray.direction));
-8323:         radiance=RenderColor.add(radiance,RenderColor.mul(throughput,env));
-8324:         if(previousGuide&&job.pathGuide){
-8325:           const w=Math.max(0,.2126*env[0]+.7152*env[1]+.0722*env[2]);
-8326:           job.pathGuide.record(previousGuide.position,previousGuide.normal,previousGuide.direction,w);
-8327:         }
-8328:         break;
-8329:       }
-8330: 
-8331:       const material=RenderMaterialLibrary.resolveHit(job.renderScene,compiled.materials,hit);
-8332:       const n=SurfaceInterpolator.normal(acceleration,hit);
-8333:       const v=RayMath.mul(ray.direction,-1);
-8334: 
-8335:       // Next-event direct lighting at each hit. Dome is excluded here because
-8336:       // environment energy is accounted for by path miss evaluation.
-8337:       const direct=Group9DirectMIS.evaluate(
-8338:         job,acceleration,compiled,ray,hit,pixelSeed^(bounce*0x9E3779B9)
-8339:       );
-8340:       const safeDirect=this.safeColor(direct);
-8341:       radiance=RenderColor.add(radiance,RenderColor.mul(throughput,safeDirect));
-8342: 
-8343:       if(previousGuide&&job.pathGuide){
-8344:         const w=Math.max(0,.2126*safeDirect[0]+.7152*safeDirect[1]+.0722*safeDirect[2]);
-8345:         job.pathGuide.record(previousGuide.position,previousGuide.normal,previousGuide.direction,w);
-8346:       }
-8347: 
-8348:       if(bounce>=1){
-8349:         if(job?.settings?.secondaryGI==='None')break;
-8350:         if(LightCacheEstimator.enabled(job)){
-8351:           const cachedTail=LightCacheEstimator.estimate(job,acceleration,compiled,hit,n,material,pixelSeed,bounce);
-8352:           if(cachedTail){
-8353:             radiance=RenderColor.add(radiance,RenderColor.mul(throughput,cachedTail));
-8354:             break;
-8355:           }
-8356:         }
-8357:       }
-8358: 
-8359:       if(material.shading==='unlit')break;
-8360: 
-8361:       const sample=GuidedBSDFSampler.sample(job,material,n,v,hit.position,pixelSeed,bounce);
-8362:       if(!sample)break;
-8363: 
-8364:       throughput=RenderColor.mul(throughput,sample.weight);
-8365: 
-8366:       if(!this.finiteColor(throughput))break;
-8367:       if(Math.max(throughput[0],throughput[1],throughput[2])<1e-6)break;
-8368: 
-8369:       // Russian roulette after the first few bounces. Survival probability tracks path throughput.
-8370:       if(bounce>=2){
-8371:         const survive=Math.max(.08,Math.min(.95,Math.max(throughput[0],throughput[1],throughput[2])));
-8372:         if(PathSampler.scalar(pixelSeed,bounce,15)>survive)break;
-8373:         throughput=RenderColor.mul(throughput,1/survive);
-8374:       }
-8375: 
-8376:       if(sample.transmission&&material.thickness>0){
-8377:         throughput=RenderColor.mul(
-8378:           throughput,
-8379:           DielectricTransport.beerLambert(material.attenuationColor,material.thickness,material.attenuationDistance)
-8380:         );
-8381:       }
-8382: 
-8383:       previousGuide=(!sample.transmission&&job.pathGuide&&RayMath.dot(n,sample.direction)>0)
-8384:         ? {position:hit.position.slice(),normal:n.slice(),direction:sample.direction.slice()}
-8385:         : null;
-8386: 
-8387:       if(pathRays>=maxPathRays)break;
-8388:       pathRays++;
-8389:       const origin=this.offsetOrigin(hit,n,sample.direction);
-8390:       const eps=RenderRayPolicy.epsilonForPoint(origin);
-8391:       const rayType=sample.transmission?RenderRayType.TRANSMISSION:(sample.lobe==='ggx'?RenderRayType.GLOSSY:RenderRayType.DIFFUSE);
-8392:       RenderCoreH.attachPerformance(job).addRay(rayType);
-8393:       ray=new RenderRay(origin,sample.direction,eps,Infinity,rayType,bounce+1);
-8394:     }
-8395: 
-8396:     return radiance;
-8397:   },
-8398: 
-8399:   tracePixel(job,acceleration,compiled,primaryRay,pixelSeed){
-8400:     const primaryHitRecord=acceleration.trace(primaryRay);
-8401:     if(!primaryHitRecord.hit){
-8402:       const env=this.safeColor(RenderCoreD.evaluateEnvironment(job,compiled,primaryRay.direction));
-8403:       return {radiance:env,primaryHit:false,primaryHitRecord:null};
-8404:     }
-8405:     return {
-8406:       radiance:this.trace(job,acceleration,compiled,primaryRay,pixelSeed,primaryHitRecord),
-8407:       primaryHit:true,
-8408:       primaryHitRecord
-8409:     };
-
-===== buildAccelerationFromPackets @ 5409 =====
-5374:     }
-5375: 
-5376:     return new PreparedGeometrySet(items);
-5377:   }
-5378: };
-5379: 
-5380: 
-5381: /* ============================================================
-5382:    3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — CORE B
-5383:    CLEAN GROUP 3 + GROUP 4 CONSOLIDATION
-5384:    ============================================================ */
-5385: class RenderExecutionGeometry{
-5386:   constructor(renderScene){
-5387:     this.accelerationPackets=RenderGeometryCompiler.compileScene(renderScene);
-5388:     this.workerPackets=this.accelerationPackets.map(p=>new RenderGeometryPacket({
-5389:       objectId:p.objectId,name:p.name,
-5390:       positions:new Float32Array(p.positions),
-5391:       normals:new Float32Array(p.normals),
-5392:       uvs:new Float32Array(p.uvs),
-5393:       indices:new Uint32Array(p.indices),
-5394:       materialIndices:new Uint16Array(p.materialIndices),
-5395:       bounds:{min:[...p.bounds.min],max:[...p.bounds.max]}
-5396:     }));
-5397:     Object.freeze(this.accelerationPackets);
-5398:     Object.freeze(this.workerPackets);
-5399:   }
-5400: }
-5401: 
-5402: var RenderCoreB=Object.freeze({
-5403:   version:'3.79.16-core-b-part2',
-5404: 
-5405:   createExecutionGeometry(renderScene){
-5406:     return new RenderExecutionGeometry(renderScene);
-5407:   },
-5408: 
-5409:   buildAccelerationFromPackets(packets){
-5410:     const store=new RenderTriangleStore();
-5411:     packets.forEach((p,i)=>store.addPacket(p,i));
-5412:     store.finalize();
-5413:     return new RenderAccelerationSet(store,new RenderBVH(store,4));
-5414:   },
-5415: 
-5416:   async prepareWorkerGeometry(job,pool,executionGeometry,onProgress=()=>{}){
-5417:     const items=[],packets=executionGeometry.workerPackets,total=packets.length;
-5418:     for(let i=0;i<packets.length;i++){
-5419:       if(job.cancelled)throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
-5420:       while(job.paused&&!job.cancelled)await new Promise(r=>setTimeout(r,25));
-5421: 
-5422:       const packet=packets[i];
-5423:       let result;
-5424:       try{
-5425:         result=await pool.run(
-5426:           {type:'prepareGeometry',jobId:job.id,packet},
-5427:           RenderGeometryCompiler.transferables(packet)
-5428:         );
-5429:       }catch(err){
-5430:         if(err?.workerUnavailable){job.progress.workerFallback=true;result=RenderGeometryPreparation.mainThread(job,packet);}
-5431:         else throw err;
-5432:       }
-5433: 
-5434:       items.push(Object.freeze({
-5435:         objectId:result.objectId,
-5436:         vertexCount:result.vertexCount,
-5437:         triangleCount:result.triangleCount,
-5438:         bounds:Object.freeze(Array.from(result.bounds||[])),
-5439:         triangleIndices:result.triangleIndices
-5440:       }));
-5441:       onProgress((i+1)/Math.max(1,total),items[items.length-1]);
-5442:     }
-5443:     return new PreparedGeometrySet(items);
-5444:   },
-5445: 
-5446:   validate(){
-5447:     const errors=[];
-5448:     const g3=validateRenderGroup3();if(!g3.ok)errors.push(...g3.errors);
-5449:     const g4=validateRenderGroup4();if(!g4.ok)errors.push(...g4.errors);
-5450:     if(typeof this.createExecutionGeometry!=='function')errors.push('Core B execution geometry missing');
-5451:     if(typeof this.buildAccelerationFromPackets!=='function')errors.push('Core B acceleration builder missing');
-5452:     return {ok:errors.length===0,errors};
-5453:   }
-5454: });
-5455: window.RenderCoreB=RenderCoreB;
-5456: 
-5457: const RenderGroup3Contract=Object.freeze({
-5458:   owns:Object.freeze([
-5459:     'worker pool',
-5460:     'render execution queue',
-5461:     'worker-safe geometry packets',
-5462:     'render geometry preparation',
-5463:     'prepared triangle-index payloads'
-5464:   ]),
-5465:   consumes:Object.freeze([
-5466:     'RenderCoreA render jobs',
-5467:     'immutable RenderSceneSnapshot'
-5468:   ]),
-5469:   doesNotOwn:Object.freeze([
-5470:     'editor objects',
-5471:     'editor geometry buffers',
-5472:     'MNMesh',
-5473:     'viewport renderer',
-5474:     'selection',
-5475:     'transforms',
-5476:     'editor undo'
-5477:   ])
-5478: });
-5479: 
-5480: function validateRenderGroup3(){
-5481:   const errors=[];
-5482:   if(typeof RenderWorkerPool!=='function')errors.push('RenderWorkerPool missing');
-5483:   if(typeof RenderGeometryCompiler.compileScene!=='function')errors.push('RenderGeometryCompiler missing');
-5484:   if(typeof RenderGeometryValidation.validatePacket!=='function')errors.push('RenderGeometryValidation missing');
-5485:   if(typeof RenderGeometryPreparation.prepare!=='function')errors.push('RenderGeometryPreparation missing');
-5486:   if(typeof PreparedGeometrySet!=='function')errors.push('PreparedGeometrySet missing');
-5487:   return {ok:errors.length===0,errors};
-5488: }
-5489: 
-5490: Object.assign(window,{
-5491:   RenderGeometryPacket,
-5492:   RenderGeometryCompiler,RenderGeometryValidation,
-5493:   RenderWorkerPool,
-5494:   PreparedGeometrySet,
-5495:   RenderGeometryPreparation,
-5496:   RenderGroup3Contract
-5497: });
-5498: 
-5499: /* ============================================================
-5500:    3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 4
-5501:    Rays + Triangle Intersections + BVH + Camera
-5502:    ============================================================ */
-5503: const RayMath=Object.freeze({
-5504:   EPSILON:1e-6,
-5505:   add(a,b){return [a[0]+b[0],a[1]+b[1],a[2]+b[2]]},
-5506:   sub(a,b){return [a[0]-b[0],a[1]-b[1],a[2]-b[2]]},
-5507:   mul(a,s){return [a[0]*s,a[1]*s,a[2]*s]},
-5508:   dot(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]},
-5509:   cross(a,b){return [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]},
-5510:   length(a){return Math.hypot(a[0],a[1],a[2])},
-5511:   normalize(a){const l=Math.hypot(a[0],a[1],a[2])||1;return [a[0]/l,a[1]/l,a[2]/l]},
-5512:   min3(a,b){return [Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.min(a[2],b[2])]},
-5513:   max3(a,b){return [Math.max(a[0],b[0]),Math.max(a[1],b[1]),Math.max(a[2],b[2])]}
-5514: });
-5515: 
-5516: const RenderRayType=Object.freeze({CAMERA:'camera',SHADOW:'shadow',DIFFUSE:'diffuse',GLOSSY:'glossy',TRANSMISSION:'transmission'});
-5517: class RenderRay{
-5518:   constructor(origin,direction,tMin=1e-5,tMax=Infinity,type=RenderRayType.CAMERA,depth=0){
-5519:     this.origin=origin;this.direction=RayMath.normalize(direction);
-5520:     this.invDirection=[
-5521:       Math.abs(this.direction[0])<RayMath.EPSILON?Infinity:1/this.direction[0],
-5522:       Math.abs(this.direction[1])<RayMath.EPSILON?Infinity:1/this.direction[1],
-5523:       Math.abs(this.direction[2])<RayMath.EPSILON?Infinity:1/this.direction[2]
-5524:     ];
-5525:     this.tMin=tMin;this.tMax=tMax;this.type=type;this.depth=depth;
-5526:   }
-5527:   at(t){return RayMath.add(this.origin,RayMath.mul(this.direction,t))}
-5528: }
-
-===== const acceleration= @ 7622 =====
+===== PathIntegrator.trace( @ 7564 =====
+7519:           ? AreaLightSampler.sample(light,hit.position,uv[0],uv[1])
+7520:           : DirectLightSampler.sample(light,hit.position);
+7521: 
+7522:         if(!sample||!sample.direction)continue;
+7523:         if(!sample.radiance||sample.radiance.every(v=>v<=0||!Number.isFinite(v)))continue;
+7524: 
+7525:         if(light.castShadows!==false){
+7526:           const visible=ShadowVisibility.visible(acceleration,hit.position,sample.direction,sample.distance);
+7527:           if(!visible)continue;
+7528:         }
+7529: 
+7530:         const brdf=PhysicalBSDF.evaluate(material,n,v,sample.direction);
+7531:         accum=RenderColor.add(accum,RenderColor.mul(brdf,sample.radiance));
+7532:       }
+7533: 
+7534:       if(count>1)accum=RenderColor.mul(accum,1/count);
+7535:       color=RenderColor.add(color,accum);
+7536:     }
+7537: 
+7538:     return color;
+7539:   }
+7540: });
+7541: 
+7542: 
+7543: /* ============================================================
+7544:    3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — CORE D
+7545:    CLEAN GROUP 7 + GROUP 8 CONSOLIDATION
+7546:    ============================================================ */
+7547: 
+7548: var RenderCoreD=Object.freeze({
+7549:   version:'3.90.0-core-d',
+7550: 
+7551:   evaluateSurfaceDirect(job,acceleration,compiled,ray,hit,pixelSeed,options={}){
+7552:     return DirectLightingIntegrator.evaluate(
+7553:       job,acceleration,compiled,ray,hit,pixelSeed,options
+7554:     );
+7555:   },
+7556: 
+7557:   evaluateEnvironment(job,compiled,rayDirection){
+7558:     return EnvironmentSampler.background(
+7559:       job.renderScene,job.settings,compiled.lights,rayDirection
+7560:     );
+7561:   },
+7562: 
+7563:   tracePath(job,acceleration,compiled,ray,pixelSeed,initialHit=null){
+7564:     return PathIntegrator.trace(
+7565:       job,acceleration,compiled,ray,pixelSeed,initialHit
+7566:     );
+7567:   },
+7568: 
+7569:   visible(acceleration,origin,direction,maxDistance){
+7570:     return ShadowVisibility.visible(acceleration,origin,direction,maxDistance);
+7571:   },
+7572: 
+7573:   validate(){
+7574:     const errors=[];
+7575:     const g7=validateRenderGroup7();if(!g7.ok)errors.push(...g7.errors);
+7576:     const g8=validateRenderGroup8();if(!g8.ok)errors.push(...g8.errors);
+7577:     if(typeof this.evaluateSurfaceDirect!=='function')errors.push('Core D direct evaluator missing');
+7578:     if(typeof this.tracePath!=='function')errors.push('Core D path tracer missing');
+7579:     if(typeof this.evaluateEnvironment!=='function')errors.push('Core D environment evaluator missing');
+7580:     return {ok:errors.length===0,errors};
+7581:   }
+7582: });
+7583: window.RenderCoreD=RenderCoreD;
+7584: 
+7585: const RenderGroup7Contract=Object.freeze({
+7586:   owns:Object.freeze([
 7587:     'shadow-ray visibility',
 7588:     'shadow bias',
 7589:     'stochastic area-light sampling',
@@ -1049,51 +175,711 @@
 7691:         RayMath.add(RayMath.mul(basis.tangent,x),RayMath.mul(basis.bitangent,y)),
 7692:         RayMath.mul(basis.n,z)
 7693:       )
-7694:     );
-7695:   }
-7696: });
-7697: 
-7698: var RenderMIS=Object.freeze({
-7699:   power(a,b){
-7700:     a=Math.max(0,Number(a)||0);b=Math.max(0,Number(b)||0);
-7701:     const aa=a*a,bb=b*b,d=aa+bb;
-7702:     return d>0?aa/d:1;
-7703:   }
-7704: });
-7705: 
-7706: const GGXImportanceSampler=Object.freeze({
-7707:   sampleHalfVector(n,roughness,u1,u2){
-7708:     const a=Math.max(.002025,roughness*roughness);
-7709:     const a2=a*a;
-7710:     const phi=2*Math.PI*u1;
-7711:     const cosTheta=Math.sqrt(Math.max(0,(1-u2)/(1+(a2-1)*u2)));
-7712:     const sinTheta=Math.sqrt(Math.max(0,1-cosTheta*cosTheta));
-7713:     const basis=LightBasis.fromDirection(n);
-7714:     return RayMath.normalize(
-7715:       RayMath.add(
-7716:         RayMath.add(RayMath.mul(basis.tangent,sinTheta*Math.cos(phi)),RayMath.mul(basis.bitangent,sinTheta*Math.sin(phi))),
-7717:         RayMath.mul(basis.n,cosTheta)
-7718:       )
-7719:     );
-7720:   },
-7721:   sampleVisibleHalfVector(n,v,roughness,u1,u2){
-7722:     const a=Math.max(.002025,roughness*roughness);
-7723:     const basis=LightBasis.fromDirection(n);
-7724:     const vl=[RayMath.dot(v,basis.tangent),RayMath.dot(v,basis.bitangent),Math.max(1e-6,RayMath.dot(v,basis.n))];
-7725:     const vh=RayMath.normalize([a*vl[0],a*vl[1],vl[2]]);
-7726:     const lensq=vh[0]*vh[0]+vh[1]*vh[1];
-7727:     const t1=lensq>1e-12?[-vh[1]/Math.sqrt(lensq),vh[0]/Math.sqrt(lensq),0]:[1,0,0];
-7728:     const t2=RayMath.cross(vh,t1);
-7729:     const r=Math.sqrt(Math.max(0,u1)),phi=2*Math.PI*u2;
-7730:     const p1=r*Math.cos(phi);
-7731:     let p2=r*Math.sin(phi);
-7732:     const mix=.5*(1+vh[2]);
-7733:     p2=(1-mix)*Math.sqrt(Math.max(0,1-p1*p1))+mix*p2;
-7734:     const z=Math.sqrt(Math.max(0,1-p1*p1-p2*p2));
-7735:     const nh=RayMath.add(RayMath.add(RayMath.mul(t1,p1),RayMath.mul(t2,p2)),RayMath.mul(vh,z));
-7736:     const ne=RayMath.normalize([a*nh[0],a*nh[1],Math.max(0,nh[2])]);
-7737:     return RayMath.normalize(RayMath.add(RayMath.add(RayMath.mul(basis.tangent,ne[0]),RayMath.mul(basis.bitangent,ne[1])),RayMath.mul(basis.n,ne[2])));
-7738:   },
-7739:   reflect(i,n){return RayMath.sub(i,RayMath.mul(n,2*RayMath.dot(i,n)));},
-7740:   distribution(nDotH,roughness){
-7741:     const a=Math.max(.002025,roughness*roughness),a2=a*a;
+
+===== acceleration.trace(ray) @ 5960 =====
+5915: /*
+5916:   BLAS/TLAS boundary:
+5917:   - object mesh geometry revisions feed BLAS-equivalent cached acceleration data;
+5918:   - scene/object transform revisions are intentionally kept outside this cache key
+5919:     so a future TLAS can update instances without rebuilding object geometry.
+5920:   Current browser renderer still uses the proven binary RenderAccelerationSet.
+5921: */
+5922: const RenderAccelerationHierarchy16=Object.freeze({
+5923:   mode:'geometry-revision acceleration cache; TLAS/BLAS boundary reserved',
+5924:   cache:RenderAccelerationCache16,
+5925:   build(scene,builder){
+5926:     const cached=RenderAccelerationCache16.get(scene);
+5927:     if(cached)return cached;
+5928:     return RenderAccelerationCache16.put(scene,builder());
+5929:   }
+5930: });
+5931: window.RenderAccelerationCache16=RenderAccelerationCache16;
+5932: window.RenderAccelerationHierarchy16=RenderAccelerationHierarchy16;
+5933: 
+5934: const RenderAccelerationBuilder=Object.freeze({
+5935:   build(renderScene){
+5936:     return RenderAccelerationHierarchy16.build(renderScene,()=>{
+5937:       const packets=RenderGeometryCompiler.compileScene(renderScene);
+5938:       const store=new RenderTriangleStore();
+5939:       packets.forEach((p,i)=>store.addPacket(p,i));
+5940:       store.finalize();
+5941:       return new RenderAccelerationSet(store,new RenderBVH(store,4));
+5942:     });
+5943:   }
+5944: });
+5945: 
+5946: const DiagnosticRenderer=Object.freeze({
+5947:   async render(job,acceleration,onProgress=()=>{}){
+5948:     const width=Math.min(640,Math.max(1,job.progress.resolution[0]));
+5949:     const height=Math.min(360,Math.max(1,job.progress.resolution[1]));
+5950:     const rgba=new Uint8ClampedArray(width*height*4);
+5951:     const cameraSnapshot=job.renderScene.camera;
+5952:     const rowChunk=8;
+5953:     for(let y=0;y<height;y++){
+5954:       if(job.cancelled||job.controlToken16?.cancelled?.())throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
+5955:       while((job.paused||job.controlToken16?.paused?.())&&!job.cancelled)await new Promise(r=>setTimeout(r,20));
+5956:       for(let x=0;x<width;x++){
+5957:         const ray=RenderCameraRayGenerator.ray(cameraSnapshot,x,y,width,height);
+5958:         perf16.addRay(RenderRayType.CAMERA);
+5959:         perf16.addRay(RenderRayType.CAMERA);
+5960:         const hit=acceleration.trace(ray);
+5961:         const o=(y*width+x)*4;
+5962:         if(hit.hit){
+5963:           const n=hit.geometricNormal;
+5964:           rgba[o]=Math.round((n[0]*.5+.5)*255);
+5965:           rgba[o+1]=Math.round((n[1]*.5+.5)*255);
+5966:           rgba[o+2]=Math.round((n[2]*.5+.5)*255);
+5967:           rgba[o+3]=255;
+5968:         }else{
+5969:           rgba[o]=24;rgba[o+1]=24;rgba[o+2]=24;rgba[o+3]=255;
+5970:         }
+5971:       }
+5972:       if(y%rowChunk===0)onProgress((y+1)/height);
+5973:       if(y%rowChunk===0)await new Promise(r=>setTimeout(r,0));
+5974:     }
+5975:     return {width,height,rgba};
+5976:   }
+5977: });
+5978: 
+5979: const RenderGroup4Contract=Object.freeze({
+5980:   owns:Object.freeze([
+5981:     'ray representation','ray/triangle intersection','ray/AABB intersection',
+5982:     'triangle store','binary BVH','camera ray generation','diagnostic normal render'
+5983:   ]),
+5984:   consumes:Object.freeze([
+5985:     'Core A immutable RenderSceneSnapshot','Group 3 RenderGeometryCompiler'
+5986:   ]),
+5987:   doesNotOwn:Object.freeze([
+5988:     'editor scene','MNMesh','selection','transforms','editor materials',
+5989:     'physical BSDF','lights','GI','denoising'
+5990:   ])
+5991: });
+5992: 
+5993: 
+5994: function runRenderGroup4SelfTests(){
+5995:   const errors=[],approx=(a,b,e=1e-5)=>Math.abs(a-b)<=e;
+5996:   try{
+5997:     let ray=new RenderRay([0,0,1],[0,0,-1]);
+5998:     let hit=TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]);
+5999:     if(!hit.hit||!approx(hit.t,1)||!hit.frontFace||!hit.orientedGeometricNormal)errors.push('Triangle front-face hit failed');
+6000: 
+6001:     ray=new RenderRay([0,0,-1],[0,0,1]);
+6002:     hit=TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]);
+6003:     if(!hit.hit||hit.frontFace)errors.push('Triangle back-face classification failed');
+6004: 
+6005:     ray=new RenderRay([3,3,1],[0,0,-1]);
+6006:     if(TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]).hit)errors.push('Triangle miss failed');
+6007: 
+6008:     if(!AABBIntersector.intersect(new RenderRay([0,0,2],[0,0,-1]),[-1,-1,-1],[1,1,1]))errors.push('AABB hit failed');
+6009: 
+6010:     const store=new RenderTriangleStore();
+6011:     store.addPacket({objectId:'a',positions:new Float32Array([-1,-1,0,1,-1,0,0,1,0,  -1,-1,-3,1,-1,-3,0,1,-3]),normals:new Float32Array(18),uvs:new Float32Array(12),indices:new Uint32Array([0,1,2,3,4,5]),materialIndices:new Uint16Array([0,0])},0);
+6012:     store.finalize();
+6013:     const bvh=new RenderBVH(store,1),closest=bvh.intersect(new RenderRay([0,0,2],[0,0,-1]));
+6014:     if(!closest.hit||!approx(closest.t,2))errors.push('BVH closest-hit failed');
+6015:     if(!bvh.anyHit(new RenderRay([0,0,2],[0,0,-1],1e-5,2.1,RenderRayType.SHADOW)))errors.push('BVH any-hit failed');
+6016:     if(bvh.anyHit(new RenderRay([0,0,2],[0,0,-1],1e-5,1.9,RenderRayType.SHADOW)))errors.push('Finite shadow tMax failed');
+6017:     const bs=bvh.stats();if(bs.nodeCount<1||bs.leafCount<1||bs.triangleCount!==2)errors.push('BVH statistics failed');
+6018: 
+6019:     const legacy=new RenderTriangleStore();
+6020:     legacy.addPacket({objectId:'legacy',positions:new Float32Array([0,0,0,1,0,0,0,1,0]),indices:new Uint32Array([0,1,2]),materialIndices:new Uint16Array([0])},0);legacy.finalize();
+6021:     if(legacy.normals.length!==9||legacy.uvs.length!==6)errors.push('Legacy minimal packet compatibility failed');
+6022: 
+6023:     const deg=new RenderTriangleStore();
+6024:     deg.addPacket({objectId:'deg',positions:new Float32Array([0,0,0,0,0,0,0,0,0]),indices:new Uint32Array([0,1,2]),materialIndices:new Uint16Array([0])},0);deg.finalize();
+6025:     if(deg.triangleCount()!==0||deg.stats.rejectedDegenerate!==1)errors.push('Degenerate rejection failed');
+6026: 
+6027:     const empty=new RenderTriangleStore();empty.finalize();const ebvh=new RenderBVH(empty,4);
+6028:     if(ebvh.root!==-1||ebvh.intersect(new RenderRay([0,0,0],[0,0,1])).hit||ebvh.anyHit(new RenderRay([0,0,0],[0,0,1])))errors.push('Empty BVH failed');
+6029: 
+6030:     const c={position:[0,0,0],quaternion:[0,0,0,1],fov:60,near:0,far:100};
+6031:     const cr=RenderCameraRayGenerator.ray(c,49.5,49.5,100,100);
+6032:     if(cr.direction[2]>-.99||cr.type!==RenderRayType.CAMERA)errors.push('Camera center ray failed');
+6033:     const extreme=RenderCameraRayGenerator.ray({position:[0,0,0],quaternion:[NaN,0,0,1],fov:1000,near:-1,far:0},0,0,1,1);
+6034:     if(!extreme.direction.every(Number.isFinite)||extreme.tMin<=0)errors.push('Camera sanitization failed');
+6035: 
+6036:     const small=RenderRayPolicy.epsilonForPoint([0,0,0]),large=RenderRayPolicy.epsilonForPoint([1e6,0,0]);
+6037:     if(!(small>0&&large>=small&&large<=1e-2))errors.push('Scale-aware epsilon failed');
+6038:   }catch(err){errors.push('Group4 self-test exception: '+String(err?.message||err));}
+6039:   return {ok:errors.length===0,errors};
+6040: }
+6041: window.runRenderGroup4SelfTests=runRenderGroup4SelfTests;
+6042: 
+6043: function validateRenderGroup4(){
+6044:   const errors=[];
+6045:   if(typeof RenderRay!=='function')errors.push('RenderRay missing');
+6046:   if(typeof TriangleIntersector.intersect!=='function')errors.push('Triangle intersector missing');
+6047:   if(typeof RenderBVH!=='function')errors.push('RenderBVH missing');
+6048:   if(typeof RenderCameraRayGenerator.ray!=='function')errors.push('Camera ray generator missing');
+6049:   if(typeof RenderAccelerationBuilder.build!=='function')errors.push('Acceleration builder missing');
+6050:   const tests=runRenderGroup4SelfTests();if(!tests.ok)errors.push(...tests.errors);
+6051:   return {ok:errors.length===0,errors};
+6052: }
+6053: 
+6054: Object.assign(window,{
+6055:   RenderRay,RenderHit,TriangleIntersector,AABBIntersector,
+6056:   RenderTriangleStore,RenderBVH,RenderCameraRayGenerator,
+6057:   RenderAccelerationSet,RenderAccelerationBuilder,DiagnosticRenderer,
+6058:   RenderGroup4Contract
+6059: });
+6060: 
+6061: /* ============================================================
+6062:    3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 5
+6063:    Physical Materials + Basic Direct Lighting
+6064:    ============================================================ */
+6065: 
+6066: const RenderColor=Object.freeze({
+6067:   clamp01(x){return Math.max(0,Math.min(1,x))},
+6068:   add(a,b){return [a[0]+b[0],a[1]+b[1],a[2]+b[2]]},
+6069:   mul(a,b){
+6070:     if(Array.isArray(b))return [a[0]*b[0],a[1]*b[1],a[2]*b[2]];
+6071:     return [a[0]*b,a[1]*b,a[2]*b];
+6072:   },
+6073:   mix(a,b,t){return [a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t]},
+6074:   srgbToLinear1(x){
+6075:     x=this.clamp01(x);return x<=.04045?x/12.92:Math.pow((x+.055)/1.055,2.4);
+6076:   },
+6077:   linearToSrgb1(x){
+6078:     x=Math.max(0,x);return x<=.0031308?12.92*x:1.055*Math.pow(x,1/2.4)-.055;
+6079:   },
+6080:   srgbToLinear(c){return [this.srgbToLinear1(c[0]),this.srgbToLinear1(c[1]),this.srgbToLinear1(c[2])]},
+6081:   linearToSrgb(c){return [this.linearToSrgb1(c[0]),this.linearToSrgb1(c[1]),this.linearToSrgb1(c[2])]},
+6082:   hexToLinear(hex){
+6083:     const h=String(hex||'#202020').replace('#','');
+6084:     const n=parseInt(h.length===3?h.split('').map(x=>x+x).join(''):h,16);
+6085:     if(!Number.isFinite(n))return [0.0144,0.0144,0.0144];
+6086:     return this.srgbToLinear([((n>>16)&255)/255,((n>>8)&255)/255,(n&255)/255]);
+6087:   },
+6088:   aces(c){
+6089:     const f=x=>{
+
+===== acceleration.trace(primaryRay) @ 8403 =====
+8358:           }
+8359:         }
+8360:       }
+8361: 
+8362:       if(material.shading==='unlit')break;
+8363: 
+8364:       const sample=GuidedBSDFSampler.sample(job,material,n,v,hit.position,pixelSeed,bounce);
+8365:       if(!sample)break;
+8366: 
+8367:       throughput=RenderColor.mul(throughput,sample.weight);
+8368: 
+8369:       if(!this.finiteColor(throughput))break;
+8370:       if(Math.max(throughput[0],throughput[1],throughput[2])<1e-6)break;
+8371: 
+8372:       // Russian roulette after the first few bounces. Survival probability tracks path throughput.
+8373:       if(bounce>=2){
+8374:         const survive=Math.max(.08,Math.min(.95,Math.max(throughput[0],throughput[1],throughput[2])));
+8375:         if(PathSampler.scalar(pixelSeed,bounce,15)>survive)break;
+8376:         throughput=RenderColor.mul(throughput,1/survive);
+8377:       }
+8378: 
+8379:       if(sample.transmission&&material.thickness>0){
+8380:         throughput=RenderColor.mul(
+8381:           throughput,
+8382:           DielectricTransport.beerLambert(material.attenuationColor,material.thickness,material.attenuationDistance)
+8383:         );
+8384:       }
+8385: 
+8386:       previousGuide=(!sample.transmission&&job.pathGuide&&RayMath.dot(n,sample.direction)>0)
+8387:         ? {position:hit.position.slice(),normal:n.slice(),direction:sample.direction.slice()}
+8388:         : null;
+8389: 
+8390:       if(pathRays>=maxPathRays)break;
+8391:       pathRays++;
+8392:       const origin=this.offsetOrigin(hit,n,sample.direction);
+8393:       const eps=RenderRayPolicy.epsilonForPoint(origin);
+8394:       const rayType=sample.transmission?RenderRayType.TRANSMISSION:(sample.lobe==='ggx'?RenderRayType.GLOSSY:RenderRayType.DIFFUSE);
+8395:       RenderCoreH.attachPerformance(job).addRay(rayType);
+8396:       ray=new RenderRay(origin,sample.direction,eps,Infinity,rayType,bounce+1);
+8397:     }
+8398: 
+8399:     return radiance;
+8400:   },
+8401: 
+8402:   tracePixel(job,acceleration,compiled,primaryRay,pixelSeed){
+8403:     const primaryHitRecord=acceleration.trace(primaryRay);
+8404:     if(!primaryHitRecord.hit){
+8405:       const env=this.safeColor(RenderCoreD.evaluateEnvironment(job,compiled,primaryRay.direction));
+8406:       return {radiance:env,primaryHit:false,primaryHitRecord:null};
+8407:     }
+8408:     return {
+8409:       radiance:this.trace(job,acceleration,compiled,primaryRay,pixelSeed,primaryHitRecord),
+8410:       primaryHit:true,
+8411:       primaryHitRecord
+8412:     };
+8413:   }
+8414: });
+8415: 
+8416: class ProgressiveAccumulator{
+8417:   constructor(width,height){
+8418:     this.width=width;this.height=height;
+8419:     const n=width*height;
+8420:     this.sum=new Float64Array(n*3);
+8421:     this.mean=new Float64Array(n);
+8422:     this.m2=new Float64Array(n);
+8423:     this.samples=new Uint32Array(n);
+8424:     this.converged=new Uint8Array(n);
+8425:     this.active=n;
+8426:   }
+8427:   add(index,color){
+8428:     const s=++this.samples[index];
+8429:     const o=index*3;
+8430:     this.sum[o]+=color[0];this.sum[o+1]+=color[1];this.sum[o+2]+=color[2];
+8431:     const lum=.2126*color[0]+.7152*color[1]+.0722*color[2];
+8432:     const delta=lum-this.mean[index];
+8433:     this.mean[index]+=delta/s;
+8434:     this.m2[index]+=delta*(lum-this.mean[index]);
+8435:   }
+8436:   variance(index){
+8437:     const s=this.samples[index];
+8438:     return s>1?Math.max(0,this.m2[index]/(s-1)):Infinity;
+8439:   }
+8440:   noise(index){
+8441:     const mean=Math.max(1e-6,Math.abs(this.mean[index]));
+8442:     const s=Math.max(1,this.samples[index]);
+8443:     return Math.sqrt(this.variance(index)/s)/mean;
+8444:   }
+8445:   shouldSample(index,settings){
+8446:     if(!settings.adaptive)return this.samples[index]<settings.maxSamples;
+8447:     if(this.samples[index]<settings.minSamples)return true;
+8448:     if(this.samples[index]>=settings.maxSamples)return false;
+8449:     return this.noise(index)>settings.noiseThreshold;
+8450:   }
+8451:   markConverged(index){
+8452:     if(this.converged[index])return;
+8453:     this.converged[index]=1;this.active=Math.max(0,this.active-1);
+8454:   }
+8455:   resolveRGBA(settings,primaryMask){
+8456:     const rgba=new Uint8ClampedArray(this.width*this.height*4);
+8457:     for(let i=0;i<this.width*this.height;i++){
+8458:       const s=Math.max(1,this.samples[i]),o=i*3,p=i*4;
+8459:       const linear=[this.sum[o]/s,this.sum[o+1]/s,this.sum[o+2]/s];
+8460:       const mapped=RenderColor.linearToSrgb(RenderColor.aces(linear));
+8461:       rgba[p]=Math.round(RenderColor.clamp01(mapped[0])*255);
+8462:       rgba[p+1]=Math.round(RenderColor.clamp01(mapped[1])*255);
+8463:       rgba[p+2]=Math.round(RenderColor.clamp01(mapped[2])*255);
+8464:       rgba[p+3]=(settings.transparent&&!primaryMask[i])?0:255;
+8465:     }
+8466:     return rgba;
+8467:   }
+8468:   averageSamples(){
+8469:     let total=0;for(let i=0;i<this.samples.length;i++)total+=this.samples[i];
+8470:     return total/Math.max(1,this.samples.length);
+8471:   }
+8472:   activeIndices(settings){
+8473:     const out=new Uint32Array(this.active||this.samples.length);
+8474:     let n=0;
+8475:     for(let i=0;i<this.samples.length;i++){
+8476:       if(this.shouldSample(i,settings))out[n++]=i;
+8477:       else this.markConverged(i);
+8478:     }
+8479:     return out.subarray(0,n);
+8480:   }
+8481:   compactActive(settings){
+8482:     return this.activeIndices(settings);
+8483:   }
+8484: 
+8485:   averageNoise(){
+8486:     let sum=0,count=0;
+8487:     for(let i=0;i<this.samples.length;i++){
+8488:       if(this.samples[i]>1&&Number.isFinite(this.noise(i))){sum+=this.noise(i);count++;}
+8489:     }
+8490:     return count?sum/count:null;
+8491:   }
+8492: }
+8493: 
+8494: var PathGIRenderer=Object.freeze({
+8495:   async render(job,acceleration,onProgress=()=>{}){
+8496:     const rr=RenderRegion14.resolve(job,640,360);
+8497:     const width=rr.width,height=rr.height;
+8498:     const compiled=RenderPart5Core.compile(job);
+8499:     const settings=job.settings;
+8500:     job.lightCache=LightCacheEstimator.enabled(job)?new RenderLightCache(job,acceleration):null;
+8501:     job.lightTree=RenderCoreH.createLightTree(job,compiled);
+8502:     job.pathGuide=RenderCoreH.createPathGuide(job,acceleration);
+8503:     job.progress.gi=settings.secondaryGI==='Light Cache'?'Brute Force + Light Cache':settings.secondaryGI;
+8504:     const accumulator=new ProgressiveAccumulator(width,height);
+8505:     const aovs=new RenderAOVSet(width,height);
+8506:     const primaryMask=new Uint8Array(width*height);
+8507:     const litePixPath410=(typeof LitePixPathExecution410==='function')?new LitePixPathExecution410(width,height,{startBlock:32,minBlock:1,maxLevel:6}):null;
+8508:     job.litePixPath410=litePixPath410;
+8509:     const perf16=RenderCoreH.attachPerformance(job);
+8510:     const rowChunk16=RenderCoreH.yieldRows(job);
+8511:     const renderStart16=RenderProfiler16.begin();
+8512:     LiteTraceExecutionContext.activeJob=job;LiteTraceExecutionContext.performance=perf16;
+8513:     const maxSamples=Math.max(1,settings.maxSamples||1);
+8514:     const progressive=settings.progressive!==false;
+8515:     const passLimit=progressive?maxSamples:1;
+8516:     let completedPasses=0;
+8517: 
+8518:     for(let pass=0;pass<passLimit;pass++){
+8519:       if(job.cancelled)throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
+8520:       while(job.paused&&!job.cancelled)await new Promise(r=>setTimeout(r,20));
+8521: 
+8522:       let sampledThisPass=0;
+8523:       const activePixels16=progressive?accumulator.compactActive(settings):(()=>{
+8524:         const a=new Uint32Array(width*height);for(let i=0;i<a.length;i++)a[i]=i;return a;
+8525:       })();
+8526:       if(activePixels16.length===0)break;
+8527: 
+8528:       const workQueue16=RenderWorkQueue16.fromIndices(activePixels16,Math.max(32,RenderCoreH.tileSize(job)*4));
+8529:       await workQueue16.run(async batch=>{
+8530:         for(const i of batch){
+8531:           if(job.cancelled||job.controlToken16?.cancelled?.())throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
+8532:           const x=i%width,y=(i/width)|0;
+
+===== Group 9 Progressive Path GI @ 8564 =====
+8519:       if(job.cancelled)throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
+8520:       while(job.paused&&!job.cancelled)await new Promise(r=>setTimeout(r,20));
+8521: 
+8522:       let sampledThisPass=0;
+8523:       const activePixels16=progressive?accumulator.compactActive(settings):(()=>{
+8524:         const a=new Uint32Array(width*height);for(let i=0;i<a.length;i++)a[i]=i;return a;
+8525:       })();
+8526:       if(activePixels16.length===0)break;
+8527: 
+8528:       const workQueue16=RenderWorkQueue16.fromIndices(activePixels16,Math.max(32,RenderCoreH.tileSize(job)*4));
+8529:       await workQueue16.run(async batch=>{
+8530:         for(const i of batch){
+8531:           if(job.cancelled||job.controlToken16?.cancelled?.())throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
+8532:           const x=i%width,y=(i/width)|0;
+8533:           const seed=((i+1)^Math.imul(pass+1,0x9E3779B1))>>>0;
+8534:           const jitterX=PathSampler.scalar(seed,pass,20)-.5;
+8535:           const jitterY=PathSampler.scalar(seed,pass,21)-.5;
+8536:           const ray=RenderPart5Core.ray(
+8537:             job.renderScene.camera,
+8538:             rr.x0+x+jitterX,rr.y0+y+jitterY,
+8539:             rr.fullW,rr.fullH
+8540:           );
+8541:           perf16.addRay(RenderRayType.CAMERA);
+8542:           const sample=RenderPart5Core.trace(job,acceleration,compiled,ray,seed);
+8543:           perf16.samples++;
+8544:           primaryMask[i]|=sample.primaryHit?1:0;
+8545:           accumulator.add(i,sample.radiance);
+8546:           const ph=sample.primaryHitRecord;
+8547:           if(litePixPath410)litePixPath410.record(i,x,y,sample,ph,accumulator);
+8548:           if(pass===0){
+8549:             if(ph?.hit)RenderAOVUtil.writePrimary(aovs,i,RenderAOVUtil.primary(job,acceleration,compiled,ray,ph,seed));
+8550:             else RenderAOVUtil.writePrimary(aovs,i,null);
+8551:           }
+8552:           sampledThisPass++;
+8553:         }
+8554:         perf16.yields++;
+8555:         await new Promise(r=>setTimeout(r,0));
+8556:       });
+8557:       completedPasses=pass+1;
+8558:       const litePixPass410=litePixPath410?litePixPath410.completePass(accumulator):null;
+8559:       job.litePixPathStats410=litePixPass410;
+8560:       const rgba=accumulator.resolveRGBA(settings,primaryMask);
+8561:       job.previewFrame={
+8562:         width,height,rgba,
+8563:         metadata:Object.freeze({
+8564:           renderer:'Group 9 Progressive Path GI',
+8565:           samplesPerPixel:accumulator.averageSamples(),
+8566:           currentPass:completedPasses,
+8567:           maxSamples,
+8568:           adaptive:!!settings.adaptive,
+8569:           noise:accumulator.averageNoise(),
+8570:           activePixels:accumulator.active
+8571:         })
+8572:       };
+8573:       job.progress.currentSamples=Math.round(accumulator.averageSamples());
+8574:       job.progress.maximumSamples=maxSamples;
+8575:       job.progress.noise=accumulator.averageNoise();
+8576:       onProgress(Math.min(1,completedPasses/passLimit));
+8577: 
+8578:       if(!progressive)break;
+8579:       if(settings.adaptive&&completedPasses>=settings.minSamples&&accumulator.active===0)break;
+8580:       if(sampledThisPass===0)break;
+8581:     }
+8582: 
+8583:     const rgba=accumulator.resolveRGBA(settings,primaryMask);
+8584:     for(let i=0;i<width*height;i++){
+8585:       const s=Math.max(1,accumulator.samples[i]),o=i*3;
+8586:       const beauty=[accumulator.sum[o]/s,accumulator.sum[o+1]/s,accumulator.sum[o+2]/s];
+8587:       aovs.set3('Beauty',i,beauty);
+8588:       aovs.set1('Noise',i,Number.isFinite(accumulator.noise(i))?accumulator.noise(i):0);
+8589:       const d=aovs.get('Direct Lighting'),e=aovs.get('Emission');
+8590:       const direct=d?[d[o],d[o+1],d[o+2]]:[0,0,0];
+8591:       const emission=e?[e[o],e[o+1],e[o+2]]:[0,0,0];
+8592:       aovs.set3('Global Illumination',i,[
+8593:         Math.max(0,beauty[0]-direct[0]-emission[0]),
+8594:         Math.max(0,beauty[1]-direct[1]-emission[1]),
+8595:         Math.max(0,beauty[2]-direct[2]-emission[2])
+8596:       ]);
+8597:     }
+8598:     RenderCoreH.markStage(job,'render',renderStart16);
+8599:     job.litePixPathStats410=litePixPath410?.snapshot?.()||job.litePixPathStats410||null;
+8600:     if(litePixPath410)litePixPath410.dispose();
+8601:     if(LiteTraceExecutionContext.performance===perf16){LiteTraceExecutionContext.activeJob=null;LiteTraceExecutionContext.performance=null;}
+8602:     job.renderChannels=aovs;
+8603:     return {
+8604:       width,height,rgba,
+8605:       channels:aovs,
+8606:       metadata:Object.freeze({
+8607:         renderer:'Group 9 Progressive Path GI',
+8608:         samplesPerPixel:accumulator.averageSamples(),
+8609:         passes:completedPasses,
+8610:         maxBounces:PathIntegrator.maxDepth(job),
+8611:         estimator:'Path GI + direct NEE + power-heuristic MIS',
+8612:         mis:true,
+8613:         adaptive:!!settings.adaptive,
+8614:         progressive:!!settings.progressive,
+8615:         russianRoulette:true,
+8616:         importanceSampling:'GGX + cosine mixture',
+8617:         noise:accumulator.averageNoise(),
+8618:         transmission:true,
+8619:         secondaryGI:settings.secondaryGI,
+8620:         lightCache:job.lightCache?.stats?.()||null,
+8621:         emissiveTriangleLights:compiled.emissiveTriangles?.triangles?.length||0,
+8622:         diagnostics:RenderPart5Core.diagnostics(job,compiled,acceleration),
+8623:         performance:RenderCoreH.performance(job),
+8624:         litePixNativePath:litePixPath410?.snapshot?.()||null,
+8625:         litePixCore2BVH:job.litePixCore2Acceleration411?.snapshot?.()||null
+8626:       })
+8627:     };
+8628:   }
+8629: });
+8630: 
+8631: const RenderGroup8Contract=Object.freeze({
+8632:   owns:Object.freeze([
+8633:     'multi-bounce path integration',
+8634:     'path throughput',
+8635:     'secondary-ray spawning',
+8636:     'cosine hemisphere BSDF sampling baseline',
+8637:     'environment contribution on path miss',
+8638:     'path-GI render mode'
+8639:   ]),
+8640:   consumes:Object.freeze([
+8641:     'Core B ray/BVH tracing',
+8642:     'Core C physical materials and lights',
+8643:     'Group 7 shadow visibility and direct-light sampling'
+8644:   ]),
+8645:   doesNotOwn:Object.freeze([
+8646:     'progressive accumulation',
+8647:     'adaptive sampling',
+8648:     'MIS',
+8649:     'Light Cache',
+8650:     'denoising',
+8651:     'path guiding'
+8652:   ])
+8653: });
+8654: 
+8655: function runRenderGroup8SelfTests(){
+8656:   const errors=[];
+8657: 
+8658:   {
+8659:     const n=[0,0,1];
+8660:     const d=PathSampler.cosineHemisphere(n,123,0);
+8661:     if(!Number.isFinite(d[0]+d[1]+d[2])||RayMath.dot(n,d)<-1e-6){
+8662:       errors.push('Cosine hemisphere sample failed');
+8663:     }
+8664:   }
+8665: 
+8666:   {
+8667:     const mat=new RenderSurfaceMaterial({
+8668:       id:'p8',name:'p8',shading:'physical',baseColor:[.8,.8,.8],
+8669:       roughness:.6,metalness:0,opacity:1,emissive:[0,0,0],emissiveIntensity:0
+8670:     });
+8671:     const smp=PathBSDFSampler.sample(mat,[0,0,1],[0,0,1],456,1);
+8672:     if(!smp||!Number.isFinite(smp.pdf)||smp.pdf<=0||smp.weight.some(x=>!Number.isFinite(x)||x<0)){
+8673:       errors.push('Path BSDF sample failed');
+8674:     }
+8675:   }
+8676: 
+8677:   {
+8678:     const fakeJob={settings:{maxBounces:99}};
+8679:     if(PathIntegrator.maxDepth(fakeJob)!==16)errors.push('Path depth clamp failed');
+8680:   }
+8681: 
+8682:   return {ok:errors.length===0,errors};
+8683: }
+8684: window.runRenderGroup8SelfTests=runRenderGroup8SelfTests;
+8685: 
+8686: function validateRenderGroup8(){
+8687:   const errors=[];
+8688:   if(typeof PathSampler.cosineHemisphere!=='function')errors.push('PathSampler missing');
+8689:   if(typeof PathBSDFSampler.sample!=='function')errors.push('PathBSDFSampler missing');
+8690:   if(typeof PathIntegrator.trace!=='function')errors.push('PathIntegrator missing');
+8691:   if(typeof PathGIRenderer.render!=='function')errors.push('PathGIRenderer missing');
+8692:   const tests=runRenderGroup8SelfTests();if(!tests.ok)errors.push(...tests.errors);
+8693:   return {ok:errors.length===0,errors};
+
+===== async render(job,acceleration @ 5947 =====
+5902:   get(scene){
+5903:     const rev=this.revision(scene);
+5904:     if(this.acceleration&&this.geometryRevision===rev){this.hits++;return this.acceleration;}
+5905:     this.misses++;return null;
+5906:   },
+5907:   put(scene,acceleration){
+5908:     this.geometryRevision=this.revision(scene);
+5909:     this.acceleration=acceleration;
+5910:     return acceleration;
+5911:   },
+5912:   stats(){return Object.freeze({geometryRevision:this.geometryRevision,hits:this.hits,misses:this.misses,reused:!!this.acceleration});}
+5913: };
+5914: 
+5915: /*
+5916:   BLAS/TLAS boundary:
+5917:   - object mesh geometry revisions feed BLAS-equivalent cached acceleration data;
+5918:   - scene/object transform revisions are intentionally kept outside this cache key
+5919:     so a future TLAS can update instances without rebuilding object geometry.
+5920:   Current browser renderer still uses the proven binary RenderAccelerationSet.
+5921: */
+5922: const RenderAccelerationHierarchy16=Object.freeze({
+5923:   mode:'geometry-revision acceleration cache; TLAS/BLAS boundary reserved',
+5924:   cache:RenderAccelerationCache16,
+5925:   build(scene,builder){
+5926:     const cached=RenderAccelerationCache16.get(scene);
+5927:     if(cached)return cached;
+5928:     return RenderAccelerationCache16.put(scene,builder());
+5929:   }
+5930: });
+5931: window.RenderAccelerationCache16=RenderAccelerationCache16;
+5932: window.RenderAccelerationHierarchy16=RenderAccelerationHierarchy16;
+5933: 
+5934: const RenderAccelerationBuilder=Object.freeze({
+5935:   build(renderScene){
+5936:     return RenderAccelerationHierarchy16.build(renderScene,()=>{
+5937:       const packets=RenderGeometryCompiler.compileScene(renderScene);
+5938:       const store=new RenderTriangleStore();
+5939:       packets.forEach((p,i)=>store.addPacket(p,i));
+5940:       store.finalize();
+5941:       return new RenderAccelerationSet(store,new RenderBVH(store,4));
+5942:     });
+5943:   }
+5944: });
+5945: 
+5946: const DiagnosticRenderer=Object.freeze({
+5947:   async render(job,acceleration,onProgress=()=>{}){
+5948:     const width=Math.min(640,Math.max(1,job.progress.resolution[0]));
+5949:     const height=Math.min(360,Math.max(1,job.progress.resolution[1]));
+5950:     const rgba=new Uint8ClampedArray(width*height*4);
+5951:     const cameraSnapshot=job.renderScene.camera;
+5952:     const rowChunk=8;
+5953:     for(let y=0;y<height;y++){
+5954:       if(job.cancelled||job.controlToken16?.cancelled?.())throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
+5955:       while((job.paused||job.controlToken16?.paused?.())&&!job.cancelled)await new Promise(r=>setTimeout(r,20));
+5956:       for(let x=0;x<width;x++){
+5957:         const ray=RenderCameraRayGenerator.ray(cameraSnapshot,x,y,width,height);
+5958:         perf16.addRay(RenderRayType.CAMERA);
+5959:         perf16.addRay(RenderRayType.CAMERA);
+5960:         const hit=acceleration.trace(ray);
+5961:         const o=(y*width+x)*4;
+5962:         if(hit.hit){
+5963:           const n=hit.geometricNormal;
+5964:           rgba[o]=Math.round((n[0]*.5+.5)*255);
+5965:           rgba[o+1]=Math.round((n[1]*.5+.5)*255);
+5966:           rgba[o+2]=Math.round((n[2]*.5+.5)*255);
+5967:           rgba[o+3]=255;
+5968:         }else{
+5969:           rgba[o]=24;rgba[o+1]=24;rgba[o+2]=24;rgba[o+3]=255;
+5970:         }
+5971:       }
+5972:       if(y%rowChunk===0)onProgress((y+1)/height);
+5973:       if(y%rowChunk===0)await new Promise(r=>setTimeout(r,0));
+5974:     }
+5975:     return {width,height,rgba};
+5976:   }
+5977: });
+5978: 
+5979: const RenderGroup4Contract=Object.freeze({
+5980:   owns:Object.freeze([
+5981:     'ray representation','ray/triangle intersection','ray/AABB intersection',
+5982:     'triangle store','binary BVH','camera ray generation','diagnostic normal render'
+5983:   ]),
+5984:   consumes:Object.freeze([
+5985:     'Core A immutable RenderSceneSnapshot','Group 3 RenderGeometryCompiler'
+5986:   ]),
+5987:   doesNotOwn:Object.freeze([
+5988:     'editor scene','MNMesh','selection','transforms','editor materials',
+5989:     'physical BSDF','lights','GI','denoising'
+5990:   ])
+5991: });
+5992: 
+5993: 
+5994: function runRenderGroup4SelfTests(){
+5995:   const errors=[],approx=(a,b,e=1e-5)=>Math.abs(a-b)<=e;
+5996:   try{
+5997:     let ray=new RenderRay([0,0,1],[0,0,-1]);
+5998:     let hit=TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]);
+5999:     if(!hit.hit||!approx(hit.t,1)||!hit.frontFace||!hit.orientedGeometricNormal)errors.push('Triangle front-face hit failed');
+6000: 
+6001:     ray=new RenderRay([0,0,-1],[0,0,1]);
+6002:     hit=TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]);
+6003:     if(!hit.hit||hit.frontFace)errors.push('Triangle back-face classification failed');
+6004: 
+6005:     ray=new RenderRay([3,3,1],[0,0,-1]);
+6006:     if(TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]).hit)errors.push('Triangle miss failed');
+6007: 
+6008:     if(!AABBIntersector.intersect(new RenderRay([0,0,2],[0,0,-1]),[-1,-1,-1],[1,1,1]))errors.push('AABB hit failed');
+6009: 
+6010:     const store=new RenderTriangleStore();
+6011:     store.addPacket({objectId:'a',positions:new Float32Array([-1,-1,0,1,-1,0,0,1,0,  -1,-1,-3,1,-1,-3,0,1,-3]),normals:new Float32Array(18),uvs:new Float32Array(12),indices:new Uint32Array([0,1,2,3,4,5]),materialIndices:new Uint16Array([0,0])},0);
+6012:     store.finalize();
+6013:     const bvh=new RenderBVH(store,1),closest=bvh.intersect(new RenderRay([0,0,2],[0,0,-1]));
+6014:     if(!closest.hit||!approx(closest.t,2))errors.push('BVH closest-hit failed');
+6015:     if(!bvh.anyHit(new RenderRay([0,0,2],[0,0,-1],1e-5,2.1,RenderRayType.SHADOW)))errors.push('BVH any-hit failed');
+6016:     if(bvh.anyHit(new RenderRay([0,0,2],[0,0,-1],1e-5,1.9,RenderRayType.SHADOW)))errors.push('Finite shadow tMax failed');
+6017:     const bs=bvh.stats();if(bs.nodeCount<1||bs.leafCount<1||bs.triangleCount!==2)errors.push('BVH statistics failed');
+6018: 
+6019:     const legacy=new RenderTriangleStore();
+6020:     legacy.addPacket({objectId:'legacy',positions:new Float32Array([0,0,0,1,0,0,0,1,0]),indices:new Uint32Array([0,1,2]),materialIndices:new Uint16Array([0])},0);legacy.finalize();
+6021:     if(legacy.normals.length!==9||legacy.uvs.length!==6)errors.push('Legacy minimal packet compatibility failed');
+6022: 
+6023:     const deg=new RenderTriangleStore();
+6024:     deg.addPacket({objectId:'deg',positions:new Float32Array([0,0,0,0,0,0,0,0,0]),indices:new Uint32Array([0,1,2]),materialIndices:new Uint16Array([0])},0);deg.finalize();
+6025:     if(deg.triangleCount()!==0||deg.stats.rejectedDegenerate!==1)errors.push('Degenerate rejection failed');
+6026: 
+6027:     const empty=new RenderTriangleStore();empty.finalize();const ebvh=new RenderBVH(empty,4);
+6028:     if(ebvh.root!==-1||ebvh.intersect(new RenderRay([0,0,0],[0,0,1])).hit||ebvh.anyHit(new RenderRay([0,0,0],[0,0,1])))errors.push('Empty BVH failed');
+6029: 
+6030:     const c={position:[0,0,0],quaternion:[0,0,0,1],fov:60,near:0,far:100};
+6031:     const cr=RenderCameraRayGenerator.ray(c,49.5,49.5,100,100);
+6032:     if(cr.direction[2]>-.99||cr.type!==RenderRayType.CAMERA)errors.push('Camera center ray failed');
+6033:     const extreme=RenderCameraRayGenerator.ray({position:[0,0,0],quaternion:[NaN,0,0,1],fov:1000,near:-1,far:0},0,0,1,1);
+6034:     if(!extreme.direction.every(Number.isFinite)||extreme.tMin<=0)errors.push('Camera sanitization failed');
+6035: 
+6036:     const small=RenderRayPolicy.epsilonForPoint([0,0,0]),large=RenderRayPolicy.epsilonForPoint([1e6,0,0]);
+6037:     if(!(small>0&&large>=small&&large<=1e-2))errors.push('Scale-aware epsilon failed');
+6038:   }catch(err){errors.push('Group4 self-test exception: '+String(err?.message||err));}
+6039:   return {ok:errors.length===0,errors};
+6040: }
+6041: window.runRenderGroup4SelfTests=runRenderGroup4SelfTests;
+6042: 
+6043: function validateRenderGroup4(){
+6044:   const errors=[];
+6045:   if(typeof RenderRay!=='function')errors.push('RenderRay missing');
+6046:   if(typeof TriangleIntersector.intersect!=='function')errors.push('Triangle intersector missing');
+6047:   if(typeof RenderBVH!=='function')errors.push('RenderBVH missing');
+6048:   if(typeof RenderCameraRayGenerator.ray!=='function')errors.push('Camera ray generator missing');
+6049:   if(typeof RenderAccelerationBuilder.build!=='function')errors.push('Acceleration builder missing');
+6050:   const tests=runRenderGroup4SelfTests();if(!tests.ok)errors.push(...tests.errors);
+6051:   return {ok:errors.length===0,errors};
+6052: }
+6053: 
+6054: Object.assign(window,{
+6055:   RenderRay,RenderHit,TriangleIntersector,AABBIntersector,
+6056:   RenderTriangleStore,RenderBVH,RenderCameraRayGenerator,
+6057:   RenderAccelerationSet,RenderAccelerationBuilder,DiagnosticRenderer,
+6058:   RenderGroup4Contract
+6059: });
+6060: 
+6061: /* ============================================================
+6062:    3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 5
+6063:    Physical Materials + Basic Direct Lighting
+6064:    ============================================================ */
+6065: 
+6066: const RenderColor=Object.freeze({
+6067:   clamp01(x){return Math.max(0,Math.min(1,x))},
+6068:   add(a,b){return [a[0]+b[0],a[1]+b[1],a[2]+b[2]]},
+6069:   mul(a,b){
+6070:     if(Array.isArray(b))return [a[0]*b[0],a[1]*b[1],a[2]*b[2]];
+6071:     return [a[0]*b,a[1]*b,a[2]*b];
+6072:   },
+6073:   mix(a,b,t){return [a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t]},
+6074:   srgbToLinear1(x){
+6075:     x=this.clamp01(x);return x<=.04045?x/12.92:Math.pow((x+.055)/1.055,2.4);
+6076:   },
