@@ -5,6 +5,7 @@ on:
     branches: [v3.99.5-fast-direct-lighting-fix]
     paths:
       - '.github/workflows/v3995-fast-lighting-patch.yml'
+      - 'patches/v3.99.5/fast-direct-lighting-fix.py'
 
 permissions:
   contents: write
@@ -32,7 +33,7 @@ jobs:
             "const VERSION='3.99.5';",
             'const faceNormal=hit.orientedGeometricNormal||hit.geometricNormal||[0,0,1];',
             'if(RayMath.dot(n,faceNormal)<0)n=RayMath.mul(n,-1);',
-            'window.__3DLiteFastDirectLighting3995=true;'
+            'root.__3DLiteFastDirectLighting3995=true;'
           ]) if(!h.includes(x)) failures.push('missing '+x);
           const ids=[...h.matchAll(/\bid\s*=\s*["']([^"']+)["']/gi)].map(m=>m[1]);
           const seen=new Set(),dups=[]; for(const id of ids){if(seen.has(id))dups.push(id); else seen.add(id)}
