@@ -11,31 +11,36 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Extract focused renderer source
+      - name: Extract renderer symbols and focused source
         shell: python
         run: |
           from pathlib import Path
           import re
           s=Path('index.html').read_text(encoding='utf-8')
-          terms=['LiteTraceExecutionContext','RenderTileScheduler16','BasicDirectRenderer','RenderCore1','RenderCore2','RenderCoreE','class BVH','function buildBVH','buildBVH','traceRay','traceGI','intersect','renderTile','PathState','GGX','MIS','materialIndex','renderPass','sampleLight','shadowRay','roughness','refraction']
-          chunks=[]
-          seen=[]
-          for term in terms:
-              matches=list(re.finditer(re.escape(term),s,re.I))
-              chunks.append(f'\n===== TERM {term} COUNT {len(matches)} =====\n')
-              for m in matches[:10]:
-                  a=max(0,m.start()-1800); b=min(len(s),m.end()+4200)
-                  if any(abs(m.start()-p)<2500 for p in seen):
-                      continue
-                  seen.append(m.start())
-                  chunks.append(f'\n--- OFFSET {m.start()} ---\n{s[a:b]}\n')
           Path('tmp').mkdir(exist_ok=True)
-          Path('tmp/v3980_renderer_excerpt.txt').write_text(''.join(chunks),encoding='utf-8')
-      - name: Commit focused renderer source
+          pats=['BVH','Acceleration','PhysicalBSDF','DirectLightSampler','DirectLightingIntegrator','LiteTrace','trace(','intersect','roughness','refraction','MIS','renderPass','AOV']
+          lines=s.splitlines()
+          out=[]
+          for i,line in enumerate(lines,1):
+              if any(p.lower() in line.lower() for p in pats):
+                  t=line.strip()
+                  if len(t)>500:t=t[:500]
+                  out.append(f'{i}: {t}')
+          Path('tmp/v3980_symbols.txt').write_text('\n'.join(out[:1400]),encoding='utf-8')
+          def around(term,n=2,before=5000,after=14000):
+              ms=list(re.finditer(re.escape(term),s,re.I))
+              chunks=[]
+              for m in ms[:n]:
+                  chunks.append(f'===== {term} @ {m.start()} =====\n'+s[max(0,m.start()-before):min(len(s),m.start()+after)])
+              return '\n\n'.join(chunks)
+          Path('tmp/v3980_bvh.txt').write_text(around('RenderBVH',4)+around('Acceleration',4),encoding='utf-8')
+          Path('tmp/v3980_bsdf.txt').write_text(around('PhysicalBSDF',4)+around('DirectLightingIntegrator',3),encoding='utf-8')
+          Path('tmp/v3980_litetrace.txt').write_text(around('LiteTraceExecutionContext',3)+around('LiteTraceRenderer',3),encoding='utf-8')
+      - name: Commit inspection files
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add tmp/v3980_renderer_excerpt.txt
+          git add tmp/v3980_symbols.txt tmp/v3980_bvh.txt tmp/v3980_bsdf.txt tmp/v3980_litetrace.txt
           git diff --cached --quiet && exit 0
-          git commit -m 'Temporary v3.98.0 renderer source excerpt'
+          git commit -m 'Temporary v3.98.0 renderer focused inspection'
           git push
