@@ -1,7 +1,6 @@
 (function(root){'use strict';
-const VERSION='4.45.0';
+const VERSION='4.45.0',TITLE='3D Lite — LitePix v4.45.0 Adaptive Ray Budget';
 const AREA_TYPES=new Set(['rectangle','disc','sphere','mesh']);
-const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const finite=v=>Number.isFinite(v)?v:0;
 class LitePixRayBudget445{
   constructor(job,acceleration,compiled,width,height){
@@ -32,7 +31,7 @@ class LitePixRayBudget445{
   _q(v,s){return Math.round(finite(v)/s);}
   _dirKey(d){const bins=this.directionBins;return `${Math.round(finite(d?.[0])*bins)},${Math.round(finite(d?.[1])*bins)},${Math.round(finite(d?.[2])*bins)}`;}
   _key(position,direction,distance,light,li,hit){
-    const cs=this.cellSize;const p=position||[0,0,0];
+    const cs=this.cellSize,p=position||[0,0,0];
     const base=`${this._lightId(light,li)}|${this._objectId(hit)}|${this._q(p[0],cs)},${this._q(p[1],cs)},${this._q(p[2],cs)}`;
     if(AREA_TYPES.has(light?.type))return `${base}|${this._dirKey(direction)}|${this._q(distance,cs*4)}`;
     if(light?.type==='sun')return `${base}|${this._dirKey(direction)}`;
@@ -40,9 +39,7 @@ class LitePixRayBudget445{
   }
   visible(acceleration,position,direction,distance,light,li,hit,traceFn){
     this.requestedShadowTests++;
-    if(!this.enabled||typeof traceFn!=='function'){
-      this.tracedShadowRays++;return traceFn();
-    }
+    if(!this.enabled||typeof traceFn!=='function'){this.tracedShadowRays++;return traceFn();}
     const key=this._key(position,direction,distance,light,li,hit);
     if(this.cache.has(key)){this.reusedShadowTests++;return this.cache.get(key);}
     this.tracedShadowRays++;
@@ -59,6 +56,9 @@ class LitePixRayBudget445{
       cellSize:this.cellSize,directionBins:this.directionBins});
   }
 }
+try{root.__LitePixTitleObserver444?.disconnect?.();}catch(_){}
+const enforceTitle=()=>{try{if(typeof document!=='undefined'&&document.title!==TITLE)document.title=TITLE;}catch(_){}};
+if(typeof document!=='undefined'){enforceTitle();if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',enforceTitle,{once:true});setTimeout(enforceTitle,0);}
 root.LitePixRayBudget445=LitePixRayBudget445;
 root.__LitePixRayBudget445=true;
 })(typeof globalThis!=='undefined'?globalThis:window);
