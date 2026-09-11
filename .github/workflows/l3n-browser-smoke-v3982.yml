@@ -34,16 +34,22 @@ jobs:
                 o.userData.renderLight.size=250; EditorLightSystem.updateIcon(o); const after=o.geometry.boundingSphere?.radius||0;
                 out.items.push({type,isLight:EditorLightSystem.isLightObject(o),before,after,materialColor,theme:o.userData.lightViewportIcon?.theme,px:o.userData.lightViewportIcon?.pixels,line:o.isLineSegments===true});
               }
-              const snap=RenderSceneBoundary.buildSnapshot(); out.lightCount=snap.lights.length; out.debugList=!!window.ThreeDLiteRenderDebugListUI; return out;
+              const snap=RenderSceneBoundary.buildSnapshot(); out.lightCount=snap.lights.length; out.debugList=!!window.ThreeDLiteRenderDebugListUI; out.context=!!window.LiteTraceExecutionContext;
+              out.rnd1104=window.ThreeDLiteRenderErrorCodes?.['RND-1104']?.title||window.ThreeDLiteL3NCompleteRenderDebugger?.codes?.['RND-1104']?.title||null;
+              out.rnd1194=window.ThreeDLiteRenderErrorCodes?.['RND-1194']?.title||window.ThreeDLiteL3NCompleteRenderDebugger?.codes?.['RND-1194']?.title||null;
+              return out;
             });
             console.log(JSON.stringify(r));
-            if(r.version!=='3.98.2') throw new Error('version '+r.version);
+            const version=(typeof r.version==='string'?r.version:r.version?.version);
+            if(version!=='3.98.2') throw new Error('version '+JSON.stringify(r.version));
             if(!r.marker||r.api?.mode!=='minimal-ui-themed-viewport-icons') throw new Error('marker/api missing');
             if(r.items.length!==8||r.items.some(x=>!x.isLight||!x.line||x.theme!=='editor-neutral'||x.px!==22)) throw new Error('icon contract failed '+JSON.stringify(r.items));
             if(r.items.some(x=>Math.abs(x.before-x.after)>1e-6)) throw new Error('physical size changed symbolic icon geometry');
             if(r.items.some(x=>x.materialColor!=='aeb4bc')) throw new Error('icon not UI themed');
             if(r.lightCount<8) throw new Error('lights missing from snapshot');
-            if(!r.debugList) throw new Error('debug list missing');
+            if(!r.debugList||!r.context) throw new Error('legacy render systems missing');
+            if(r.rnd1104 && r.rnd1104!=='Render execution failure') throw new Error('RND-1104 changed '+r.rnd1104);
+            if(r.rnd1194 && r.rnd1194!=='Unknown / unregistered render error') throw new Error('RND-1194 changed '+r.rnd1194);
             if(errors.some(e=>/ReferenceError|TypeError|SyntaxError|3DLite Renderer.*validation/i.test(e))) throw new Error('browser errors '+errors.join('\n'));
             await browser.close();
           })().catch(e=>{console.error(e);process.exit(1)});
