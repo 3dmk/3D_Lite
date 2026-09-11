@@ -5,33 +5,27 @@ on:
     branches: [v3.99.5-fast-direct-lighting-fix]
     paths:
       - '.github/workflows/v3995-fast-lighting-inspect.yml'
+      - 'patches/v3.99.5/inspect-fast-lighting.py'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   inspect:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect Fast Direct lighting code
+        with:
+          ref: v3.99.5-fast-direct-lighting-fix
+          fetch-depth: 0
+      - name: Capture exact Fast Direct lighting code
+        run: python3 patches/v3.99.5/inspect-fast-lighting.py
+      - name: Commit inspection output
         shell: bash
         run: |
-          python3 <<'PY'
-          from pathlib import Path
-          s=Path('index.html').read_text(encoding='utf-8')
-          needles=['BasicDirectRenderer','FastRenderDiagnostics','spot','shadowRay','occluded','attenuation','ndotl','NdotL','normal','light.direction','cone']
-          for n in needles:
-              print('\n###',n)
-              start=0; hits=0
-              while True:
-                  i=s.find(n,start)
-                  if i<0: break
-                  hits+=1
-                  line=s.count('\n',0,i)+1
-                  print(f'-- hit {hits} line {line} --')
-                  print(s[max(0,i-900):min(len(s),i+len(n)+2400)])
-                  start=i+len(n)
-                  if hits>=18: break
-              print('hits',hits)
-          PY
+          git config user.name '3DLite Gate'
+          git config user.email 'actions@users.noreply.github.com'
+          git add patches/v3.99.5/fast-lighting-inspection.txt
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Capture v3.99.5 Fast lighting source inspection'
+          git push origin HEAD:v3.99.5-fast-direct-lighting-fix
