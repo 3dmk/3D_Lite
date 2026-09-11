@@ -1,885 +1,959 @@
 
-===== PathIntegrator.trace( @ 7564 =====
-7519:           ? AreaLightSampler.sample(light,hit.position,uv[0],uv[1])
-7520:           : DirectLightSampler.sample(light,hit.position);
-7521: 
-7522:         if(!sample||!sample.direction)continue;
-7523:         if(!sample.radiance||sample.radiance.every(v=>v<=0||!Number.isFinite(v)))continue;
-7524: 
-7525:         if(light.castShadows!==false){
-7526:           const visible=ShadowVisibility.visible(acceleration,hit.position,sample.direction,sample.distance);
-7527:           if(!visible)continue;
-7528:         }
-7529: 
-7530:         const brdf=PhysicalBSDF.evaluate(material,n,v,sample.direction);
-7531:         accum=RenderColor.add(accum,RenderColor.mul(brdf,sample.radiance));
-7532:       }
-7533: 
-7534:       if(count>1)accum=RenderColor.mul(accum,1/count);
-7535:       color=RenderColor.add(color,accum);
-7536:     }
-7537: 
-7538:     return color;
-7539:   }
-7540: });
-7541: 
-7542: 
-7543: /* ============================================================
-7544:    3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — CORE D
-7545:    CLEAN GROUP 7 + GROUP 8 CONSOLIDATION
-7546:    ============================================================ */
-7547: 
-7548: var RenderCoreD=Object.freeze({
-7549:   version:'3.90.0-core-d',
-7550: 
-7551:   evaluateSurfaceDirect(job,acceleration,compiled,ray,hit,pixelSeed,options={}){
-7552:     return DirectLightingIntegrator.evaluate(
-7553:       job,acceleration,compiled,ray,hit,pixelSeed,options
-7554:     );
-7555:   },
-7556: 
-7557:   evaluateEnvironment(job,compiled,rayDirection){
-7558:     return EnvironmentSampler.background(
-7559:       job.renderScene,job.settings,compiled.lights,rayDirection
-7560:     );
-7561:   },
-7562: 
-7563:   tracePath(job,acceleration,compiled,ray,pixelSeed,initialHit=null){
-7564:     return PathIntegrator.trace(
-7565:       job,acceleration,compiled,ray,pixelSeed,initialHit
-7566:     );
-7567:   },
-7568: 
-7569:   visible(acceleration,origin,direction,maxDistance){
-7570:     return ShadowVisibility.visible(acceleration,origin,direction,maxDistance);
-7571:   },
-7572: 
-7573:   validate(){
-7574:     const errors=[];
-7575:     const g7=validateRenderGroup7();if(!g7.ok)errors.push(...g7.errors);
-7576:     const g8=validateRenderGroup8();if(!g8.ok)errors.push(...g8.errors);
-7577:     if(typeof this.evaluateSurfaceDirect!=='function')errors.push('Core D direct evaluator missing');
-7578:     if(typeof this.tracePath!=='function')errors.push('Core D path tracer missing');
-7579:     if(typeof this.evaluateEnvironment!=='function')errors.push('Core D environment evaluator missing');
-7580:     return {ok:errors.length===0,errors};
-7581:   }
-7582: });
-7583: window.RenderCoreD=RenderCoreD;
-7584: 
-7585: const RenderGroup7Contract=Object.freeze({
-7586:   owns:Object.freeze([
-7587:     'shadow-ray visibility',
-7588:     'shadow bias',
-7589:     'stochastic area-light sampling',
-7590:     'constant-color dome environment radiance',
-7591:     'direct-light sample accumulation'
-7592:   ]),
-7593:   consumes:Object.freeze([
-7594:     'Core B acceleration trace',
-7595:     'Core C materials and scene lights',
-7596:     'Group 5 PhysicalBSDF'
-7597:   ]),
-7598:   doesNotOwn:Object.freeze([
-7599:     'path GI',
-7600:     'MIS',
-7601:     'adaptive sampling',
-7602:     'HDRI importance sampling',
-7603:     'light cache',
-7604:     'path guiding'
-7605:   ])
-7606: });
-7607: 
-7608: function runRenderGroup7SelfTests(){
-7609:   const errors=[];
-7610: 
-7611:   {
-7612:     const store=new RenderTriangleStore();
-7613:     store.addPacket({
-7614:       objectId:'shadow-test',
-7615:       positions:new Float32Array([-1,-1,0,1,-1,0,0,1,0]),
-7616:       normals:new Float32Array([0,0,1,0,0,1,0,0,1]),
-7617:       uvs:new Float32Array([0,0,1,0,.5,1]),
-7618:       indices:new Uint32Array([0,1,2]),
-7619:       materialIndices:new Uint16Array([0])
-7620:     },0);
-7621:     store.finalize();
-7622:     const acceleration=new RenderAccelerationSet(store,new RenderBVH(store,1));
-7623:     if(ShadowVisibility.visible(acceleration,[0,0,-1],[0,0,1],10)!==false){
-7624:       errors.push('Shadow occlusion test failed');
-7625:     }
-7626:     if(ShadowVisibility.visible(acceleration,[3,3,-1],[0,0,1],10)!==true){
-7627:       errors.push('Shadow clear test failed');
-7628:     }
-7629:     const occRay=new RenderRay([0,0,-1],[0,0,1],1e-4,10);
-7630:     if(acceleration.occluded(occRay)!==true)errors.push('BVH any-hit test failed');
-7631:   }
-7632: 
-7633:   {
-7634:     const light=new RenderSceneLight({
-7635:       id:'r',name:'r',type:'rectangle',enabled:true,color:'#ffffff',intensity:10,
-7636:       range:0,size:1,width:2,height:2,coneAngle:90,penumbra:0,castShadows:true,
-7637:       position:[0,0,5],direction:[0,0,-1]
-7638:     });
-7639:     const s=AreaLightSampler.sample(light,[0,0,0],.5,.5);
-7640:     if(!s||Math.abs(s.distance-5)>1e-4||s.radiance.some(x=>!Number.isFinite(x)||x<0)){
-7641:       errors.push('Rectangle area sample failed');
-7642:     }
-7643:   }
-7644: 
-7645:   {
-7646:     const a=RenderSampling.sample2D(123,4),b=RenderSampling.sample2D(123,4);
-7647:     if(a[0]!==b[0]||a[1]!==b[1])errors.push('Deterministic sampling test failed');
-7648:   }
-7649: 
-7650:   return {ok:errors.length===0,errors};
-7651: }
-7652: window.runRenderGroup7SelfTests=runRenderGroup7SelfTests;
-7653: 
-7654: function validateRenderGroup7(){
-7655:   const errors=[];
-7656:   if(typeof ShadowVisibility.visible!=='function')errors.push('ShadowVisibility missing');
-7657:   if(typeof AreaLightSampler.sample!=='function')errors.push('AreaLightSampler missing');
-7658:   if(typeof DirectLightingIntegrator.evaluate!=='function')errors.push('DirectLightingIntegrator missing');
-7659:   if(typeof EnvironmentSampler.background!=='function')errors.push('EnvironmentSampler missing');
-7660:   const tests=runRenderGroup7SelfTests();if(!tests.ok)errors.push(...tests.errors);
-7661:   return {ok:errors.length===0,errors};
-7662: }
-7663: 
-7664: Object.assign(window,{
-7665:   RenderSampling,LightBasis,EnvironmentSampler,ShadowVisibility,
-7666:   AreaLightSampler,DirectLightingIntegrator,RenderGroup7Contract
-7667: });
-7668: 
-7669: /* ============================================================
-7670:    3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 8
-7671:    Path GI Core
-7672:    ============================================================ */
-7673: 
-7674: const PathSampler=Object.freeze({
-7675:   scalar(seed,bounce,dimension){
-7676:     return RenderSampling.hash32(
-7677:       ((seed>>>0) ^ Math.imul((bounce+1),0x9E3779B1) ^ Math.imul((dimension+1),0x85EBCA77))>>>0
-7678:     );
-7679:   },
-7680: 
-7681:   cosineHemisphere(n,seed,bounce){
-7682:     const u1=this.scalar(seed,bounce,0);
-7683:     const u2=this.scalar(seed,bounce,1);
-7684:     const r=Math.sqrt(u1);
-7685:     const phi=2*Math.PI*u2;
-7686:     const x=r*Math.cos(phi),y=r*Math.sin(phi),z=Math.sqrt(Math.max(0,1-u1));
-7687: 
-7688:     const basis=LightBasis.fromDirection(n);
-7689:     return RayMath.normalize(
-7690:       RayMath.add(
-7691:         RayMath.add(RayMath.mul(basis.tangent,x),RayMath.mul(basis.bitangent,y)),
-7692:         RayMath.mul(basis.n,z)
-7693:       )
+===== BoxGeometry @ 2368 =====
+2333:     if(color==null||!ch.material)return;
+2334:     const mats=Array.isArray(ch.material)?ch.material:[ch.material];
+2335:     for(const m of mats){
+2336:       if(!m||!m.color||m.opacity===0)continue;
+2337:       m.color.setHex(color);
+2338:       if(m._color?.setHex)m._color.setHex(color);
+2339:       const isPlane=name.length===2 && name!=='E';
+2340:       const op=isPlane?ClassicMinimalTransformTheme.planeOpacity:ClassicMinimalTransformTheme.handleOpacity;
+2341:       if(m.opacity>0){m.transparent=isPlane||m.transparent;m.opacity=Math.min(m.opacity,op);}
+2342:       if('_opacity' in m && m._opacity>0)m._opacity=Math.min(m._opacity,op);
+2343:       m.depthWrite=false;
+2344:       m.needsUpdate=true;
+2345:     }
+2346:   });
+2347:   uniformScaleHandle?.material?.color?.setHex(ClassicMinimalTransformTheme.neutral);
+2348:   if(uniformScaleHandle?.material){uniformScaleHandle.material.opacity=.94;uniformScaleHandle.material.needsUpdate=true;}
+2349: }
+2350: function classicMinimalTransformCursor(axis=transform.axis,mode=transform.getMode()){
+2351:   if(!axis)return '';
+2352:   if(mode==='rotate')return 'var(--cursor-rotate)';
+2353:   if(mode==='scale'){
+2354:     if(axis==='XYZ'||axis==='XYZE')return 'var(--cursor-uniform-scale)';
+2355:     if(axis.length===2)return 'var(--cursor-plane)';
+2356:     return 'var(--cursor-scale)';
+2357:   }
+2358:   if(axis.length===2)return 'var(--cursor-plane)';
+2359:   return 'var(--cursor-move)';
+2360: }
+2361: 
+2362: // Native Z-up transform behavior. The editor camera is already configured
+2363: // with camera.up = (0, 0, 1), so TransformControls must keep its original
+2364: // X/Y/Z handle identities. Do not swap Y and Z names here.
+2365: 
+2366: // Dedicated center cube for uniform XYZ scaling.
+2367: const uniformScaleHandle=new THREE.Mesh(
+2368:   new THREE.BoxGeometry(.16,.16,.16),
+2369:   new THREE.MeshBasicMaterial({color:0xd8d8d8,depthTest:false,transparent:true,opacity:.95})
+2370: );
+2371: uniformScaleHandle.renderOrder=10001;
+2372: uniformScaleHandle.visible=false;
+2373: uniformScaleHandle.userData.isUniformScaleHandle=true;
+2374: scene.add(uniformScaleHandle);
+2375: applyClassicMinimalTransformTheme();
+2376: 
+2377: let uniformScaleDrag=null;
+2378: 
+2379: function updateUniformScaleHandle(){
+2380:   const obj=transform.object;
+2381:   const active=!!obj && transform.visible && transform.enabled && transform.getMode()==='scale';
+2382:   uniformScaleHandle.visible=active;
+2383:   if(!active)return;
+2384:   obj.updateMatrixWorld(true);
+2385:   const wp=new THREE.Vector3();
+2386:   obj.getWorldPosition(wp);
+2387:   uniformScaleHandle.position.copy(wp);
+2388:   const dist=Math.max(.001,camera.position.distanceTo(wp));
+2389:   const s=Math.max(.12,dist*.022);
+2390:   uniformScaleHandle.scale.setScalar(s);
+2391: }
+2392: 
+2393: function uniformScaleHandleHit(e){
+2394:   if(!uniformScaleHandle.visible)return false;
+2395:   const r=renderer.domElement.getBoundingClientRect();
+2396:   const p=uniformScaleHandle.position.clone().project(camera);
+2397:   const sx=r.left+(p.x*.5+.5)*r.width;
+2398:   const sy=r.top+(-p.y*.5+.5)*r.height;
+2399:   return Math.hypot(e.clientX-sx,e.clientY-sy)<=14;
+2400: }
+2401: 
+2402: function beginUniformScale(e){
+2403:   if(e.button!==0 || !transform.object || transform.getMode()!=='scale')return false;
+2404:   if(!uniformScaleHandleHit(e))return false;
+2405: 
+2406:   const target=transform.object;
+2407:   uniformScaleDrag={
+2408:     pointerId:e.pointerId,
+2409:     target,
+2410:     startY:e.clientY,
+2411:     startScale:target.scale.clone(),
+2412:     before:(subMode&&subPivot&&target===subPivot)?null:transformState(target),
+2413:     sub:!!(subMode&&subPivot&&target===subPivot)
+2414:   };
+2415:   if(uniformScaleDrag.sub) beginSubTransform();
+2416:   routerOwner='uniformScale';
+2417:   routerPointerId=e.pointerId;
+2418:   orbit.enabled=false;
+2419:   try{renderer.domElement.setPointerCapture(e.pointerId)}catch(_){}
+2420:   return true;
+2421: }
+2422: 
+2423: function moveUniformScale(e){
+2424:   if(!uniformScaleDrag || e.pointerId!==uniformScaleDrag.pointerId)return;
+2425:   const dy=uniformScaleDrag.startY-e.clientY;
+2426:   const precision=(TransformSystem.modifiers.shift||TransformConfig.fine)?.25:1;
+2427:   const f=Math.max(.001,Math.exp(dy*.01*precision));
+2428:   const s=uniformScaleDrag.startScale;
+2429:   uniformScaleDrag.target.scale.set(s.x*f,s.y*f,s.z*f);
+2430:   uniformScaleDrag.target.updateMatrixWorld(true);
+2431:   if(uniformScaleDrag.sub)applySubTransform();
+2432:   TransformSystem.showFeedback();TransformSystem.updateFeedback();
+2433:   refreshModifyPanel();
+2434: }
+2435: 
+2436: function endUniformScale(e){
+2437:   if(!uniformScaleDrag || e.pointerId!==uniformScaleDrag.pointerId)return;
+2438:   const d=uniformScaleDrag;
+2439:   if(d.sub)finishSubTransform();
+2440:   else{
+2441:     const after=transformState(d.target);
+2442:     if(stateChanged(d.before,after))pushUndo({type:'transform',object:d.target,before:d.before,after});
+2443:   }
+2444:   try{renderer.domElement.releasePointerCapture(e.pointerId)}catch(_){}
+2445:   uniformScaleDrag=null;
+2446:   if(routerOwner==='uniformScale')routerOwner=null;
+2447:   routerPointerId=null;
+2448:   orbit.enabled=true;TransformSystem.hideFeedback();
+2449: }
+2450: 
+2451: // Hide only TransformControls' neutral white helper/guide lines.
+2452: // Colored X/Y/Z handles and their hit areas remain active.
+2453: function hideTransformGuideLines(){
+2454:   transform.traverse(child=>{
+2455:     if(!(child.isLine||child.isLineSegments)||!child.material)return;
+2456:     const mats=Array.isArray(child.material)?child.material:[child.material];
+2457:     for(const mat of mats){
+2458:       if(!mat || !mat.color)continue;
+2459:       const c=mat.color;
+2460:       const neutral=Math.abs(c.r-c.g)<0.04 && Math.abs(c.g-c.b)<0.04;
+2461:       const bright=(c.r+c.g+c.b)/3>0.45;
+2462:       if(neutral && bright){
+2463:         mat.visible=false;
+2464:         mat.opacity=0;
+2465:         mat.transparent=true;
+2466:         mat.depthWrite=false;
+2467:         mat.needsUpdate=true;
 
-===== acceleration.trace(ray) @ 5960 =====
-5915: /*
-5916:   BLAS/TLAS boundary:
-5917:   - object mesh geometry revisions feed BLAS-equivalent cached acceleration data;
-5918:   - scene/object transform revisions are intentionally kept outside this cache key
-5919:     so a future TLAS can update instances without rebuilding object geometry.
-5920:   Current browser renderer still uses the proven binary RenderAccelerationSet.
-5921: */
-5922: const RenderAccelerationHierarchy16=Object.freeze({
-5923:   mode:'geometry-revision acceleration cache; TLAS/BLAS boundary reserved',
-5924:   cache:RenderAccelerationCache16,
-5925:   build(scene,builder){
-5926:     const cached=RenderAccelerationCache16.get(scene);
-5927:     if(cached)return cached;
-5928:     return RenderAccelerationCache16.put(scene,builder());
-5929:   }
-5930: });
-5931: window.RenderAccelerationCache16=RenderAccelerationCache16;
-5932: window.RenderAccelerationHierarchy16=RenderAccelerationHierarchy16;
-5933: 
-5934: const RenderAccelerationBuilder=Object.freeze({
-5935:   build(renderScene){
-5936:     return RenderAccelerationHierarchy16.build(renderScene,()=>{
-5937:       const packets=RenderGeometryCompiler.compileScene(renderScene);
-5938:       const store=new RenderTriangleStore();
-5939:       packets.forEach((p,i)=>store.addPacket(p,i));
-5940:       store.finalize();
-5941:       return new RenderAccelerationSet(store,new RenderBVH(store,4));
-5942:     });
-5943:   }
-5944: });
-5945: 
-5946: const DiagnosticRenderer=Object.freeze({
-5947:   async render(job,acceleration,onProgress=()=>{}){
-5948:     const width=Math.min(640,Math.max(1,job.progress.resolution[0]));
-5949:     const height=Math.min(360,Math.max(1,job.progress.resolution[1]));
-5950:     const rgba=new Uint8ClampedArray(width*height*4);
-5951:     const cameraSnapshot=job.renderScene.camera;
-5952:     const rowChunk=8;
-5953:     for(let y=0;y<height;y++){
-5954:       if(job.cancelled||job.controlToken16?.cancelled?.())throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
-5955:       while((job.paused||job.controlToken16?.paused?.())&&!job.cancelled)await new Promise(r=>setTimeout(r,20));
-5956:       for(let x=0;x<width;x++){
-5957:         const ray=RenderCameraRayGenerator.ray(cameraSnapshot,x,y,width,height);
-5958:         perf16.addRay(RenderRayType.CAMERA);
-5959:         perf16.addRay(RenderRayType.CAMERA);
-5960:         const hit=acceleration.trace(ray);
-5961:         const o=(y*width+x)*4;
-5962:         if(hit.hit){
-5963:           const n=hit.geometricNormal;
-5964:           rgba[o]=Math.round((n[0]*.5+.5)*255);
-5965:           rgba[o+1]=Math.round((n[1]*.5+.5)*255);
-5966:           rgba[o+2]=Math.round((n[2]*.5+.5)*255);
-5967:           rgba[o+3]=255;
-5968:         }else{
-5969:           rgba[o]=24;rgba[o+1]=24;rgba[o+2]=24;rgba[o+3]=255;
-5970:         }
-5971:       }
-5972:       if(y%rowChunk===0)onProgress((y+1)/height);
-5973:       if(y%rowChunk===0)await new Promise(r=>setTimeout(r,0));
-5974:     }
-5975:     return {width,height,rgba};
-5976:   }
-5977: });
-5978: 
-5979: const RenderGroup4Contract=Object.freeze({
-5980:   owns:Object.freeze([
-5981:     'ray representation','ray/triangle intersection','ray/AABB intersection',
-5982:     'triangle store','binary BVH','camera ray generation','diagnostic normal render'
-5983:   ]),
-5984:   consumes:Object.freeze([
-5985:     'Core A immutable RenderSceneSnapshot','Group 3 RenderGeometryCompiler'
-5986:   ]),
-5987:   doesNotOwn:Object.freeze([
-5988:     'editor scene','MNMesh','selection','transforms','editor materials',
-5989:     'physical BSDF','lights','GI','denoising'
-5990:   ])
-5991: });
-5992: 
-5993: 
-5994: function runRenderGroup4SelfTests(){
-5995:   const errors=[],approx=(a,b,e=1e-5)=>Math.abs(a-b)<=e;
-5996:   try{
-5997:     let ray=new RenderRay([0,0,1],[0,0,-1]);
-5998:     let hit=TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]);
-5999:     if(!hit.hit||!approx(hit.t,1)||!hit.frontFace||!hit.orientedGeometricNormal)errors.push('Triangle front-face hit failed');
-6000: 
-6001:     ray=new RenderRay([0,0,-1],[0,0,1]);
-6002:     hit=TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]);
-6003:     if(!hit.hit||hit.frontFace)errors.push('Triangle back-face classification failed');
-6004: 
-6005:     ray=new RenderRay([3,3,1],[0,0,-1]);
-6006:     if(TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]).hit)errors.push('Triangle miss failed');
-6007: 
-6008:     if(!AABBIntersector.intersect(new RenderRay([0,0,2],[0,0,-1]),[-1,-1,-1],[1,1,1]))errors.push('AABB hit failed');
-6009: 
-6010:     const store=new RenderTriangleStore();
-6011:     store.addPacket({objectId:'a',positions:new Float32Array([-1,-1,0,1,-1,0,0,1,0,  -1,-1,-3,1,-1,-3,0,1,-3]),normals:new Float32Array(18),uvs:new Float32Array(12),indices:new Uint32Array([0,1,2,3,4,5]),materialIndices:new Uint16Array([0,0])},0);
-6012:     store.finalize();
-6013:     const bvh=new RenderBVH(store,1),closest=bvh.intersect(new RenderRay([0,0,2],[0,0,-1]));
-6014:     if(!closest.hit||!approx(closest.t,2))errors.push('BVH closest-hit failed');
-6015:     if(!bvh.anyHit(new RenderRay([0,0,2],[0,0,-1],1e-5,2.1,RenderRayType.SHADOW)))errors.push('BVH any-hit failed');
-6016:     if(bvh.anyHit(new RenderRay([0,0,2],[0,0,-1],1e-5,1.9,RenderRayType.SHADOW)))errors.push('Finite shadow tMax failed');
-6017:     const bs=bvh.stats();if(bs.nodeCount<1||bs.leafCount<1||bs.triangleCount!==2)errors.push('BVH statistics failed');
-6018: 
-6019:     const legacy=new RenderTriangleStore();
-6020:     legacy.addPacket({objectId:'legacy',positions:new Float32Array([0,0,0,1,0,0,0,1,0]),indices:new Uint32Array([0,1,2]),materialIndices:new Uint16Array([0])},0);legacy.finalize();
-6021:     if(legacy.normals.length!==9||legacy.uvs.length!==6)errors.push('Legacy minimal packet compatibility failed');
-6022: 
-6023:     const deg=new RenderTriangleStore();
-6024:     deg.addPacket({objectId:'deg',positions:new Float32Array([0,0,0,0,0,0,0,0,0]),indices:new Uint32Array([0,1,2]),materialIndices:new Uint16Array([0])},0);deg.finalize();
-6025:     if(deg.triangleCount()!==0||deg.stats.rejectedDegenerate!==1)errors.push('Degenerate rejection failed');
-6026: 
-6027:     const empty=new RenderTriangleStore();empty.finalize();const ebvh=new RenderBVH(empty,4);
-6028:     if(ebvh.root!==-1||ebvh.intersect(new RenderRay([0,0,0],[0,0,1])).hit||ebvh.anyHit(new RenderRay([0,0,0],[0,0,1])))errors.push('Empty BVH failed');
-6029: 
-6030:     const c={position:[0,0,0],quaternion:[0,0,0,1],fov:60,near:0,far:100};
-6031:     const cr=RenderCameraRayGenerator.ray(c,49.5,49.5,100,100);
-6032:     if(cr.direction[2]>-.99||cr.type!==RenderRayType.CAMERA)errors.push('Camera center ray failed');
-6033:     const extreme=RenderCameraRayGenerator.ray({position:[0,0,0],quaternion:[NaN,0,0,1],fov:1000,near:-1,far:0},0,0,1,1);
-6034:     if(!extreme.direction.every(Number.isFinite)||extreme.tMin<=0)errors.push('Camera sanitization failed');
-6035: 
-6036:     const small=RenderRayPolicy.epsilonForPoint([0,0,0]),large=RenderRayPolicy.epsilonForPoint([1e6,0,0]);
-6037:     if(!(small>0&&large>=small&&large<=1e-2))errors.push('Scale-aware epsilon failed');
-6038:   }catch(err){errors.push('Group4 self-test exception: '+String(err?.message||err));}
-6039:   return {ok:errors.length===0,errors};
-6040: }
-6041: window.runRenderGroup4SelfTests=runRenderGroup4SelfTests;
-6042: 
-6043: function validateRenderGroup4(){
-6044:   const errors=[];
-6045:   if(typeof RenderRay!=='function')errors.push('RenderRay missing');
-6046:   if(typeof TriangleIntersector.intersect!=='function')errors.push('Triangle intersector missing');
-6047:   if(typeof RenderBVH!=='function')errors.push('RenderBVH missing');
-6048:   if(typeof RenderCameraRayGenerator.ray!=='function')errors.push('Camera ray generator missing');
-6049:   if(typeof RenderAccelerationBuilder.build!=='function')errors.push('Acceleration builder missing');
-6050:   const tests=runRenderGroup4SelfTests();if(!tests.ok)errors.push(...tests.errors);
-6051:   return {ok:errors.length===0,errors};
-6052: }
-6053: 
-6054: Object.assign(window,{
-6055:   RenderRay,RenderHit,TriangleIntersector,AABBIntersector,
-6056:   RenderTriangleStore,RenderBVH,RenderCameraRayGenerator,
-6057:   RenderAccelerationSet,RenderAccelerationBuilder,DiagnosticRenderer,
-6058:   RenderGroup4Contract
-6059: });
-6060: 
-6061: /* ============================================================
-6062:    3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 5
-6063:    Physical Materials + Basic Direct Lighting
-6064:    ============================================================ */
-6065: 
-6066: const RenderColor=Object.freeze({
-6067:   clamp01(x){return Math.max(0,Math.min(1,x))},
-6068:   add(a,b){return [a[0]+b[0],a[1]+b[1],a[2]+b[2]]},
-6069:   mul(a,b){
-6070:     if(Array.isArray(b))return [a[0]*b[0],a[1]*b[1],a[2]*b[2]];
-6071:     return [a[0]*b,a[1]*b,a[2]*b];
-6072:   },
-6073:   mix(a,b,t){return [a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t]},
-6074:   srgbToLinear1(x){
-6075:     x=this.clamp01(x);return x<=.04045?x/12.92:Math.pow((x+.055)/1.055,2.4);
-6076:   },
-6077:   linearToSrgb1(x){
-6078:     x=Math.max(0,x);return x<=.0031308?12.92*x:1.055*Math.pow(x,1/2.4)-.055;
-6079:   },
-6080:   srgbToLinear(c){return [this.srgbToLinear1(c[0]),this.srgbToLinear1(c[1]),this.srgbToLinear1(c[2])]},
-6081:   linearToSrgb(c){return [this.linearToSrgb1(c[0]),this.linearToSrgb1(c[1]),this.linearToSrgb1(c[2])]},
-6082:   hexToLinear(hex){
-6083:     const h=String(hex||'#202020').replace('#','');
-6084:     const n=parseInt(h.length===3?h.split('').map(x=>x+x).join(''):h,16);
-6085:     if(!Number.isFinite(n))return [0.0144,0.0144,0.0144];
-6086:     return this.srgbToLinear([((n>>16)&255)/255,((n>>8)&255)/255,(n&255)/255]);
-6087:   },
-6088:   aces(c){
-6089:     const f=x=>{
+===== PlaneGeometry @ 13490 =====
+13455:   geometry.computeBoundingSphere();
+13456:   return geometry;
+13457: }
+13458: 
+13459: function primitiveGeometry(type,sizeA=100,sizeB=100,height=100,params=null){
+13460:   params=params||getCreateParams(type);
+13461:   switch(type){
+13462:     case 'box': {
+13463:       if(params.chamferEnabled&&params.chamfer>0){
+13464:         let amount=params.chamfer;if(params.clampChamfer)amount=Math.min(amount,Math.min(sizeA,sizeB,height)*.49);
+13465:         const segs=Math.max(1,Math.round(Number(params.chamferSegs)||1));
+13466:         const chamferType=params.chamferType||'tri';
+13467:         // Corner Radius is currently informational only and makes no geometry changes.
+13468:         // Box chamfer geometry is driven only by Amount, Chamfer Segs and Chamfer Type.
+13469:         const g=makeChamferBox(
+13470:           Math.max(sizeA,.001),Math.max(sizeB,.001),Math.max(height,.001),
+13471:           amount,segs,chamferType
+13472:         );
+13473:         if(params.smoothChamfer)g.computeVertexNormals();return g;
+13474:       }
+13475:       return new THREE.BoxGeometry(Math.max(sizeA,.001),Math.max(sizeB,.001),Math.max(height,.001),params.lengthSegs,params.widthSegs,params.heightSegs);
+13476:     }
+13477:     case 'chbox': return makeChamferBox(Math.max(sizeA,.001),Math.max(sizeB,.001),Math.max(height,.001),params.chamfer,params.chamferSegs);
+13478:     case 'cbox': return makeCBox(Math.max(sizeA,.001),Math.max(sizeB,.001),Math.max(height,.001),params.wall,params.opening);
+13479:     case 'sphere':{const thetaLength=Math.PI*(1-Math.max(0,Math.min(1,params.hemisphere)));return applyPrimitiveSmoothGeometry(makeZUpGeometry(new THREE.SphereGeometry(Math.max(sizeA,.001),params.segments,Math.max(3,Math.floor(params.segments/2)),0,Math.PI*2,0,thetaLength)),params.smooth);}
+13480:     case 'qsphere': return applyPrimitiveSmoothGeometry(makeZUpGeometry(new THREE.IcosahedronGeometry(Math.max(sizeA,.001),Math.max(0,params.iterations-1))),params.smooth);
+13481:     case 'geosphere': return applyPrimitiveSmoothGeometry(makeZUpGeometry(new THREE.IcosahedronGeometry(Math.max(sizeA,.001),Math.max(0,params.iterations-1))),params.smooth);
+13482:     case 'cylinder': return applyPrimitiveSmoothGeometry(makeCylinderWithCapSegments(Math.max(sizeA,.001),Math.max(height,.001),params.sides,params.heightSegs,params.capSegs),params.smooth);
+13483:     case 'cone': return applyPrimitiveSmoothGeometry(makeConeWithCapSegments(Math.max(sizeA,0),Math.max(params.radius2,0),Math.max(height,.001),params.sides,params.heightSegs,params.capSegs),params.smooth);
+13484:     case 'pyramid': return makeZUpGeometry(new THREE.ConeGeometry(Math.max(sizeA,.001),Math.max(height,.001),params.sides,params.heightSegs,false));
+13485:     case 'tube': return makeTubeWithCapSegments(Math.max(sizeA,.001),Math.min(params.inner,Math.max(sizeA,.001)*.98),Math.max(height,.001),params.sides,params.heightSegs,params.capSegs);
+13486:     case 'capsule': return makeCapsule(Math.max(sizeA,.001),Math.max(height,.001),params.roundness,params.caHeight,params.chamfer,params.segments);
+13487:     case 'torus': return new THREE.TorusGeometry(Math.max(sizeA,.001),Math.max(params.tube,.001),params.sides,params.segments);
+13488:     case 'knot': return new THREE.TorusKnotGeometry(Math.max(sizeA,.001),Math.max(params.tube,.001),params.pathSegs,params.tubeSegs,params.p,params.q);
+13489:     case 'helix': return makeHelix(Math.max(sizeA,.001),params.tube,Math.max(height,.001),params.turns,params.segments,params.tubeSegs);
+13490:     case 'plane': return new THREE.PlaneGeometry(Math.max(sizeA,.001),Math.max(sizeB,.001),params.lengthSegs,params.widthSegs);
+13491:   }
+13492: }
+13493: 
+13494: 
+13495: function normalizePrimitiveParams(type,input){
+13496:   const p={...(input||{})};
+13497:   const n=(k,fb,min=0,max=Infinity)=>{
+13498:     let v=Number(p[k]);if(!Number.isFinite(v))v=fb;
+13499:     p[k]=Math.min(max,Math.max(min,v));return p[k];
+13500:   };
+13501:   const i=(k,fb,min=1,max=512)=>{p[k]=Math.round(n(k,fb,min,max));return p[k];};
+13502:   switch(type){
+13503:     case 'box':
+13504:       n('length',100,.001);n('width',100,.001);n('height',100,.001);
+13505:       i('lengthSegs',1,1,200);i('widthSegs',1,1,200);i('heightSegs',1,1,200);
+13506:       p.chamferEnabled=p.chamferEnabled===true;n('chamfer',2,0,Math.min(p.length,p.width,p.height)*.49);i('chamferSegs',2,1,12);n('cornerRadius',2,0,Math.min(p.length,p.width,p.height)*.49);
+13507:       p.chamferType=['standard','round','concave','miter','quad'].includes(p.chamferType)?p.chamferType:'standard';p.smoothChamfer=p.smoothChamfer!==false;p.clampChamfer=p.clampChamfer!==false;p.generateMapping=p.generateMapping!==false;p.realWorldMap=!!p.realWorldMap;break;
+13508:     case 'chbox':
+13509:       n('length',100,.001);n('width',100,.001);n('height',100,.001);
+13510:       n('chamfer',8,0,Math.min(p.length,p.width,p.height)*.49);i('chamferSegs',2,1,12);break;
+13511:     case 'cbox':
+13512:       n('length',100,.001);n('width',100,.001);n('height',100,.001);
+13513:       n('wall',20,.001,Math.min(p.length*.45,p.height*.45));
+13514:       n('opening',60,.001,Math.max(.001,p.height-2*p.wall));break;
+13515:     case 'plane':
+13516:       n('length',100,.001);n('width',100,.001);i('lengthSegs',1,1,200);i('widthSegs',1,1,200);break;
+13517:     case 'sphere':
+13518:       n('radius',50,.001);i('segments',24,4,128);n('hemisphere',0,0,1);p.smooth=p.smooth!==false;break;
+13519:     case 'qsphere':case 'geosphere':
+13520:       n('radius',50,.001);i('iterations',3,1,6);p.smooth=p.smooth!==false;break;
+13521:     case 'cylinder':
+13522:       n('radius',50,.001);n('height',100,.001);i('sides',24,3,128);i('heightSegs',1,1,200);i('capSegs',1,1,100);p.smooth=p.smooth!==false;break;
+13523:     case 'cone':
+13524:       n('radius1',50,0);n('radius2',0,0);n('height',100,.001);i('sides',24,3,128);i('heightSegs',1,1,200);i('capSegs',1,1,100);p.smooth=p.smooth!==false;break;
+13525:     case 'pyramid':
+13526:       n('radius',50,.001);n('height',100,.001);i('sides',4,3,32);i('heightSegs',1,1,100);break;
+13527:     case 'tube':
+13528:       n('outer',50,.001);n('inner',30,.001,Math.max(.001,p.outer*.98));n('height',100,.001);i('sides',24,3,128);i('heightSegs',1,1,200);i('capSegs',1,1,100);break;
+13529:     case 'capsule':
+13530:       n('radius',30,.001);n('height',100,.001);n('roundness',100,0,100);n('caHeight',0,-200,200);n('chamfer',0,0,100);i('segments',16,6,64);break;
+13531:     case 'torus':
+13532:       n('radius',50,.001);n('tube',12,.001);i('segments',32,3,128);i('sides',12,3,64);break;
+13533:     case 'knot':
+13534:       n('radius',45,.001);n('tube',10,.001);i('pathSegs',96,12,512);i('tubeSegs',12,3,128);i('p',2,1,12);i('q',3,1,12);break;
+13535:     case 'helix':
+13536:       n('radius',40,.001);n('tube',4,.001);n('height',100,.001);i('turns',3,1,40);i('segments',96,12,512);i('tubeSegs',8,3,64);break;
+13537:   }
+13538:   return p;
+13539: }
+13540: 
+13541: function geometryFromPrimitiveParams(type,input){
+13542:   const p=normalizePrimitiveParams(type,input);
+13543:   switch(type){
+13544:     case 'box':case 'chbox':case 'cbox':return {geometry:primitiveGeometry(type,p.length,p.width,p.height,p),params:p};
+13545:     case 'plane':return {geometry:primitiveGeometry(type,p.length,p.width,1,p),params:p};
+13546:     case 'sphere':case 'qsphere':case 'geosphere':case 'torus':case 'knot':
+13547:       return {geometry:primitiveGeometry(type,p.radius,p.radius,p.radius*2,p),params:p};
+13548:     case 'cylinder':case 'pyramid':case 'capsule':case 'helix':
+13549:       return {geometry:primitiveGeometry(type,p.radius,p.radius,p.height,p),params:p};
+13550:     case 'cone':return {geometry:primitiveGeometry(type,p.radius1,p.radius1,p.height,p),params:p};
+13551:     case 'tube':return {geometry:primitiveGeometry(type,p.outer,p.outer,p.height,p),params:p};
+13552:   }
+13553:   return {geometry:null,params:p};
+13554: }
+13555: 
+13556: function replacePrimitiveGeometry(mesh,input){
+13557:   if(!mesh||mesh.userData.editPoly||!mesh.userData.primitiveType)return false;
+13558:   const built=geometryFromPrimitiveParams(mesh.userData.primitiveType,input);
+13559:   if(!built.geometry)return false;
+13560:   const old=mesh.geometry;
+13561:   mesh.geometry=built.geometry;
+13562:   mesh.userData.creationParams={...built.params};
+13563:   old?.dispose();
+13564:   if(mesh.material){
+13565:     if(built.params.color)mesh.material.color.set(built.params.color);
+13566:     mesh.material.flatShading=built.params.smooth===false;
+13567:     mesh.material.needsUpdate=true;
+13568:     mesh.userData.baseColor=mesh.material.color.getHex();
+13569:   }
+13570:   rebuildWire(mesh);
+13571:   return true;
+13572: }
+13573: 
+13574: function primitiveTypeDisplayName(type){
+13575:   const names={
+13576:     box:'Box',chbox:'CHBox',cbox:'CBox',plane:'Plane',pyramid:'Pyramid',
+13577:     cone:'Cone',sphere:'Sphere',qsphere:'QSphere',geosphere:'GeoSphere',
+13578:     cylinder:'Cylinder',tube:'Tube',capsule:'Capsule',torus:'Torus',
+13579:     knot:'Knot',helix:'Helix'
+13580:   };
+13581:   return names[type]||type.charAt(0).toUpperCase()+type.slice(1);
+13582: }
+13583: 
+13584: function nextPrimitiveNumber(type){
+13585:   let maxNum=0;
+13586:   const base=primitiveTypeDisplayName(type);
+13587:   const rx=new RegExp('^'+base.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\\\s+(\\\\d+)$','i');
+13588: 
+13589:   for(const o of objects){
 
-===== acceleration.trace(primaryRay) @ 8403 =====
-8358:           }
-8359:         }
-8360:       }
-8361: 
-8362:       if(material.shading==='unlit')break;
-8363: 
-8364:       const sample=GuidedBSDFSampler.sample(job,material,n,v,hit.position,pixelSeed,bounce);
-8365:       if(!sample)break;
-8366: 
-8367:       throughput=RenderColor.mul(throughput,sample.weight);
-8368: 
-8369:       if(!this.finiteColor(throughput))break;
-8370:       if(Math.max(throughput[0],throughput[1],throughput[2])<1e-6)break;
-8371: 
-8372:       // Russian roulette after the first few bounces. Survival probability tracks path throughput.
-8373:       if(bounce>=2){
-8374:         const survive=Math.max(.08,Math.min(.95,Math.max(throughput[0],throughput[1],throughput[2])));
-8375:         if(PathSampler.scalar(pixelSeed,bounce,15)>survive)break;
-8376:         throughput=RenderColor.mul(throughput,1/survive);
-8377:       }
-8378: 
-8379:       if(sample.transmission&&material.thickness>0){
-8380:         throughput=RenderColor.mul(
-8381:           throughput,
-8382:           DielectricTransport.beerLambert(material.attenuationColor,material.thickness,material.attenuationDistance)
-8383:         );
-8384:       }
-8385: 
-8386:       previousGuide=(!sample.transmission&&job.pathGuide&&RayMath.dot(n,sample.direction)>0)
-8387:         ? {position:hit.position.slice(),normal:n.slice(),direction:sample.direction.slice()}
-8388:         : null;
-8389: 
-8390:       if(pathRays>=maxPathRays)break;
-8391:       pathRays++;
-8392:       const origin=this.offsetOrigin(hit,n,sample.direction);
-8393:       const eps=RenderRayPolicy.epsilonForPoint(origin);
-8394:       const rayType=sample.transmission?RenderRayType.TRANSMISSION:(sample.lobe==='ggx'?RenderRayType.GLOSSY:RenderRayType.DIFFUSE);
-8395:       RenderCoreH.attachPerformance(job).addRay(rayType);
-8396:       ray=new RenderRay(origin,sample.direction,eps,Infinity,rayType,bounce+1);
-8397:     }
-8398: 
-8399:     return radiance;
-8400:   },
-8401: 
-8402:   tracePixel(job,acceleration,compiled,primaryRay,pixelSeed){
-8403:     const primaryHitRecord=acceleration.trace(primaryRay);
-8404:     if(!primaryHitRecord.hit){
-8405:       const env=this.safeColor(RenderCoreD.evaluateEnvironment(job,compiled,primaryRay.direction));
-8406:       return {radiance:env,primaryHit:false,primaryHitRecord:null};
-8407:     }
-8408:     return {
-8409:       radiance:this.trace(job,acceleration,compiled,primaryRay,pixelSeed,primaryHitRecord),
-8410:       primaryHit:true,
-8411:       primaryHitRecord
-8412:     };
-8413:   }
-8414: });
-8415: 
-8416: class ProgressiveAccumulator{
-8417:   constructor(width,height){
-8418:     this.width=width;this.height=height;
-8419:     const n=width*height;
-8420:     this.sum=new Float64Array(n*3);
-8421:     this.mean=new Float64Array(n);
-8422:     this.m2=new Float64Array(n);
-8423:     this.samples=new Uint32Array(n);
-8424:     this.converged=new Uint8Array(n);
-8425:     this.active=n;
-8426:   }
-8427:   add(index,color){
-8428:     const s=++this.samples[index];
-8429:     const o=index*3;
-8430:     this.sum[o]+=color[0];this.sum[o+1]+=color[1];this.sum[o+2]+=color[2];
-8431:     const lum=.2126*color[0]+.7152*color[1]+.0722*color[2];
-8432:     const delta=lum-this.mean[index];
-8433:     this.mean[index]+=delta/s;
-8434:     this.m2[index]+=delta*(lum-this.mean[index]);
-8435:   }
-8436:   variance(index){
-8437:     const s=this.samples[index];
-8438:     return s>1?Math.max(0,this.m2[index]/(s-1)):Infinity;
-8439:   }
-8440:   noise(index){
-8441:     const mean=Math.max(1e-6,Math.abs(this.mean[index]));
-8442:     const s=Math.max(1,this.samples[index]);
-8443:     return Math.sqrt(this.variance(index)/s)/mean;
-8444:   }
-8445:   shouldSample(index,settings){
-8446:     if(!settings.adaptive)return this.samples[index]<settings.maxSamples;
-8447:     if(this.samples[index]<settings.minSamples)return true;
-8448:     if(this.samples[index]>=settings.maxSamples)return false;
-8449:     return this.noise(index)>settings.noiseThreshold;
-8450:   }
-8451:   markConverged(index){
-8452:     if(this.converged[index])return;
-8453:     this.converged[index]=1;this.active=Math.max(0,this.active-1);
-8454:   }
-8455:   resolveRGBA(settings,primaryMask){
-8456:     const rgba=new Uint8ClampedArray(this.width*this.height*4);
-8457:     for(let i=0;i<this.width*this.height;i++){
-8458:       const s=Math.max(1,this.samples[i]),o=i*3,p=i*4;
-8459:       const linear=[this.sum[o]/s,this.sum[o+1]/s,this.sum[o+2]/s];
-8460:       const mapped=RenderColor.linearToSrgb(RenderColor.aces(linear));
-8461:       rgba[p]=Math.round(RenderColor.clamp01(mapped[0])*255);
-8462:       rgba[p+1]=Math.round(RenderColor.clamp01(mapped[1])*255);
-8463:       rgba[p+2]=Math.round(RenderColor.clamp01(mapped[2])*255);
-8464:       rgba[p+3]=(settings.transparent&&!primaryMask[i])?0:255;
-8465:     }
-8466:     return rgba;
-8467:   }
-8468:   averageSamples(){
-8469:     let total=0;for(let i=0;i<this.samples.length;i++)total+=this.samples[i];
-8470:     return total/Math.max(1,this.samples.length);
-8471:   }
-8472:   activeIndices(settings){
-8473:     const out=new Uint32Array(this.active||this.samples.length);
-8474:     let n=0;
-8475:     for(let i=0;i<this.samples.length;i++){
-8476:       if(this.shouldSample(i,settings))out[n++]=i;
-8477:       else this.markConverged(i);
-8478:     }
-8479:     return out.subarray(0,n);
-8480:   }
-8481:   compactActive(settings){
-8482:     return this.activeIndices(settings);
-8483:   }
-8484: 
-8485:   averageNoise(){
-8486:     let sum=0,count=0;
-8487:     for(let i=0;i<this.samples.length;i++){
-8488:       if(this.samples[i]>1&&Number.isFinite(this.noise(i))){sum+=this.noise(i);count++;}
-8489:     }
-8490:     return count?sum/count:null;
-8491:   }
-8492: }
-8493: 
-8494: var PathGIRenderer=Object.freeze({
-8495:   async render(job,acceleration,onProgress=()=>{}){
-8496:     const rr=RenderRegion14.resolve(job,640,360);
-8497:     const width=rr.width,height=rr.height;
-8498:     const compiled=RenderPart5Core.compile(job);
-8499:     const settings=job.settings;
-8500:     job.lightCache=LightCacheEstimator.enabled(job)?new RenderLightCache(job,acceleration):null;
-8501:     job.lightTree=RenderCoreH.createLightTree(job,compiled);
-8502:     job.pathGuide=RenderCoreH.createPathGuide(job,acceleration);
-8503:     job.progress.gi=settings.secondaryGI==='Light Cache'?'Brute Force + Light Cache':settings.secondaryGI;
-8504:     const accumulator=new ProgressiveAccumulator(width,height);
-8505:     const aovs=new RenderAOVSet(width,height);
-8506:     const primaryMask=new Uint8Array(width*height);
-8507:     const litePixPath410=(typeof LitePixPathExecution410==='function')?new LitePixPathExecution410(width,height,{startBlock:32,minBlock:1,maxLevel:6}):null;
-8508:     job.litePixPath410=litePixPath410;
-8509:     const perf16=RenderCoreH.attachPerformance(job);
-8510:     const rowChunk16=RenderCoreH.yieldRows(job);
-8511:     const renderStart16=RenderProfiler16.begin();
-8512:     LiteTraceExecutionContext.activeJob=job;LiteTraceExecutionContext.performance=perf16;
-8513:     const maxSamples=Math.max(1,settings.maxSamples||1);
-8514:     const progressive=settings.progressive!==false;
-8515:     const passLimit=progressive?maxSamples:1;
-8516:     let completedPasses=0;
-8517: 
-8518:     for(let pass=0;pass<passLimit;pass++){
-8519:       if(job.cancelled)throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
-8520:       while(job.paused&&!job.cancelled)await new Promise(r=>setTimeout(r,20));
-8521: 
-8522:       let sampledThisPass=0;
-8523:       const activePixels16=progressive?accumulator.compactActive(settings):(()=>{
-8524:         const a=new Uint32Array(width*height);for(let i=0;i<a.length;i++)a[i]=i;return a;
-8525:       })();
-8526:       if(activePixels16.length===0)break;
-8527: 
-8528:       const workQueue16=RenderWorkQueue16.fromIndices(activePixels16,Math.max(32,RenderCoreH.tileSize(job)*4));
-8529:       await workQueue16.run(async batch=>{
-8530:         for(const i of batch){
-8531:           if(job.cancelled||job.controlToken16?.cancelled?.())throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
-8532:           const x=i%width,y=(i/width)|0;
+===== SphereGeometry @ 13479 =====
+13444:     flat.deleteAttribute?.('normal');
+13445:     flat.computeVertexNormals();
+13446:     flat.computeBoundingBox();
+13447:     flat.computeBoundingSphere();
+13448:     return flat;
+13449:   }
+13450:   // Smooth ON uses shared indexed vertices where the primitive generator provides
+13451:   // them. Hard boundaries such as cylinder caps remain separate vertex islands.
+13452:   geometry.deleteAttribute?.('normal');
+13453:   geometry.computeVertexNormals();
+13454:   geometry.computeBoundingBox();
+13455:   geometry.computeBoundingSphere();
+13456:   return geometry;
+13457: }
+13458: 
+13459: function primitiveGeometry(type,sizeA=100,sizeB=100,height=100,params=null){
+13460:   params=params||getCreateParams(type);
+13461:   switch(type){
+13462:     case 'box': {
+13463:       if(params.chamferEnabled&&params.chamfer>0){
+13464:         let amount=params.chamfer;if(params.clampChamfer)amount=Math.min(amount,Math.min(sizeA,sizeB,height)*.49);
+13465:         const segs=Math.max(1,Math.round(Number(params.chamferSegs)||1));
+13466:         const chamferType=params.chamferType||'tri';
+13467:         // Corner Radius is currently informational only and makes no geometry changes.
+13468:         // Box chamfer geometry is driven only by Amount, Chamfer Segs and Chamfer Type.
+13469:         const g=makeChamferBox(
+13470:           Math.max(sizeA,.001),Math.max(sizeB,.001),Math.max(height,.001),
+13471:           amount,segs,chamferType
+13472:         );
+13473:         if(params.smoothChamfer)g.computeVertexNormals();return g;
+13474:       }
+13475:       return new THREE.BoxGeometry(Math.max(sizeA,.001),Math.max(sizeB,.001),Math.max(height,.001),params.lengthSegs,params.widthSegs,params.heightSegs);
+13476:     }
+13477:     case 'chbox': return makeChamferBox(Math.max(sizeA,.001),Math.max(sizeB,.001),Math.max(height,.001),params.chamfer,params.chamferSegs);
+13478:     case 'cbox': return makeCBox(Math.max(sizeA,.001),Math.max(sizeB,.001),Math.max(height,.001),params.wall,params.opening);
+13479:     case 'sphere':{const thetaLength=Math.PI*(1-Math.max(0,Math.min(1,params.hemisphere)));return applyPrimitiveSmoothGeometry(makeZUpGeometry(new THREE.SphereGeometry(Math.max(sizeA,.001),params.segments,Math.max(3,Math.floor(params.segments/2)),0,Math.PI*2,0,thetaLength)),params.smooth);}
+13480:     case 'qsphere': return applyPrimitiveSmoothGeometry(makeZUpGeometry(new THREE.IcosahedronGeometry(Math.max(sizeA,.001),Math.max(0,params.iterations-1))),params.smooth);
+13481:     case 'geosphere': return applyPrimitiveSmoothGeometry(makeZUpGeometry(new THREE.IcosahedronGeometry(Math.max(sizeA,.001),Math.max(0,params.iterations-1))),params.smooth);
+13482:     case 'cylinder': return applyPrimitiveSmoothGeometry(makeCylinderWithCapSegments(Math.max(sizeA,.001),Math.max(height,.001),params.sides,params.heightSegs,params.capSegs),params.smooth);
+13483:     case 'cone': return applyPrimitiveSmoothGeometry(makeConeWithCapSegments(Math.max(sizeA,0),Math.max(params.radius2,0),Math.max(height,.001),params.sides,params.heightSegs,params.capSegs),params.smooth);
+13484:     case 'pyramid': return makeZUpGeometry(new THREE.ConeGeometry(Math.max(sizeA,.001),Math.max(height,.001),params.sides,params.heightSegs,false));
+13485:     case 'tube': return makeTubeWithCapSegments(Math.max(sizeA,.001),Math.min(params.inner,Math.max(sizeA,.001)*.98),Math.max(height,.001),params.sides,params.heightSegs,params.capSegs);
+13486:     case 'capsule': return makeCapsule(Math.max(sizeA,.001),Math.max(height,.001),params.roundness,params.caHeight,params.chamfer,params.segments);
+13487:     case 'torus': return new THREE.TorusGeometry(Math.max(sizeA,.001),Math.max(params.tube,.001),params.sides,params.segments);
+13488:     case 'knot': return new THREE.TorusKnotGeometry(Math.max(sizeA,.001),Math.max(params.tube,.001),params.pathSegs,params.tubeSegs,params.p,params.q);
+13489:     case 'helix': return makeHelix(Math.max(sizeA,.001),params.tube,Math.max(height,.001),params.turns,params.segments,params.tubeSegs);
+13490:     case 'plane': return new THREE.PlaneGeometry(Math.max(sizeA,.001),Math.max(sizeB,.001),params.lengthSegs,params.widthSegs);
+13491:   }
+13492: }
+13493: 
+13494: 
+13495: function normalizePrimitiveParams(type,input){
+13496:   const p={...(input||{})};
+13497:   const n=(k,fb,min=0,max=Infinity)=>{
+13498:     let v=Number(p[k]);if(!Number.isFinite(v))v=fb;
+13499:     p[k]=Math.min(max,Math.max(min,v));return p[k];
+13500:   };
+13501:   const i=(k,fb,min=1,max=512)=>{p[k]=Math.round(n(k,fb,min,max));return p[k];};
+13502:   switch(type){
+13503:     case 'box':
+13504:       n('length',100,.001);n('width',100,.001);n('height',100,.001);
+13505:       i('lengthSegs',1,1,200);i('widthSegs',1,1,200);i('heightSegs',1,1,200);
+13506:       p.chamferEnabled=p.chamferEnabled===true;n('chamfer',2,0,Math.min(p.length,p.width,p.height)*.49);i('chamferSegs',2,1,12);n('cornerRadius',2,0,Math.min(p.length,p.width,p.height)*.49);
+13507:       p.chamferType=['standard','round','concave','miter','quad'].includes(p.chamferType)?p.chamferType:'standard';p.smoothChamfer=p.smoothChamfer!==false;p.clampChamfer=p.clampChamfer!==false;p.generateMapping=p.generateMapping!==false;p.realWorldMap=!!p.realWorldMap;break;
+13508:     case 'chbox':
+13509:       n('length',100,.001);n('width',100,.001);n('height',100,.001);
+13510:       n('chamfer',8,0,Math.min(p.length,p.width,p.height)*.49);i('chamferSegs',2,1,12);break;
+13511:     case 'cbox':
+13512:       n('length',100,.001);n('width',100,.001);n('height',100,.001);
+13513:       n('wall',20,.001,Math.min(p.length*.45,p.height*.45));
+13514:       n('opening',60,.001,Math.max(.001,p.height-2*p.wall));break;
+13515:     case 'plane':
+13516:       n('length',100,.001);n('width',100,.001);i('lengthSegs',1,1,200);i('widthSegs',1,1,200);break;
+13517:     case 'sphere':
+13518:       n('radius',50,.001);i('segments',24,4,128);n('hemisphere',0,0,1);p.smooth=p.smooth!==false;break;
+13519:     case 'qsphere':case 'geosphere':
+13520:       n('radius',50,.001);i('iterations',3,1,6);p.smooth=p.smooth!==false;break;
+13521:     case 'cylinder':
+13522:       n('radius',50,.001);n('height',100,.001);i('sides',24,3,128);i('heightSegs',1,1,200);i('capSegs',1,1,100);p.smooth=p.smooth!==false;break;
+13523:     case 'cone':
+13524:       n('radius1',50,0);n('radius2',0,0);n('height',100,.001);i('sides',24,3,128);i('heightSegs',1,1,200);i('capSegs',1,1,100);p.smooth=p.smooth!==false;break;
+13525:     case 'pyramid':
+13526:       n('radius',50,.001);n('height',100,.001);i('sides',4,3,32);i('heightSegs',1,1,100);break;
+13527:     case 'tube':
+13528:       n('outer',50,.001);n('inner',30,.001,Math.max(.001,p.outer*.98));n('height',100,.001);i('sides',24,3,128);i('heightSegs',1,1,200);i('capSegs',1,1,100);break;
+13529:     case 'capsule':
+13530:       n('radius',30,.001);n('height',100,.001);n('roundness',100,0,100);n('caHeight',0,-200,200);n('chamfer',0,0,100);i('segments',16,6,64);break;
+13531:     case 'torus':
+13532:       n('radius',50,.001);n('tube',12,.001);i('segments',32,3,128);i('sides',12,3,64);break;
+13533:     case 'knot':
+13534:       n('radius',45,.001);n('tube',10,.001);i('pathSegs',96,12,512);i('tubeSegs',12,3,128);i('p',2,1,12);i('q',3,1,12);break;
+13535:     case 'helix':
+13536:       n('radius',40,.001);n('tube',4,.001);n('height',100,.001);i('turns',3,1,40);i('segments',96,12,512);i('tubeSegs',8,3,64);break;
+13537:   }
+13538:   return p;
+13539: }
+13540: 
+13541: function geometryFromPrimitiveParams(type,input){
+13542:   const p=normalizePrimitiveParams(type,input);
+13543:   switch(type){
+13544:     case 'box':case 'chbox':case 'cbox':return {geometry:primitiveGeometry(type,p.length,p.width,p.height,p),params:p};
+13545:     case 'plane':return {geometry:primitiveGeometry(type,p.length,p.width,1,p),params:p};
+13546:     case 'sphere':case 'qsphere':case 'geosphere':case 'torus':case 'knot':
+13547:       return {geometry:primitiveGeometry(type,p.radius,p.radius,p.radius*2,p),params:p};
+13548:     case 'cylinder':case 'pyramid':case 'capsule':case 'helix':
+13549:       return {geometry:primitiveGeometry(type,p.radius,p.radius,p.height,p),params:p};
+13550:     case 'cone':return {geometry:primitiveGeometry(type,p.radius1,p.radius1,p.height,p),params:p};
+13551:     case 'tube':return {geometry:primitiveGeometry(type,p.outer,p.outer,p.height,p),params:p};
+13552:   }
+13553:   return {geometry:null,params:p};
+13554: }
+13555: 
+13556: function replacePrimitiveGeometry(mesh,input){
+13557:   if(!mesh||mesh.userData.editPoly||!mesh.userData.primitiveType)return false;
+13558:   const built=geometryFromPrimitiveParams(mesh.userData.primitiveType,input);
+13559:   if(!built.geometry)return false;
+13560:   const old=mesh.geometry;
+13561:   mesh.geometry=built.geometry;
+13562:   mesh.userData.creationParams={...built.params};
+13563:   old?.dispose();
+13564:   if(mesh.material){
+13565:     if(built.params.color)mesh.material.color.set(built.params.color);
+13566:     mesh.material.flatShading=built.params.smooth===false;
+13567:     mesh.material.needsUpdate=true;
+13568:     mesh.userData.baseColor=mesh.material.color.getHex();
+13569:   }
+13570:   rebuildWire(mesh);
+13571:   return true;
+13572: }
+13573: 
+13574: function primitiveTypeDisplayName(type){
+13575:   const names={
+13576:     box:'Box',chbox:'CHBox',cbox:'CBox',plane:'Plane',pyramid:'Pyramid',
+13577:     cone:'Cone',sphere:'Sphere',qsphere:'QSphere',geosphere:'GeoSphere',
+13578:     cylinder:'Cylinder',tube:'Tube',capsule:'Capsule',torus:'Torus',
 
-===== Group 9 Progressive Path GI @ 8564 =====
-8519:       if(job.cancelled)throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
-8520:       while(job.paused&&!job.cancelled)await new Promise(r=>setTimeout(r,20));
-8521: 
-8522:       let sampledThisPass=0;
-8523:       const activePixels16=progressive?accumulator.compactActive(settings):(()=>{
-8524:         const a=new Uint32Array(width*height);for(let i=0;i<a.length;i++)a[i]=i;return a;
-8525:       })();
-8526:       if(activePixels16.length===0)break;
-8527: 
-8528:       const workQueue16=RenderWorkQueue16.fromIndices(activePixels16,Math.max(32,RenderCoreH.tileSize(job)*4));
-8529:       await workQueue16.run(async batch=>{
-8530:         for(const i of batch){
-8531:           if(job.cancelled||job.controlToken16?.cancelled?.())throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
-8532:           const x=i%width,y=(i/width)|0;
-8533:           const seed=((i+1)^Math.imul(pass+1,0x9E3779B1))>>>0;
-8534:           const jitterX=PathSampler.scalar(seed,pass,20)-.5;
-8535:           const jitterY=PathSampler.scalar(seed,pass,21)-.5;
-8536:           const ray=RenderPart5Core.ray(
-8537:             job.renderScene.camera,
-8538:             rr.x0+x+jitterX,rr.y0+y+jitterY,
-8539:             rr.fullW,rr.fullH
-8540:           );
-8541:           perf16.addRay(RenderRayType.CAMERA);
-8542:           const sample=RenderPart5Core.trace(job,acceleration,compiled,ray,seed);
-8543:           perf16.samples++;
-8544:           primaryMask[i]|=sample.primaryHit?1:0;
-8545:           accumulator.add(i,sample.radiance);
-8546:           const ph=sample.primaryHitRecord;
-8547:           if(litePixPath410)litePixPath410.record(i,x,y,sample,ph,accumulator);
-8548:           if(pass===0){
-8549:             if(ph?.hit)RenderAOVUtil.writePrimary(aovs,i,RenderAOVUtil.primary(job,acceleration,compiled,ray,ph,seed));
-8550:             else RenderAOVUtil.writePrimary(aovs,i,null);
-8551:           }
-8552:           sampledThisPass++;
-8553:         }
-8554:         perf16.yields++;
-8555:         await new Promise(r=>setTimeout(r,0));
-8556:       });
-8557:       completedPasses=pass+1;
-8558:       const litePixPass410=litePixPath410?litePixPath410.completePass(accumulator):null;
-8559:       job.litePixPathStats410=litePixPass410;
-8560:       const rgba=accumulator.resolveRGBA(settings,primaryMask);
-8561:       job.previewFrame={
-8562:         width,height,rgba,
-8563:         metadata:Object.freeze({
-8564:           renderer:'Group 9 Progressive Path GI',
-8565:           samplesPerPixel:accumulator.averageSamples(),
-8566:           currentPass:completedPasses,
-8567:           maxSamples,
-8568:           adaptive:!!settings.adaptive,
-8569:           noise:accumulator.averageNoise(),
-8570:           activePixels:accumulator.active
-8571:         })
-8572:       };
-8573:       job.progress.currentSamples=Math.round(accumulator.averageSamples());
-8574:       job.progress.maximumSamples=maxSamples;
-8575:       job.progress.noise=accumulator.averageNoise();
-8576:       onProgress(Math.min(1,completedPasses/passLimit));
-8577: 
-8578:       if(!progressive)break;
-8579:       if(settings.adaptive&&completedPasses>=settings.minSamples&&accumulator.active===0)break;
-8580:       if(sampledThisPass===0)break;
-8581:     }
-8582: 
-8583:     const rgba=accumulator.resolveRGBA(settings,primaryMask);
-8584:     for(let i=0;i<width*height;i++){
-8585:       const s=Math.max(1,accumulator.samples[i]),o=i*3;
-8586:       const beauty=[accumulator.sum[o]/s,accumulator.sum[o+1]/s,accumulator.sum[o+2]/s];
-8587:       aovs.set3('Beauty',i,beauty);
-8588:       aovs.set1('Noise',i,Number.isFinite(accumulator.noise(i))?accumulator.noise(i):0);
-8589:       const d=aovs.get('Direct Lighting'),e=aovs.get('Emission');
-8590:       const direct=d?[d[o],d[o+1],d[o+2]]:[0,0,0];
-8591:       const emission=e?[e[o],e[o+1],e[o+2]]:[0,0,0];
-8592:       aovs.set3('Global Illumination',i,[
-8593:         Math.max(0,beauty[0]-direct[0]-emission[0]),
-8594:         Math.max(0,beauty[1]-direct[1]-emission[1]),
-8595:         Math.max(0,beauty[2]-direct[2]-emission[2])
-8596:       ]);
-8597:     }
-8598:     RenderCoreH.markStage(job,'render',renderStart16);
-8599:     job.litePixPathStats410=litePixPath410?.snapshot?.()||job.litePixPathStats410||null;
-8600:     if(litePixPath410)litePixPath410.dispose();
-8601:     if(LiteTraceExecutionContext.performance===perf16){LiteTraceExecutionContext.activeJob=null;LiteTraceExecutionContext.performance=null;}
-8602:     job.renderChannels=aovs;
-8603:     return {
-8604:       width,height,rgba,
-8605:       channels:aovs,
-8606:       metadata:Object.freeze({
-8607:         renderer:'Group 9 Progressive Path GI',
-8608:         samplesPerPixel:accumulator.averageSamples(),
-8609:         passes:completedPasses,
-8610:         maxBounces:PathIntegrator.maxDepth(job),
-8611:         estimator:'Path GI + direct NEE + power-heuristic MIS',
-8612:         mis:true,
-8613:         adaptive:!!settings.adaptive,
-8614:         progressive:!!settings.progressive,
-8615:         russianRoulette:true,
-8616:         importanceSampling:'GGX + cosine mixture',
-8617:         noise:accumulator.averageNoise(),
-8618:         transmission:true,
-8619:         secondaryGI:settings.secondaryGI,
-8620:         lightCache:job.lightCache?.stats?.()||null,
-8621:         emissiveTriangleLights:compiled.emissiveTriangles?.triangles?.length||0,
-8622:         diagnostics:RenderPart5Core.diagnostics(job,compiled,acceleration),
-8623:         performance:RenderCoreH.performance(job),
-8624:         litePixNativePath:litePixPath410?.snapshot?.()||null,
-8625:         litePixCore2BVH:job.litePixCore2Acceleration411?.snapshot?.()||null
-8626:       })
-8627:     };
-8628:   }
-8629: });
-8630: 
-8631: const RenderGroup8Contract=Object.freeze({
-8632:   owns:Object.freeze([
-8633:     'multi-bounce path integration',
-8634:     'path throughput',
-8635:     'secondary-ray spawning',
-8636:     'cosine hemisphere BSDF sampling baseline',
-8637:     'environment contribution on path miss',
-8638:     'path-GI render mode'
-8639:   ]),
-8640:   consumes:Object.freeze([
-8641:     'Core B ray/BVH tracing',
-8642:     'Core C physical materials and lights',
-8643:     'Group 7 shadow visibility and direct-light sampling'
-8644:   ]),
-8645:   doesNotOwn:Object.freeze([
-8646:     'progressive accumulation',
-8647:     'adaptive sampling',
-8648:     'MIS',
-8649:     'Light Cache',
-8650:     'denoising',
-8651:     'path guiding'
-8652:   ])
-8653: });
-8654: 
-8655: function runRenderGroup8SelfTests(){
-8656:   const errors=[];
-8657: 
-8658:   {
-8659:     const n=[0,0,1];
-8660:     const d=PathSampler.cosineHemisphere(n,123,0);
-8661:     if(!Number.isFinite(d[0]+d[1]+d[2])||RayMath.dot(n,d)<-1e-6){
-8662:       errors.push('Cosine hemisphere sample failed');
-8663:     }
-8664:   }
-8665: 
-8666:   {
-8667:     const mat=new RenderSurfaceMaterial({
-8668:       id:'p8',name:'p8',shading:'physical',baseColor:[.8,.8,.8],
-8669:       roughness:.6,metalness:0,opacity:1,emissive:[0,0,0],emissiveIntensity:0
-8670:     });
-8671:     const smp=PathBSDFSampler.sample(mat,[0,0,1],[0,0,1],456,1);
-8672:     if(!smp||!Number.isFinite(smp.pdf)||smp.pdf<=0||smp.weight.some(x=>!Number.isFinite(x)||x<0)){
-8673:       errors.push('Path BSDF sample failed');
-8674:     }
-8675:   }
-8676: 
-8677:   {
-8678:     const fakeJob={settings:{maxBounces:99}};
-8679:     if(PathIntegrator.maxDepth(fakeJob)!==16)errors.push('Path depth clamp failed');
-8680:   }
-8681: 
-8682:   return {ok:errors.length===0,errors};
-8683: }
-8684: window.runRenderGroup8SelfTests=runRenderGroup8SelfTests;
-8685: 
-8686: function validateRenderGroup8(){
-8687:   const errors=[];
-8688:   if(typeof PathSampler.cosineHemisphere!=='function')errors.push('PathSampler missing');
-8689:   if(typeof PathBSDFSampler.sample!=='function')errors.push('PathBSDFSampler missing');
-8690:   if(typeof PathIntegrator.trace!=='function')errors.push('PathIntegrator missing');
-8691:   if(typeof PathGIRenderer.render!=='function')errors.push('PathGIRenderer missing');
-8692:   const tests=runRenderGroup8SelfTests();if(!tests.ok)errors.push(...tests.errors);
-8693:   return {ok:errors.length===0,errors};
+===== scene.add( @ 2310 =====
+2275:   }else{
+2276:     toTarget.multiplyScalar(1/distance);
+2277:   }
+2278: 
+2279:   // Normalize trackpads/mice without allowing a single event to jump excessively.
+2280:   const wheelUnits=Math.min(3,Math.max(1,Math.abs(e.deltaY)/100));
+2281:   const proportional=Math.min(distance*VIEW_ZOOM.maxFraction,
+2282:                               Math.max(distance*VIEW_ZOOM.fraction,VIEW_ZOOM.minStep));
+2283:   let step=proportional*wheelUnits;
+2284: 
+2285:   if(delta<0){ // zoom in
+2286:     if(distance>VIEW_ZOOM.closeDistance){
+2287:       // Approach the orbit target normally, but never collapse onto it.
+2288:       step=Math.min(step,Math.max(VIEW_ZOOM.minStep,distance-VIEW_ZOOM.closeDistance));
+2289:       camera.position.addScaledVector(toTarget,step);
+2290:     }else{
+2291:       // Near the target, translate camera and target together. This prevents
+2292:       // the familiar "zoom barely moves near the object" stall.
+2293:       camera.position.addScaledVector(toTarget,step);
+2294:       orbit.target.addScaledVector(toTarget,step);
+2295:     }
+2296:   }else{ // zoom out
+2297:     camera.position.addScaledVector(toTarget,-step);
+2298:   }
+2299: 
+2300:   orbit.update();
+2301: }
+2302: 
+2303: renderer.domElement.addEventListener('wheel',adaptiveViewportWheelZoom,{passive:false,capture:true});
+2304: 
+2305: const transform=new THREE.TransformControls(camera,renderer.domElement);
+2306: transform.setMode('translate');
+2307: transform.setSpace('local');
+2308: transform.setSize(.9);
+2309: transform.showX=transform.showY=transform.showZ=true;
+2310: scene.add(transform);
+2311: 
+2312: 
+2313: /* Classic Minimal transform-widget visual theme. Geometry and hit testing remain native. */
+2314: const ClassicMinimalTransformTheme=Object.freeze({
+2315:   x:0xe4574f,y:0x4ecb64,z:0x3f7cff,neutral:0xd7d7d7,screen:0xbfc3c7,
+2316:   planeOpacity:.18,handleOpacity:.96
+2317: });
+2318: function classicMinimalColorForHandle(name){
+2319:   if(name==='X')return ClassicMinimalTransformTheme.x;
+2320:   if(name==='Y')return ClassicMinimalTransformTheme.y;
+2321:   if(name==='Z')return ClassicMinimalTransformTheme.z;
+2322:   if(name==='XY')return ClassicMinimalTransformTheme.z;
+2323:   if(name==='YZ')return ClassicMinimalTransformTheme.x;
+2324:   if(name==='XZ')return ClassicMinimalTransformTheme.y;
+2325:   if(name==='XYZ'||name==='XYZE')return ClassicMinimalTransformTheme.neutral;
+2326:   if(name==='E')return ClassicMinimalTransformTheme.screen;
+2327:   return null;
+2328: }
+2329: function applyClassicMinimalTransformTheme(){
+2330:   transform.traverse(ch=>{
+2331:     const name=ch.name||'';
+2332:     const color=classicMinimalColorForHandle(name);
+2333:     if(color==null||!ch.material)return;
+2334:     const mats=Array.isArray(ch.material)?ch.material:[ch.material];
+2335:     for(const m of mats){
+2336:       if(!m||!m.color||m.opacity===0)continue;
+2337:       m.color.setHex(color);
+2338:       if(m._color?.setHex)m._color.setHex(color);
+2339:       const isPlane=name.length===2 && name!=='E';
+2340:       const op=isPlane?ClassicMinimalTransformTheme.planeOpacity:ClassicMinimalTransformTheme.handleOpacity;
+2341:       if(m.opacity>0){m.transparent=isPlane||m.transparent;m.opacity=Math.min(m.opacity,op);}
+2342:       if('_opacity' in m && m._opacity>0)m._opacity=Math.min(m._opacity,op);
+2343:       m.depthWrite=false;
+2344:       m.needsUpdate=true;
+2345:     }
+2346:   });
+2347:   uniformScaleHandle?.material?.color?.setHex(ClassicMinimalTransformTheme.neutral);
+2348:   if(uniformScaleHandle?.material){uniformScaleHandle.material.opacity=.94;uniformScaleHandle.material.needsUpdate=true;}
+2349: }
+2350: function classicMinimalTransformCursor(axis=transform.axis,mode=transform.getMode()){
+2351:   if(!axis)return '';
+2352:   if(mode==='rotate')return 'var(--cursor-rotate)';
+2353:   if(mode==='scale'){
+2354:     if(axis==='XYZ'||axis==='XYZE')return 'var(--cursor-uniform-scale)';
+2355:     if(axis.length===2)return 'var(--cursor-plane)';
+2356:     return 'var(--cursor-scale)';
+2357:   }
+2358:   if(axis.length===2)return 'var(--cursor-plane)';
+2359:   return 'var(--cursor-move)';
+2360: }
+2361: 
+2362: // Native Z-up transform behavior. The editor camera is already configured
+2363: // with camera.up = (0, 0, 1), so TransformControls must keep its original
+2364: // X/Y/Z handle identities. Do not swap Y and Z names here.
+2365: 
+2366: // Dedicated center cube for uniform XYZ scaling.
+2367: const uniformScaleHandle=new THREE.Mesh(
+2368:   new THREE.BoxGeometry(.16,.16,.16),
+2369:   new THREE.MeshBasicMaterial({color:0xd8d8d8,depthTest:false,transparent:true,opacity:.95})
+2370: );
+2371: uniformScaleHandle.renderOrder=10001;
+2372: uniformScaleHandle.visible=false;
+2373: uniformScaleHandle.userData.isUniformScaleHandle=true;
+2374: scene.add(uniformScaleHandle);
+2375: applyClassicMinimalTransformTheme();
+2376: 
+2377: let uniformScaleDrag=null;
+2378: 
+2379: function updateUniformScaleHandle(){
+2380:   const obj=transform.object;
+2381:   const active=!!obj && transform.visible && transform.enabled && transform.getMode()==='scale';
+2382:   uniformScaleHandle.visible=active;
+2383:   if(!active)return;
+2384:   obj.updateMatrixWorld(true);
+2385:   const wp=new THREE.Vector3();
+2386:   obj.getWorldPosition(wp);
+2387:   uniformScaleHandle.position.copy(wp);
+2388:   const dist=Math.max(.001,camera.position.distanceTo(wp));
+2389:   const s=Math.max(.12,dist*.022);
+2390:   uniformScaleHandle.scale.setScalar(s);
+2391: }
+2392: 
+2393: function uniformScaleHandleHit(e){
+2394:   if(!uniformScaleHandle.visible)return false;
+2395:   const r=renderer.domElement.getBoundingClientRect();
+2396:   const p=uniformScaleHandle.position.clone().project(camera);
+2397:   const sx=r.left+(p.x*.5+.5)*r.width;
+2398:   const sy=r.top+(-p.y*.5+.5)*r.height;
+2399:   return Math.hypot(e.clientX-sx,e.clientY-sy)<=14;
+2400: }
+2401: 
+2402: function beginUniformScale(e){
+2403:   if(e.button!==0 || !transform.object || transform.getMode()!=='scale')return false;
+2404:   if(!uniformScaleHandleHit(e))return false;
+2405: 
+2406:   const target=transform.object;
+2407:   uniformScaleDrag={
+2408:     pointerId:e.pointerId,
+2409:     target,
 
-===== async render(job,acceleration @ 5947 =====
-5902:   get(scene){
-5903:     const rev=this.revision(scene);
-5904:     if(this.acceleration&&this.geometryRevision===rev){this.hits++;return this.acceleration;}
-5905:     this.misses++;return null;
-5906:   },
-5907:   put(scene,acceleration){
-5908:     this.geometryRevision=this.revision(scene);
-5909:     this.acceleration=acceleration;
-5910:     return acceleration;
-5911:   },
-5912:   stats(){return Object.freeze({geometryRevision:this.geometryRevision,hits:this.hits,misses:this.misses,reused:!!this.acceleration});}
-5913: };
-5914: 
-5915: /*
-5916:   BLAS/TLAS boundary:
-5917:   - object mesh geometry revisions feed BLAS-equivalent cached acceleration data;
-5918:   - scene/object transform revisions are intentionally kept outside this cache key
-5919:     so a future TLAS can update instances without rebuilding object geometry.
-5920:   Current browser renderer still uses the proven binary RenderAccelerationSet.
-5921: */
-5922: const RenderAccelerationHierarchy16=Object.freeze({
-5923:   mode:'geometry-revision acceleration cache; TLAS/BLAS boundary reserved',
-5924:   cache:RenderAccelerationCache16,
-5925:   build(scene,builder){
-5926:     const cached=RenderAccelerationCache16.get(scene);
-5927:     if(cached)return cached;
-5928:     return RenderAccelerationCache16.put(scene,builder());
-5929:   }
-5930: });
-5931: window.RenderAccelerationCache16=RenderAccelerationCache16;
-5932: window.RenderAccelerationHierarchy16=RenderAccelerationHierarchy16;
-5933: 
-5934: const RenderAccelerationBuilder=Object.freeze({
-5935:   build(renderScene){
-5936:     return RenderAccelerationHierarchy16.build(renderScene,()=>{
-5937:       const packets=RenderGeometryCompiler.compileScene(renderScene);
-5938:       const store=new RenderTriangleStore();
-5939:       packets.forEach((p,i)=>store.addPacket(p,i));
-5940:       store.finalize();
-5941:       return new RenderAccelerationSet(store,new RenderBVH(store,4));
-5942:     });
-5943:   }
-5944: });
-5945: 
-5946: const DiagnosticRenderer=Object.freeze({
-5947:   async render(job,acceleration,onProgress=()=>{}){
-5948:     const width=Math.min(640,Math.max(1,job.progress.resolution[0]));
-5949:     const height=Math.min(360,Math.max(1,job.progress.resolution[1]));
-5950:     const rgba=new Uint8ClampedArray(width*height*4);
-5951:     const cameraSnapshot=job.renderScene.camera;
-5952:     const rowChunk=8;
-5953:     for(let y=0;y<height;y++){
-5954:       if(job.cancelled||job.controlToken16?.cancelled?.())throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
-5955:       while((job.paused||job.controlToken16?.paused?.())&&!job.cancelled)await new Promise(r=>setTimeout(r,20));
-5956:       for(let x=0;x<width;x++){
-5957:         const ray=RenderCameraRayGenerator.ray(cameraSnapshot,x,y,width,height);
-5958:         perf16.addRay(RenderRayType.CAMERA);
-5959:         perf16.addRay(RenderRayType.CAMERA);
-5960:         const hit=acceleration.trace(ray);
-5961:         const o=(y*width+x)*4;
-5962:         if(hit.hit){
-5963:           const n=hit.geometricNormal;
-5964:           rgba[o]=Math.round((n[0]*.5+.5)*255);
-5965:           rgba[o+1]=Math.round((n[1]*.5+.5)*255);
-5966:           rgba[o+2]=Math.round((n[2]*.5+.5)*255);
-5967:           rgba[o+3]=255;
-5968:         }else{
-5969:           rgba[o]=24;rgba[o+1]=24;rgba[o+2]=24;rgba[o+3]=255;
-5970:         }
-5971:       }
-5972:       if(y%rowChunk===0)onProgress((y+1)/height);
-5973:       if(y%rowChunk===0)await new Promise(r=>setTimeout(r,0));
-5974:     }
-5975:     return {width,height,rgba};
-5976:   }
-5977: });
-5978: 
-5979: const RenderGroup4Contract=Object.freeze({
-5980:   owns:Object.freeze([
-5981:     'ray representation','ray/triangle intersection','ray/AABB intersection',
-5982:     'triangle store','binary BVH','camera ray generation','diagnostic normal render'
-5983:   ]),
-5984:   consumes:Object.freeze([
-5985:     'Core A immutable RenderSceneSnapshot','Group 3 RenderGeometryCompiler'
-5986:   ]),
-5987:   doesNotOwn:Object.freeze([
-5988:     'editor scene','MNMesh','selection','transforms','editor materials',
-5989:     'physical BSDF','lights','GI','denoising'
-5990:   ])
-5991: });
-5992: 
-5993: 
-5994: function runRenderGroup4SelfTests(){
-5995:   const errors=[],approx=(a,b,e=1e-5)=>Math.abs(a-b)<=e;
-5996:   try{
-5997:     let ray=new RenderRay([0,0,1],[0,0,-1]);
-5998:     let hit=TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]);
-5999:     if(!hit.hit||!approx(hit.t,1)||!hit.frontFace||!hit.orientedGeometricNormal)errors.push('Triangle front-face hit failed');
-6000: 
-6001:     ray=new RenderRay([0,0,-1],[0,0,1]);
-6002:     hit=TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]);
-6003:     if(!hit.hit||hit.frontFace)errors.push('Triangle back-face classification failed');
-6004: 
-6005:     ray=new RenderRay([3,3,1],[0,0,-1]);
-6006:     if(TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]).hit)errors.push('Triangle miss failed');
-6007: 
-6008:     if(!AABBIntersector.intersect(new RenderRay([0,0,2],[0,0,-1]),[-1,-1,-1],[1,1,1]))errors.push('AABB hit failed');
-6009: 
-6010:     const store=new RenderTriangleStore();
-6011:     store.addPacket({objectId:'a',positions:new Float32Array([-1,-1,0,1,-1,0,0,1,0,  -1,-1,-3,1,-1,-3,0,1,-3]),normals:new Float32Array(18),uvs:new Float32Array(12),indices:new Uint32Array([0,1,2,3,4,5]),materialIndices:new Uint16Array([0,0])},0);
-6012:     store.finalize();
-6013:     const bvh=new RenderBVH(store,1),closest=bvh.intersect(new RenderRay([0,0,2],[0,0,-1]));
-6014:     if(!closest.hit||!approx(closest.t,2))errors.push('BVH closest-hit failed');
-6015:     if(!bvh.anyHit(new RenderRay([0,0,2],[0,0,-1],1e-5,2.1,RenderRayType.SHADOW)))errors.push('BVH any-hit failed');
-6016:     if(bvh.anyHit(new RenderRay([0,0,2],[0,0,-1],1e-5,1.9,RenderRayType.SHADOW)))errors.push('Finite shadow tMax failed');
-6017:     const bs=bvh.stats();if(bs.nodeCount<1||bs.leafCount<1||bs.triangleCount!==2)errors.push('BVH statistics failed');
-6018: 
-6019:     const legacy=new RenderTriangleStore();
-6020:     legacy.addPacket({objectId:'legacy',positions:new Float32Array([0,0,0,1,0,0,0,1,0]),indices:new Uint32Array([0,1,2]),materialIndices:new Uint16Array([0])},0);legacy.finalize();
-6021:     if(legacy.normals.length!==9||legacy.uvs.length!==6)errors.push('Legacy minimal packet compatibility failed');
-6022: 
-6023:     const deg=new RenderTriangleStore();
-6024:     deg.addPacket({objectId:'deg',positions:new Float32Array([0,0,0,0,0,0,0,0,0]),indices:new Uint32Array([0,1,2]),materialIndices:new Uint16Array([0])},0);deg.finalize();
-6025:     if(deg.triangleCount()!==0||deg.stats.rejectedDegenerate!==1)errors.push('Degenerate rejection failed');
-6026: 
-6027:     const empty=new RenderTriangleStore();empty.finalize();const ebvh=new RenderBVH(empty,4);
-6028:     if(ebvh.root!==-1||ebvh.intersect(new RenderRay([0,0,0],[0,0,1])).hit||ebvh.anyHit(new RenderRay([0,0,0],[0,0,1])))errors.push('Empty BVH failed');
-6029: 
-6030:     const c={position:[0,0,0],quaternion:[0,0,0,1],fov:60,near:0,far:100};
-6031:     const cr=RenderCameraRayGenerator.ray(c,49.5,49.5,100,100);
-6032:     if(cr.direction[2]>-.99||cr.type!==RenderRayType.CAMERA)errors.push('Camera center ray failed');
-6033:     const extreme=RenderCameraRayGenerator.ray({position:[0,0,0],quaternion:[NaN,0,0,1],fov:1000,near:-1,far:0},0,0,1,1);
-6034:     if(!extreme.direction.every(Number.isFinite)||extreme.tMin<=0)errors.push('Camera sanitization failed');
-6035: 
-6036:     const small=RenderRayPolicy.epsilonForPoint([0,0,0]),large=RenderRayPolicy.epsilonForPoint([1e6,0,0]);
-6037:     if(!(small>0&&large>=small&&large<=1e-2))errors.push('Scale-aware epsilon failed');
-6038:   }catch(err){errors.push('Group4 self-test exception: '+String(err?.message||err));}
-6039:   return {ok:errors.length===0,errors};
-6040: }
-6041: window.runRenderGroup4SelfTests=runRenderGroup4SelfTests;
-6042: 
-6043: function validateRenderGroup4(){
-6044:   const errors=[];
-6045:   if(typeof RenderRay!=='function')errors.push('RenderRay missing');
-6046:   if(typeof TriangleIntersector.intersect!=='function')errors.push('Triangle intersector missing');
-6047:   if(typeof RenderBVH!=='function')errors.push('RenderBVH missing');
-6048:   if(typeof RenderCameraRayGenerator.ray!=='function')errors.push('Camera ray generator missing');
-6049:   if(typeof RenderAccelerationBuilder.build!=='function')errors.push('Acceleration builder missing');
-6050:   const tests=runRenderGroup4SelfTests();if(!tests.ok)errors.push(...tests.errors);
-6051:   return {ok:errors.length===0,errors};
-6052: }
-6053: 
-6054: Object.assign(window,{
-6055:   RenderRay,RenderHit,TriangleIntersector,AABBIntersector,
-6056:   RenderTriangleStore,RenderBVH,RenderCameraRayGenerator,
-6057:   RenderAccelerationSet,RenderAccelerationBuilder,DiagnosticRenderer,
-6058:   RenderGroup4Contract
-6059: });
-6060: 
-6061: /* ============================================================
-6062:    3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 5
-6063:    Physical Materials + Basic Direct Lighting
-6064:    ============================================================ */
-6065: 
-6066: const RenderColor=Object.freeze({
-6067:   clamp01(x){return Math.max(0,Math.min(1,x))},
-6068:   add(a,b){return [a[0]+b[0],a[1]+b[1],a[2]+b[2]]},
-6069:   mul(a,b){
-6070:     if(Array.isArray(b))return [a[0]*b[0],a[1]*b[1],a[2]*b[2]];
-6071:     return [a[0]*b,a[1]*b,a[2]*b];
-6072:   },
-6073:   mix(a,b,t){return [a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t]},
-6074:   srgbToLinear1(x){
-6075:     x=this.clamp01(x);return x<=.04045?x/12.92:Math.pow((x+.055)/1.055,2.4);
-6076:   },
+===== new THREE.Mesh @ 2367 =====
+2332:     const color=classicMinimalColorForHandle(name);
+2333:     if(color==null||!ch.material)return;
+2334:     const mats=Array.isArray(ch.material)?ch.material:[ch.material];
+2335:     for(const m of mats){
+2336:       if(!m||!m.color||m.opacity===0)continue;
+2337:       m.color.setHex(color);
+2338:       if(m._color?.setHex)m._color.setHex(color);
+2339:       const isPlane=name.length===2 && name!=='E';
+2340:       const op=isPlane?ClassicMinimalTransformTheme.planeOpacity:ClassicMinimalTransformTheme.handleOpacity;
+2341:       if(m.opacity>0){m.transparent=isPlane||m.transparent;m.opacity=Math.min(m.opacity,op);}
+2342:       if('_opacity' in m && m._opacity>0)m._opacity=Math.min(m._opacity,op);
+2343:       m.depthWrite=false;
+2344:       m.needsUpdate=true;
+2345:     }
+2346:   });
+2347:   uniformScaleHandle?.material?.color?.setHex(ClassicMinimalTransformTheme.neutral);
+2348:   if(uniformScaleHandle?.material){uniformScaleHandle.material.opacity=.94;uniformScaleHandle.material.needsUpdate=true;}
+2349: }
+2350: function classicMinimalTransformCursor(axis=transform.axis,mode=transform.getMode()){
+2351:   if(!axis)return '';
+2352:   if(mode==='rotate')return 'var(--cursor-rotate)';
+2353:   if(mode==='scale'){
+2354:     if(axis==='XYZ'||axis==='XYZE')return 'var(--cursor-uniform-scale)';
+2355:     if(axis.length===2)return 'var(--cursor-plane)';
+2356:     return 'var(--cursor-scale)';
+2357:   }
+2358:   if(axis.length===2)return 'var(--cursor-plane)';
+2359:   return 'var(--cursor-move)';
+2360: }
+2361: 
+2362: // Native Z-up transform behavior. The editor camera is already configured
+2363: // with camera.up = (0, 0, 1), so TransformControls must keep its original
+2364: // X/Y/Z handle identities. Do not swap Y and Z names here.
+2365: 
+2366: // Dedicated center cube for uniform XYZ scaling.
+2367: const uniformScaleHandle=new THREE.Mesh(
+2368:   new THREE.BoxGeometry(.16,.16,.16),
+2369:   new THREE.MeshBasicMaterial({color:0xd8d8d8,depthTest:false,transparent:true,opacity:.95})
+2370: );
+2371: uniformScaleHandle.renderOrder=10001;
+2372: uniformScaleHandle.visible=false;
+2373: uniformScaleHandle.userData.isUniformScaleHandle=true;
+2374: scene.add(uniformScaleHandle);
+2375: applyClassicMinimalTransformTheme();
+2376: 
+2377: let uniformScaleDrag=null;
+2378: 
+2379: function updateUniformScaleHandle(){
+2380:   const obj=transform.object;
+2381:   const active=!!obj && transform.visible && transform.enabled && transform.getMode()==='scale';
+2382:   uniformScaleHandle.visible=active;
+2383:   if(!active)return;
+2384:   obj.updateMatrixWorld(true);
+2385:   const wp=new THREE.Vector3();
+2386:   obj.getWorldPosition(wp);
+2387:   uniformScaleHandle.position.copy(wp);
+2388:   const dist=Math.max(.001,camera.position.distanceTo(wp));
+2389:   const s=Math.max(.12,dist*.022);
+2390:   uniformScaleHandle.scale.setScalar(s);
+2391: }
+2392: 
+2393: function uniformScaleHandleHit(e){
+2394:   if(!uniformScaleHandle.visible)return false;
+2395:   const r=renderer.domElement.getBoundingClientRect();
+2396:   const p=uniformScaleHandle.position.clone().project(camera);
+2397:   const sx=r.left+(p.x*.5+.5)*r.width;
+2398:   const sy=r.top+(-p.y*.5+.5)*r.height;
+2399:   return Math.hypot(e.clientX-sx,e.clientY-sy)<=14;
+2400: }
+2401: 
+2402: function beginUniformScale(e){
+2403:   if(e.button!==0 || !transform.object || transform.getMode()!=='scale')return false;
+2404:   if(!uniformScaleHandleHit(e))return false;
+2405: 
+2406:   const target=transform.object;
+2407:   uniformScaleDrag={
+2408:     pointerId:e.pointerId,
+2409:     target,
+2410:     startY:e.clientY,
+2411:     startScale:target.scale.clone(),
+2412:     before:(subMode&&subPivot&&target===subPivot)?null:transformState(target),
+2413:     sub:!!(subMode&&subPivot&&target===subPivot)
+2414:   };
+2415:   if(uniformScaleDrag.sub) beginSubTransform();
+2416:   routerOwner='uniformScale';
+2417:   routerPointerId=e.pointerId;
+2418:   orbit.enabled=false;
+2419:   try{renderer.domElement.setPointerCapture(e.pointerId)}catch(_){}
+2420:   return true;
+2421: }
+2422: 
+2423: function moveUniformScale(e){
+2424:   if(!uniformScaleDrag || e.pointerId!==uniformScaleDrag.pointerId)return;
+2425:   const dy=uniformScaleDrag.startY-e.clientY;
+2426:   const precision=(TransformSystem.modifiers.shift||TransformConfig.fine)?.25:1;
+2427:   const f=Math.max(.001,Math.exp(dy*.01*precision));
+2428:   const s=uniformScaleDrag.startScale;
+2429:   uniformScaleDrag.target.scale.set(s.x*f,s.y*f,s.z*f);
+2430:   uniformScaleDrag.target.updateMatrixWorld(true);
+2431:   if(uniformScaleDrag.sub)applySubTransform();
+2432:   TransformSystem.showFeedback();TransformSystem.updateFeedback();
+2433:   refreshModifyPanel();
+2434: }
+2435: 
+2436: function endUniformScale(e){
+2437:   if(!uniformScaleDrag || e.pointerId!==uniformScaleDrag.pointerId)return;
+2438:   const d=uniformScaleDrag;
+2439:   if(d.sub)finishSubTransform();
+2440:   else{
+2441:     const after=transformState(d.target);
+2442:     if(stateChanged(d.before,after))pushUndo({type:'transform',object:d.target,before:d.before,after});
+2443:   }
+2444:   try{renderer.domElement.releasePointerCapture(e.pointerId)}catch(_){}
+2445:   uniformScaleDrag=null;
+2446:   if(routerOwner==='uniformScale')routerOwner=null;
+2447:   routerPointerId=null;
+2448:   orbit.enabled=true;TransformSystem.hideFeedback();
+2449: }
+2450: 
+2451: // Hide only TransformControls' neutral white helper/guide lines.
+2452: // Colored X/Y/Z handles and their hit areas remain active.
+2453: function hideTransformGuideLines(){
+2454:   transform.traverse(child=>{
+2455:     if(!(child.isLine||child.isLineSegments)||!child.material)return;
+2456:     const mats=Array.isArray(child.material)?child.material:[child.material];
+2457:     for(const mat of mats){
+2458:       if(!mat || !mat.color)continue;
+2459:       const c=mat.color;
+2460:       const neutral=Math.abs(c.r-c.g)<0.04 && Math.abs(c.g-c.b)<0.04;
+2461:       const bright=(c.r+c.g+c.b)/3>0.45;
+2462:       if(neutral && bright){
+2463:         mat.visible=false;
+2464:         mat.opacity=0;
+2465:         mat.transparent=true;
+2466:         mat.depthWrite=false;
+
+===== const scene= @ 2099 =====
+2064:     if(e.target?.id==='boxChamferEnabled'||e.target?.id==='boxGenerateMapping')syncBoxOptions();
+2065:   });
+2066:   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',syncBoxOptions);
+2067:   else syncBoxOptions();
+2068: })();
+2069: 
+2070: 
+2071: /* ============================================================
+2072:    3DLite 2.5
+2073:    Clean-room lightweight modeling editor.
+2074:    Interaction/UI reference: 3ds Max-style workflow.
+2075:    ============================================================ */
+2076: 
+2077: const COLORS={
+2078:   background:0x3a3a3a,
+2079:   object:0xb8b0a3,
+2080:   wire:0x242424,
+2081:   selectedWire:0x242424,
+2082:   vertex:0x268cff,
+2083:   selectedVertex:0xff3030,
+2084:   vertexHover:0x55d66b,
+2085:   selectedEdge:0xff3030,
+2086:   selectedPoly:0xff4545,
+2087:   hover:0x55bfff,
+2088:   backEdge:0x2b2b2b,
+2089:   gridMajor:0x53616a,
+2090:   gridMinor:0x3f494f
+2091: };
+2092: 
+2093: const viewport=document.getElementById('viewport');
+2094: const viewportWrap=document.getElementById('viewportWrap');
+2095: const statsEl=document.getElementById('stats');
+2096: const hintEl=document.getElementById('hint');
+2097: const marqueeEl=document.getElementById('marquee');
+2098: 
+2099: const scene=new THREE.Scene();
+2100: scene.background=new THREE.Color(COLORS.background);
+2101: 
+2102: const camera=new THREE.PerspectiveCamera(45,1,1,100000);
+2103: camera.up.set(0,0,1);
+2104: camera.position.set(800,800,600);
+2105: 
+2106: const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
+2107: 
+2108: const viewportEl=document.getElementById('viewport');
+2109: const modernCursor=document.getElementById('modernCursor');
+2110: const cursorCross=document.getElementById('cursorCross');
+2111: const cursorOrbit=document.getElementById('cursorOrbit');
+2112: 
+2113: let cursorMode='default';
+2114: let cursorX=0,cursorY=0;
+2115: 
+2116: function setCursorMode(mode){
+2117:   if(cursorMode===mode)return;
+2118:   cursorMode=mode;
+2119: 
+2120:   viewportEl.classList.remove(
+2121:     'cursor-object',
+2122:     'cursor-pan',
+2123:     'cursor-pan-active',
+2124:     'cursor-orbit'
+2125:   );
+2126: 
+2127:   modernCursor.style.display='none';
+2128:   cursorCross.style.display='none';
+2129:   cursorOrbit.style.display='none';
+2130: 
+2131:   if(mode==='object'){
+2132:     viewportEl.classList.add('cursor-object');
+2133:   }else if(mode==='pan'){
+2134:     viewportEl.classList.add('cursor-pan');
+2135:   }else if(mode==='pan-active'){
+2136:     viewportEl.classList.add('cursor-pan-active');
+2137:   }else if(mode==='orbit'){
+2138:     viewportEl.classList.add('cursor-orbit');
+2139:   }
+2140: }
+2141: 
+2142: function updateModernCursorPosition(e){
+2143:   cursorX=e.clientX;
+2144:   cursorY=e.clientY;
+2145:   modernCursor.style.left=cursorX+'px';
+2146:   modernCursor.style.top=cursorY+'px';
+2147: }
+2148: 
+2149: function objectUnderPointer(e){
+2150:   const r=renderer.domElement.getBoundingClientRect();
+2151:   mouse.x=((e.clientX-r.left)/r.width)*2-1;
+2152:   mouse.y=-((e.clientY-r.top)/r.height)*2+1;
+2153: 
+2154:   raycaster.setFromCamera(mouse,camera);
+2155:   const hits=raycaster.intersectObjects(
+2156:     objects.filter(o=>o.visible&&!o.userData.frozen),
+2157:     false
+2158:   );
+2159:   return hits.length>0;
+2160: }
+2161: 
+2162: function refreshViewportCursor(e){
+2163:   updateModernCursorPosition(e);
+2164: 
+2165:   if(altMMBOrbit||routerOwner==='viewportOrbit'){
+2166:     setCursorMode('orbit');
+2167:     return;
+2168:   }
+2169: 
+2170:   if((e.buttons&4)!==0){
+2171:     setCursorMode(e.altKey?'orbit':'pan-active');
+2172:     return;
+2173:   }
+2174: 
+2175:   if(createTool||transform.dragging){
+2176:     setCursorMode('default');
+2177:     return;
+2178:   }
+2179: 
+2180:   // v3.78.4: while Editable Poly sub-object/Edit mode is active, keep the
+2181:   // crosshair everywhere in the viewport. Navigation and gizmo dragging above
+2182:   // still keep their dedicated cursors.
+2183:   if(subMode && selected?.userData?.editPoly){
+2184:     setCursorMode('object');
+2185:   }else if(objectUnderPointer(e)){
+2186:     setCursorMode('object');
+2187:   }else{
+2188:     setCursorMode('default');
+2189:   }
+2190: }
+2191: 
+2192: renderer.domElement.addEventListener('pointermove',refreshViewportCursor,{passive:true});
+2193: renderer.domElement.addEventListener('pointerleave',()=>{
+2194:   setCursorMode('default');
+2195: });
+2196: renderer.domElement.addEventListener('pointerenter',e=>{
+2197:   refreshViewportCursor(e);
+2198: });
+
+===== window.scene @ 18891 =====
+18856:   }));
+18857:   document.getElementById('materialResetUVBtn')?.addEventListener('click',()=>{
+18858:     const mesh=MaterialWorkspace.selectedMesh();if(mesh)UVWSystem.reset(mesh);
+18859:   });
+18860: 
+18861:   updateMaterialPanelState();
+18862:   window.MaterialWorkspace=MaterialWorkspace;
+18863: })();
+18864: 
+18865: 
+18866: 
+18867: // Central input observation keeps the original event router intact while making
+18868: // pointer state available to new tool/picking architecture owners.
+18869: renderer.domElement.addEventListener('pointerdown',e=>InputController.notePointer(e),{capture:true,passive:true});
+18870: renderer.domElement.addEventListener('pointermove',e=>InputController.notePointer(e),{capture:true,passive:true});
+18871: renderer.domElement.addEventListener('pointerup',e=>InputController.notePointer(e),{capture:true,passive:true});
+18872: 
+18873: function validateGenerationKnowledge(){
+18874:   const issues=[];
+18875:   const k=window.GENERATION_KNOWLEDGE;
+18876:   if(!k)issues.push('Generation knowledge manifest missing');
+18877:   if(typeof boot3DLite!=='function')issues.push('boot3DLite owner missing');
+18878:   if(typeof updateDisplayForMesh!=='function')issues.push('viewport display owner missing');
+18879:   if(typeof syncTransformTarget!=='function')issues.push('transform target owner missing');
+18880:   if(typeof MeshWireManager==='undefined')issues.push('MeshWireManager missing');
+18881:   if(typeof window.selectedObject!=='undefined')issues.push('legacy selectedObject global present');
+18882:   return {ok:issues.length===0,issues};
+18883: }
+18884: window.validateGenerationKnowledge=validateGenerationKnowledge;
+18885: 
+18886: 
+18887: window.CLASSIC_MINIMAL_TRANSFORM_THEME='3.78.29';
+18888: /* ---------- Architecture Refactor Batch 13: scene/object ownership — Gen1 ---------- */
+18889: const ThreeDLiteSceneRegistryService=(()=>{const records=new Map();return Object.freeze({owner:'SceneManager',track(object,meta={}){if(!object?.uuid)return false;records.set(object.uuid,{object,meta:{...meta},trackedAt:performance.now()});return true;},untrack(objectOrId){const id=typeof objectOrId==='string'?objectOrId:objectOrId?.uuid;return id?records.delete(id):false;},get(id){return records.get(id)?.object||null;},has(id){return records.has(id);},snapshot(){return Object.freeze([...records].map(([id,r])=>Object.freeze({id,name:r.object?.name||'',type:r.object?.type||'',meta:Object.freeze({...r.meta})})));}});})(); window.ThreeDLiteSceneRegistryService=ThreeDLiteSceneRegistryService;
+18890: const ThreeDLiteObjectIdentityService=Object.freeze({owner:'SceneManager',describe(o){return Object.freeze({uuid:o?.uuid||null,name:o?.name||'',type:o?.type||null,parent:o?.parent?.uuid||null});}}); window.ThreeDLiteObjectIdentityService=ThreeDLiteObjectIdentityService;
+18891: const ThreeDLiteSceneMutationService=Object.freeze({owner:'SceneManager',add(o,parent=window.scene){if(!o||!parent?.add)return false;parent.add(o);ThreeDLiteSceneRegistryService.track(o);window.ThreeDLiteDirtyFlagService?.mark?.('scene');return true;},remove(o){if(!o?.parent)return false;o.parent.remove(o);ThreeDLiteSceneRegistryService.untrack(o);window.ThreeDLiteDirtyFlagService?.mark?.('scene');return true;}}); window.ThreeDLiteSceneMutationService=ThreeDLiteSceneMutationService;
+18892: const ThreeDLiteHierarchyService=Object.freeze({owner:'SceneManager',children(o){return Object.freeze([...(o?.children||[])]);},ancestors(o){const a=[];for(let p=o?.parent;p;p=p.parent)a.push(p);return Object.freeze(a);},isDescendant(o,parent){for(let p=o?.parent;p;p=p.parent)if(p===parent)return true;return false;}}); window.ThreeDLiteHierarchyService=ThreeDLiteHierarchyService;
+18893: function register3DLiteBatch13Gen1(){const c=window.ThreeDLiteAppContext;if(!c?.register)return false;for(const [n,s] of Object.entries({SceneRegistryService:ThreeDLiteSceneRegistryService,ObjectIdentityService:ThreeDLiteObjectIdentityService,SceneMutationService:ThreeDLiteSceneMutationService,HierarchyService:ThreeDLiteHierarchyService}))if(!c.get?.(n))c.register(n,s);return true;} window.register3DLiteBatch13Gen1=register3DLiteBatch13Gen1; register3DLiteBatch13Gen1();
+18894: 
+18895: /* ---------- Architecture Refactor Batch 13: scene/object ownership — Gen2 ---------- */
+18896: const ThreeDLiteObjectLifecycleService=Object.freeze({owner:'SceneManager',dispose(o,{recursive=true}={}){if(!o)return false;const nodes=recursive?[o,...(o.children||[]).flatMap(function walk(n){return [n,...(n.children||[]).flatMap(walk)]})]:[o];for(const n of nodes){try{n.geometry?.dispose?.();const mats=Array.isArray(n.material)?n.material:[n.material];for(const m of mats)if(m)m.dispose?.();}catch(e){window.ThreeDLiteErrorBoundaryService?.report?.('object-dispose',e);}ThreeDLiteSceneRegistryService.untrack(n);}o.parent?.remove?.(o);return true;}}); window.ThreeDLiteObjectLifecycleService=ThreeDLiteObjectLifecycleService;
+18897: const ThreeDLiteSceneQueryService=Object.freeze({owner:'SceneManager',all(root=window.scene){const a=[];root?.traverse?.(o=>a.push(o));return Object.freeze(a);},byType(type,root=window.scene){return Object.freeze(this.all(root).filter(o=>o.type===type));},byName(name,root=window.scene){return this.all(root).find(o=>o.name===name)||null;}}); window.ThreeDLiteSceneQueryService=ThreeDLiteSceneQueryService;
+18898: const ThreeDLiteSceneSnapshotService=Object.freeze({owner:'SceneManager',capture(root=window.scene){const objects=ThreeDLiteSceneQueryService.all(root).map(o=>ThreeDLiteObjectIdentityService.describe(o));return Object.freeze({count:objects.length,objects:Object.freeze(objects),selected:window.selected?.uuid||null});}}); window.ThreeDLiteSceneSnapshotService=ThreeDLiteSceneSnapshotService;
+18899: function register3DLiteBatch13Gen2(){const c=window.ThreeDLiteAppContext;if(!c?.register)return false;for(const [n,s] of Object.entries({ObjectLifecycleService:ThreeDLiteObjectLifecycleService,SceneQueryService:ThreeDLiteSceneQueryService,SceneSnapshotService:ThreeDLiteSceneSnapshotService}))if(!c.get?.(n))c.register(n,s);return true;} window.register3DLiteBatch13Gen2=register3DLiteBatch13Gen2; register3DLiteBatch13Gen2();
+18900: 
+18901: /* ---------- Architecture Refactor Batch 13: scene/object ownership — Gen3 ---------- */
+18902: const ThreeDLiteSceneAuditService=Object.freeze({owner:'ArchitectureCore',run(root=window.scene){const errors=[],seen=new Set();for(const o of ThreeDLiteSceneQueryService.all(root)){if(!o.uuid)errors.push('object-without-uuid');else if(seen.has(o.uuid))errors.push('duplicate-object-uuid:'+o.uuid);else seen.add(o.uuid);if(o.parent===o)errors.push('self-parent:'+o.uuid);}return Object.freeze({ok:errors.length===0,errors:Object.freeze(errors),objectCount:seen.size});}}); window.ThreeDLiteSceneAuditService=ThreeDLiteSceneAuditService;
+18903: const ThreeDLiteSceneFacade=Object.freeze({owner:'ArchitectureCore',get registry(){return ThreeDLiteSceneRegistryService;},get mutations(){return ThreeDLiteSceneMutationService;},get hierarchy(){return ThreeDLiteHierarchyService;},get lifecycle(){return ThreeDLiteObjectLifecycleService;},get query(){return ThreeDLiteSceneQueryService;},snapshot(){return ThreeDLiteSceneSnapshotService.capture();},audit(){return ThreeDLiteSceneAuditService.run();}}); window.ThreeDLiteSceneFacade=ThreeDLiteSceneFacade;
+18904: const ThreeDLiteSceneOwnershipContract=Object.freeze({owner:'SceneManager',rule:'SceneManager owns scene graph mutation; SelectionManager references objects but does not own them.',services:Object.freeze(['ThreeDLiteSceneRegistryService','ThreeDLiteObjectIdentityService','ThreeDLiteSceneMutationService','ThreeDLiteHierarchyService','ThreeDLiteObjectLifecycleService','ThreeDLiteSceneQueryService','ThreeDLiteSceneSnapshotService','ThreeDLiteSceneAuditService','ThreeDLiteSceneFacade'])}); window.ThreeDLiteSceneOwnershipContract=ThreeDLiteSceneOwnershipContract;
+18905: function register3DLiteBatch13Services(){const c=window.ThreeDLiteAppContext;if(!c?.register)return false;for(const [n,s] of Object.entries({SceneAuditService:ThreeDLiteSceneAuditService,SceneFacade:ThreeDLiteSceneFacade,SceneOwnershipContract:ThreeDLiteSceneOwnershipContract}))if(!c.get?.(n))c.register(n,s);return true;} window.register3DLiteBatch13Services=register3DLiteBatch13Services; register3DLiteBatch13Services();
+18906: function validate3DLiteBatch13(){const required=['ThreeDLiteSceneRegistryService','ThreeDLiteObjectIdentityService','ThreeDLiteSceneMutationService','ThreeDLiteHierarchyService','ThreeDLiteObjectLifecycleService','ThreeDLiteSceneQueryService','ThreeDLiteSceneSnapshotService','ThreeDLiteSceneAuditService','ThreeDLiteSceneFacade','ThreeDLiteSceneOwnershipContract'],errors=[];for(const n of required)if(!window[n])errors.push(n+' missing');return Object.freeze({ok:errors.length===0,errors:Object.freeze(errors)});} window.validate3DLiteBatch13=validate3DLiteBatch13;
+18907: window.ThreeDLiteSceneArchitecture=Object.freeze({version:'3.84.2-batch13-gen3',changes:Object.freeze([121,122,123,124,125,126,127,128,129,130]),ownership:ThreeDLiteSceneOwnershipContract,validate:validate3DLiteBatch13});
+18908: 
+18909: 
+18910: 
+18911: /* ---------- Architecture Refactor Batch 14: viewport/render ownership — Gen1 ---------- */
+18912: const ThreeDLiteViewportRegistryService=(()=>{const views=new Map();return Object.freeze({owner:'ViewportManager',register(id,view){if(!id||!view)return false;views.set(id,view);return true;},unregister(id){return views.delete(id);},get(id){return views.get(id)||null;},ids(){return Object.freeze([...views.keys()]);},snapshot(){return Object.freeze([...views].map(([id,v])=>Object.freeze({id,hasCamera:!!v?.camera,hasRenderer:!!v?.renderer,enabled:v?.enabled!==false})));}});})(); window.ThreeDLiteViewportRegistryService=ThreeDLiteViewportRegistryService;
+18913: const ThreeDLiteRenderOwnershipService=Object.freeze({owner:'ViewportManager',contract:Object.freeze({renderer:'ViewportManager',camera:'ViewportManager',scene:'SceneManager',selection:'SelectionManager',loop:'AnimationLoopOwner'}),canRender(){return !!(window.renderer&&window.scene&&window.camera);}}); window.ThreeDLiteRenderOwnershipService=ThreeDLiteRenderOwnershipService;
+18914: const ThreeDLiteViewportRuntimeStateService=(()=>{let revision=0;return Object.freeze({owner:'ViewportManager',touch(){return ++revision;},snapshot(){return Object.freeze({revision,cameraType:window.camera?.type||null,rendererReady:!!window.renderer,sceneReady:!!window.scene});}});})(); window.ThreeDLiteViewportRuntimeStateService=ThreeDLiteViewportRuntimeStateService;
+18915: const ThreeDLiteRenderInvalidationService=(()=>{let dirty=true,reasons=new Set(['startup']);return Object.freeze({owner:'ViewportManager',invalidate(reason='unknown'){dirty=true;reasons.add(reason);window.ThreeDLiteDirtyFlagService?.mark?.('viewport');},consume(){const r=Object.freeze([...reasons]);dirty=false;reasons.clear();return Object.freeze({dirty:true,reasons:r});},peek(){return Object.freeze({dirty,reasons:Object.freeze([...reasons])});}});})(); window.ThreeDLiteRenderInvalidationService=ThreeDLiteRenderInvalidationService;
+18916: function register3DLiteBatch14Gen1(){const c=window.ThreeDLiteAppContext;if(!c?.register)return false;for(const [n,s] of Object.entries({ViewportRegistryService:ThreeDLiteViewportRegistryService,RenderOwnershipService:ThreeDLiteRenderOwnershipService,ViewportRuntimeStateService:ThreeDLiteViewportRuntimeStateService,RenderInvalidationService:ThreeDLiteRenderInvalidationService}))if(!c.get?.(n))c.register(n,s);return true;} window.register3DLiteBatch14Gen1=register3DLiteBatch14Gen1; register3DLiteBatch14Gen1();
+18917: 
+18918: /* ---------- Architecture Refactor Batch 14: viewport/render ownership — Gen2 ---------- */
+18919: const ThreeDLiteCameraStateService=Object.freeze({owner:'ViewportManager',snapshot(camera=window.camera){if(!camera)return Object.freeze({ready:false});return Object.freeze({ready:true,type:camera.type||null,position:Object.freeze({x:camera.position?.x||0,y:camera.position?.y||0,z:camera.position?.z||0}),near:camera.near??null,far:camera.far??null,zoom:camera.zoom??null});}}); window.ThreeDLiteCameraStateService=ThreeDLiteCameraStateService;
+18920: const ThreeDLiteRendererStateService=Object.freeze({owner:'ViewportManager',snapshot(renderer=window.renderer){if(!renderer)return Object.freeze({ready:false});const s=renderer.getSize?.(new THREE.Vector2());return Object.freeze({ready:true,width:s?.x||0,height:s?.y||0,pixelRatio:renderer.getPixelRatio?.()||1,contextLost:!!renderer.getContext?.()?.isContextLost?.()});}}); window.ThreeDLiteRendererStateService=ThreeDLiteRendererStateService;
+18921: const ThreeDLiteViewportSnapshotService=Object.freeze({owner:'ViewportManager',capture(){return Object.freeze({viewport:ThreeDLiteViewportRuntimeStateService.snapshot(),camera:ThreeDLiteCameraStateService.snapshot(),renderer:ThreeDLiteRendererStateService.snapshot(),invalidation:ThreeDLiteRenderInvalidationService.peek()});}}); window.ThreeDLiteViewportSnapshotService=ThreeDLiteViewportSnapshotService;
+18922: function register3DLiteBatch14Gen2(){const c=window.ThreeDLiteAppContext;if(!c?.register)return false;for(const [n,s] of Object.entries({CameraStateService:ThreeDLiteCameraStateService,RendererStateService:ThreeDLiteRendererStateService,ViewportSnapshotService:ThreeDLiteViewportSnapshotService}))if(!c.get?.(n))c.register(n,s);return true;} window.register3DLiteBatch14Gen2=register3DLiteBatch14Gen2; register3DLiteBatch14Gen2();
+18923: 
+18924: /* ---------- Architecture Refactor Batch 14: viewport/render ownership — Gen3 ---------- */
+18925: const ThreeDLiteViewportAuditService=Object.freeze({owner:'ArchitectureCore',run(){const errors=[];if(!window.renderer)errors.push('renderer-missing');if(!window.scene)errors.push('scene-missing');if(!window.camera)errors.push('camera-missing');if(window.renderer&&!window.renderer.domElement)errors.push('renderer-dom-missing');const ctx=window.renderer?.getContext?.();if(ctx?.isContextLost?.())errors.push('webgl-context-lost');return Object.freeze({ok:errors.length===0,errors:Object.freeze(errors),snapshot:ThreeDLiteViewportSnapshotService.capture()});}}); window.ThreeDLiteViewportAuditService=ThreeDLiteViewportAuditService;
+18926: const ThreeDLiteViewportFacade=Object.freeze({owner:'ArchitectureCore',get registry(){return ThreeDLiteViewportRegistryService;},get invalidation(){return ThreeDLiteRenderInvalidationService;},snapshot(){return ThreeDLiteViewportSnapshotService.capture();},audit(){return ThreeDLiteViewportAuditService.run();},invalidate(reason){ThreeDLiteRenderInvalidationService.invalidate(reason);}}); window.ThreeDLiteViewportFacade=ThreeDLiteViewportFacade;
+18927: const ThreeDLiteViewportOwnershipContract=Object.freeze({owner:'ViewportManager',rule:'ViewportManager owns renderer/camera state and render invalidation; SceneManager owns scene graph; AnimationLoopOwner alone starts the frame loop.',services:Object.freeze(['ThreeDLiteViewportRegistryService','ThreeDLiteRenderOwnershipService','ThreeDLiteViewportRuntimeStateService','ThreeDLiteRenderInvalidationService','ThreeDLiteCameraStateService','ThreeDLiteRendererStateService','ThreeDLiteViewportSnapshotService','ThreeDLiteViewportAuditService','ThreeDLiteViewportFacade'])}); window.ThreeDLiteViewportOwnershipContract=ThreeDLiteViewportOwnershipContract;
+18928: function register3DLiteBatch14Services(){const c=window.ThreeDLiteAppContext;if(!c?.register)return false;for(const [n,s] of Object.entries({ViewportAuditService:ThreeDLiteViewportAuditService,ViewportFacade:ThreeDLiteViewportFacade,ViewportOwnershipContract:ThreeDLiteViewportOwnershipContract}))if(!c.get?.(n))c.register(n,s);return true;} window.register3DLiteBatch14Services=register3DLiteBatch14Services; register3DLiteBatch14Services();
+18929: function validate3DLiteBatch14(){const required=['ThreeDLiteViewportRegistryService','ThreeDLiteRenderOwnershipService','ThreeDLiteViewportRuntimeStateService','ThreeDLiteRenderInvalidationService','ThreeDLiteCameraStateService','ThreeDLiteRendererStateService','ThreeDLiteViewportSnapshotService','ThreeDLiteViewportAuditService','ThreeDLiteViewportFacade','ThreeDLiteViewportOwnershipContract'],errors=[];for(const n of required)if(!window[n])errors.push(n+' missing');return Object.freeze({ok:errors.length===0,errors:Object.freeze(errors)});} window.validate3DLiteBatch14=validate3DLiteBatch14;
+18930: window.ThreeDLiteViewportArchitecture=Object.freeze({version:'3.84.3.1-batch14-gen3-hotfix',changes:Object.freeze([131,132,133,134,135,136,137,138,139,140]),ownership:ThreeDLiteViewportOwnershipContract,validate:validate3DLiteBatch14});
+18931: 
+18932: 
+18933: /* ---------- Architecture Refactor Batch 15: input/tool interaction ownership — Gen1 ---------- */
+18934: /* Change 141 — canonical input state owner */
+18935: const ThreeDLiteInputStateService=(()=>{const state={enabled:true,revision:0,lastSource:null};return Object.freeze({owner:'InputManager',setEnabled(v){state.enabled=!!v;state.revision++;return state.enabled;},note(source){state.lastSource=source||null;state.revision++;},snapshot(){return Object.freeze({...state});}});})(); window.ThreeDLiteInputStateService=ThreeDLiteInputStateService;
+18936: /* Change 142 — pointer state owner */
+18937: const ThreeDLitePointerStateService=(()=>{const p={x:0,y:0,buttons:0,pointerId:null,pointerType:null,inside:false,revision:0};return Object.freeze({owner:'InputManager',update(e){if(!e)return; if(Number.isFinite(e.clientX))p.x=e.clientX;if(Number.isFinite(e.clientY))p.y=e.clientY;p.buttons=Number.isFinite(e.buttons)?e.buttons:p.buttons;p.pointerId=e.pointerId??p.pointerId;p.pointerType=e.pointerType||p.pointerType;p.revision++;ThreeDLiteInputStateService.note('pointer');},setInside(v){p.inside=!!v;p.revision++;},snapshot(){return Object.freeze({...p});}});})(); window.ThreeDLitePointerStateService=ThreeDLitePointerStateService;
+18938: /* Change 143 — keyboard state owner */
+18939: const ThreeDLiteKeyboardStateService=(()=>{const down=new Set();let revision=0;return Object.freeze({owner:'InputManager',noteDown(e){if(e?.code)down.add(e.code);revision++;ThreeDLiteInputStateService.note('keyboard');},noteUp(e){if(e?.code)down.delete(e.code);revision++;},clear(){down.clear();revision++;},isDown(code){return down.has(code);},snapshot(){return Object.freeze({revision,down:Object.freeze([...down])});}});})(); window.ThreeDLiteKeyboardStateService=ThreeDLiteKeyboardStateService;
+18940: /* Change 144 — pointer capture owner */
+18941: const ThreeDLitePointerCaptureService=(()=>{let owner=null,pointerId=null;return Object.freeze({owner:'InputManager',claim(name,id,element=window.renderer?.domElement){if(owner&&owner!==name)return false;owner=name||'anonymous';pointerId=id??null;try{if(element?.setPointerCapture&&pointerId!=null)element.setPointerCapture(pointerId);}catch(e){window.ThreeDLiteErrorBoundaryService?.report?.('pointer-capture',e);}return true;},release(name,element=window.renderer?.domElement){if(owner&&name&&owner!==name)return false;try{if(element?.releasePointerCapture&&pointerId!=null&&element.hasPointerCapture?.(pointerId))element.releasePointerCapture(pointerId);}catch(e){window.ThreeDLiteErrorBoundaryService?.report?.('pointer-release',e);}owner=null;pointerId=null;return true;},snapshot(){return Object.freeze({owner,pointerId});}});})(); window.ThreeDLitePointerCaptureService=ThreeDLitePointerCaptureService;
+18942: function register3DLiteBatch15Gen1(){const c=window.ThreeDLiteAppContext;if(!c?.register)return false;for(const [n,s] of Object.entries({InputStateService:ThreeDLiteInputStateService,PointerStateService:ThreeDLitePointerStateService,KeyboardStateService:ThreeDLiteKeyboardStateService,PointerCaptureService:ThreeDLitePointerCaptureService}))if(!c.get?.(n))c.register(n,s);return true;} window.register3DLiteBatch15Gen1=register3DLiteBatch15Gen1; register3DLiteBatch15Gen1();
+18943: 
+18944: 
+18945: /* ---------- Architecture Refactor Batch 15: input/tool interaction ownership — Gen2 ---------- */
+18946: /* Change 145 — shortcut routing with explicit priority */
+18947: const ThreeDLiteShortcutRouterService=(()=>{const handlers=[];return Object.freeze({owner:'InputManager',register(id,fn,{priority=0,when=null}={}){if(!id||typeof fn!=='function')return false;const i=handlers.findIndex(h=>h.id===id);const rec={id,fn,priority:Number(priority)||0,when:typeof when==='function'?when:null};if(i>=0)handlers[i]=rec;else handlers.push(rec);handlers.sort((a,b)=>b.priority-a.priority);return true;},unregister(id){const i=handlers.findIndex(h=>h.id===id);if(i<0)return false;handlers.splice(i,1);return true;},route(e,context={}){if(!ThreeDLiteInputStateService.snapshot().enabled)return false;for(const h of handlers){if(h.when&&!h.when(context,e))continue;try{if(h.fn(e,context)===true)return true;}catch(err){window.ThreeDLiteErrorBoundaryService?.report?.('shortcut:'+h.id,err);}}return false;},snapshot(){return Object.freeze(handlers.map(h=>Object.freeze({id:h.id,priority:h.priority})));}});})(); window.ThreeDLiteShortcutRouterService=ThreeDLiteShortcutRouterService;
+18948: /* Change 146 — active tool ownership */
+18949: const ThreeDLiteToolActivationService=(()=>{let active=null,revision=0;const tools=new Map();return Object.freeze({owner:'ToolManager',register(id,tool){if(!id||!tool)return false;tools.set(id,tool);return true;},activate(id,context={}){if(active===id)return true;const next=tools.get(id);if(!next)return false;const prev=tools.get(active);try{prev?.deactivate?.(context);next.activate?.(context);}catch(e){window.ThreeDLiteErrorBoundaryService?.report?.('tool-activate:'+id,e);return false;}active=id;revision++;window.ThreeDLiteDirtyFlagService?.mark?.('tool');return true;},deactivate(context={}){if(!active)return true;const prev=tools.get(active);try{prev?.deactivate?.(context);}catch(e){window.ThreeDLiteErrorBoundaryService?.report?.('tool-deactivate:'+active,e);}active=null;revision++;return true;},active(){return active;},get(id){return tools.get(id)||null;},snapshot(){return Object.freeze({active,revision,registered:Object.freeze([...tools.keys()])});}});})(); window.ThreeDLiteToolActivationService=ThreeDLiteToolActivationService;
+18950: /* Change 147 — bounded interaction transaction owner */
+18951: const ThreeDLiteInteractionTransactionService=(()=>{let current=null,seq=0;return Object.freeze({owner:'ToolManager',begin(kind,meta={}){if(current)return null;current={id:++seq,kind:kind||'interaction',meta:{...meta},startedAt:performance.now()};window.ThreeDLiteTransactionService?.begin?.('interaction:'+current.kind);return Object.freeze({...current,meta:Object.freeze({...current.meta})});},commit(id){if(!current||current.id!==id)return false;window.ThreeDLiteTransactionService?.commit?.();current=null;return true;},cancel(id){if(!current||current.id!==id)return false;window.ThreeDLiteTransactionService?.rollback?.();current=null;return true;},current(){return current?Object.freeze({...current,meta:Object.freeze({...current.meta})}):null;}});})(); window.ThreeDLiteInteractionTransactionService=ThreeDLiteInteractionTransactionService;
+18952: function register3DLiteBatch15Gen2(){const c=window.ThreeDLiteAppContext;if(!c?.register)return false;for(const [n,s] of Object.entries({ShortcutRouterService:ThreeDLiteShortcutRouterService,ToolActivationService:ThreeDLiteToolActivationService,InteractionTransactionService:ThreeDLiteInteractionTransactionService}))if(!c.get?.(n))c.register(n,s);return true;} window.register3DLiteBatch15Gen2=register3DLiteBatch15Gen2; register3DLiteBatch15Gen2();
+18953: 
+18954: 
+18955: /* ---------- Architecture Refactor Batch 15: input/tool interaction ownership — Gen3 ---------- */
+18956: /* Change 148 — one cancellation path for transient interaction state */
+18957: const ThreeDLiteInteractionCancellationService=Object.freeze({owner:'ToolManager',cancel(reason='cancelled'){const tx=ThreeDLiteInteractionTransactionService.current();if(tx)ThreeDLiteInteractionTransactionService.cancel(tx.id);ThreeDLitePointerCaptureService.release();ThreeDLiteKeyboardStateService.clear();try{window.cancelTargetWeld?.();window.cancelCutTool?.();window.TransformSystem?.cancel?.();}catch(e){window.ThreeDLiteErrorBoundaryService?.report?.('interaction-cancel',e);}ThreeDLiteRenderInvalidationService?.invalidate?.('interaction-cancel:'+reason);return true;}}); window.ThreeDLiteInteractionCancellationService=ThreeDLiteInteractionCancellationService;
+18958: /* Change 149 — immutable interaction snapshot + audit */
+18959: const ThreeDLiteInteractionSnapshotService=Object.freeze({owner:'InputManager',capture(){return Object.freeze({input:ThreeDLiteInputStateService.snapshot(),pointer:ThreeDLitePointerStateService.snapshot(),keyboard:ThreeDLiteKeyboardStateService.snapshot(),capture:ThreeDLitePointerCaptureService.snapshot(),tool:ThreeDLiteToolActivationService.snapshot(),transaction:ThreeDLiteInteractionTransactionService.current(),shortcuts:ThreeDLiteShortcutRouterService.snapshot()});},audit(){const errors=[],s=this.capture();if(s.capture.owner&&!s.input.enabled)errors.push('pointer-captured-while-input-disabled');if(s.transaction&&!s.tool.active)errors.push('interaction-transaction-without-active-tool');return Object.freeze({ok:errors.length===0,errors:Object.freeze(errors),snapshot:s});}}); window.ThreeDLiteInteractionSnapshotService=ThreeDLiteInteractionSnapshotService;
+18960: /* Change 150 — consolidated interaction facade + ownership contract */
+18961: const ThreeDLiteInteractionFacade=Object.freeze({owner:'ArchitectureCore',get input(){return ThreeDLiteInputStateService;},get pointer(){return ThreeDLitePointerStateService;},get keyboard(){return ThreeDLiteKeyboardStateService;},get shortcuts(){return ThreeDLiteShortcutRouterService;},get tools(){return ThreeDLiteToolActivationService;},get transactions(){return ThreeDLiteInteractionTransactionService;},cancel(reason){return ThreeDLiteInteractionCancellationService.cancel(reason);},snapshot(){return ThreeDLiteInteractionSnapshotService.capture();},audit(){return ThreeDLiteInteractionSnapshotService.audit();}}); window.ThreeDLiteInteractionFacade=ThreeDLiteInteractionFacade;
+18962: const ThreeDLiteInteractionOwnershipContract=Object.freeze({owner:'InputManager/ToolManager',rule:'InputManager owns raw pointer/keyboard state and shortcut routing; ToolManager owns active-tool lifecycle and interaction transactions; viewport and scene services remain observers/consumers, not input owners.',services:Object.freeze(['ThreeDLiteInputStateService','ThreeDLitePointerStateService','ThreeDLiteKeyboardStateService','ThreeDLitePointerCaptureService','ThreeDLiteShortcutRouterService','ThreeDLiteToolActivationService','ThreeDLiteInteractionTransactionService','ThreeDLiteInteractionCancellationService','ThreeDLiteInteractionSnapshotService','ThreeDLiteInteractionFacade'])}); window.ThreeDLiteInteractionOwnershipContract=ThreeDLiteInteractionOwnershipContract;
+18963: function register3DLiteBatch15Services(){const c=window.ThreeDLiteAppContext;if(!c?.register)return false;for(const [n,s] of Object.entries({InteractionCancellationService:ThreeDLiteInteractionCancellationService,InteractionSnapshotService:ThreeDLiteInteractionSnapshotService,InteractionFacade:ThreeDLiteInteractionFacade,InteractionOwnershipContract:ThreeDLiteInteractionOwnershipContract}))if(!c.get?.(n))c.register(n,s);return true;} window.register3DLiteBatch15Services=register3DLiteBatch15Services; register3DLiteBatch15Services();
+18964: function validate3DLiteBatch15(){const required=['ThreeDLiteInputStateService','ThreeDLitePointerStateService','ThreeDLiteKeyboardStateService','ThreeDLitePointerCaptureService','ThreeDLiteShortcutRouterService','ThreeDLiteToolActivationService','ThreeDLiteInteractionTransactionService','ThreeDLiteInteractionCancellationService','ThreeDLiteInteractionSnapshotService','ThreeDLiteInteractionFacade','ThreeDLiteInteractionOwnershipContract'],errors=[];for(const n of required)if(!window[n])errors.push(n+' missing');return Object.freeze({ok:errors.length===0,errors:Object.freeze(errors)});} window.validate3DLiteBatch15=validate3DLiteBatch15;
+18965: window.ThreeDLiteInteractionArchitecture=Object.freeze({version:'3.84.4-batch15-gen3',changes:Object.freeze([141,142,143,144,145,146,147,148,149,150]),ownership:ThreeDLiteInteractionOwnershipContract,validate:validate3DLiteBatch15});
+18966: 
+18967: 
+18968: /* ---------- Architecture Refactor Batch 16: mesh/topology edit ownership — Gen1 ---------- */
+18969: /* Change 151 — canonical editable-mesh registry */
+18970: const ThreeDLiteMeshRegistryService=(()=>{const meshes=new Map();let seq=0;const keyOf=(mesh)=>{if(!mesh)return null;if(!mesh.userData)mesh.userData={};if(!mesh.userData.__threeDLiteMeshId)mesh.userData.__threeDLiteMeshId='mesh-'+(++seq);return mesh.userData.__threeDLiteMeshId;};return Object.freeze({owner:'MeshManager',register(mesh){const id=keyOf(mesh);if(!id)return null;meshes.set(id,mesh);return id;},unregister(meshOrId){const id=typeof meshOrId==='string'?meshOrId:meshOrId?.userData?.__threeDLiteMeshId;return id?meshes.delete(id):false;},get(id){return meshes.get(id)||null;},idOf(mesh){return mesh?.userData?.__threeDLiteMeshId||null;},ids(){return Object.freeze([...meshes.keys()]);},snapshot(){return Object.freeze([...meshes].map(([id,m])=>Object.freeze({id,name:m?.name||'',visible:m?.visible!==false,hasGeometry:!!m?.geometry})));}});})(); window.ThreeDLiteMeshRegistryService=ThreeDLiteMeshRegistryService;
+18971: /* Change 152 — geometry/topology revision ownership */
+18972: const ThreeDLiteGeometryRevisionService=(()=>{const revisions=new WeakMap();const ensure=(g)=>{if(!g)return 0;if(!revisions.has(g))revisions.set(g,0);return revisions.get(g);};return Object.freeze({owner:'MeshManager',get(geometry){return ensure(geometry);},touch(geometry,reason='edit'){if(!geometry)return 0;const next=ensure(geometry)+1;revisions.set(geometry,next);geometry.userData=geometry.userData||{};geometry.userData.__threeDLiteRevision=next;geometry.userData.__threeDLiteLastEdit=reason;return next;},snapshot(geometry){return Object.freeze({revision:ensure(geometry),lastEdit:geometry?.userData?.__threeDLiteLastEdit||null});}});})(); window.ThreeDLiteGeometryRevisionService=ThreeDLiteGeometryRevisionService;
+18973: /* Change 153 — guarded topology mutation entry point */
+18974: const ThreeDLiteTopologyMutationService=(()=>{let active=null,seq=0;return Object.freeze({owner:'MeshManager',begin(mesh,label='topology-edit'){if(active||!mesh?.geometry)return null;ThreeDLiteMeshRegistryService.register(mesh);active={id:++seq,mesh,label,revisionBefore:ThreeDLiteGeometryRevisionService.get(mesh.geometry)};return Object.freeze({id:active.id,label,revisionBefore:active.revisionBefore});},commit(id,reason='topology-edit'){if(!active||active.id!==id)return false;const mesh=active.mesh;ThreeDLiteGeometryRevisionService.touch(mesh.geometry,reason);mesh.geometry.attributes?.position&&(mesh.geometry.attributes.position.needsUpdate=true);mesh.geometry.computeBoundingBox?.();mesh.geometry.computeBoundingSphere?.();active=null;window.ThreeDLiteDirtyFlagService?.mark?.('scene');window.ThreeDLiteRenderInvalidationService?.invalidate?.('topology:'+reason);return true;},cancel(id){if(!active||active.id!==id)return false;active=null;return true;},current(){return active?Object.freeze({id:active.id,label:active.label,meshId:ThreeDLiteMeshRegistryService.idOf(active.mesh),revisionBefore:active.revisionBefore}):null;}});})(); window.ThreeDLiteTopologyMutationService=ThreeDLiteTopologyMutationService;
+18975: /* Change 154 — geometry resource disposal boundary */
+18976: const ThreeDLiteGeometryResourceService=Object.freeze({owner:'MeshManager',disposeGeometry(geometry){if(!geometry)return false;try{geometry.dispose?.();return true;}catch(e){window.ThreeDLiteErrorBoundaryService?.report?.('geometry-dispose',e);return false;}},replaceGeometry(mesh,nextGeometry,{disposePrevious=true}={}){if(!mesh||!nextGeometry)return false;const prev=mesh.geometry;mesh.geometry=nextGeometry;ThreeDLiteGeometryRevisionService.touch(nextGeometry,'replace-geometry');if(disposePrevious&&prev&&prev!==nextGeometry)this.disposeGeometry(prev);window.ThreeDLiteRenderInvalidationService?.invalidate?.('replace-geometry');return true;}}); window.ThreeDLiteGeometryResourceService=ThreeDLiteGeometryResourceService;
+18977: function register3DLiteBatch16Gen1(){const c=window.ThreeDLiteAppContext;if(!c?.register)return false;for(const [n,s] of Object.entries({MeshRegistryService:ThreeDLiteMeshRegistryService,GeometryRevisionService:ThreeDLiteGeometryRevisionService,TopologyMutationService:ThreeDLiteTopologyMutationService,GeometryResourceService:ThreeDLiteGeometryResourceService}))if(!c.get?.(n))c.register(n,s);return true;} window.register3DLiteBatch16Gen1=register3DLiteBatch16Gen1; register3DLiteBatch16Gen1();
+18978: 
+18979: 
+18980: 
+18981: /* ---------- Architecture Refactor Batch 16: mesh/topology edit ownership — Gen2 ---------- */
+18982: /* Change 155 — mesh edit transaction bridge */
+18983: const ThreeDLiteMeshEditTransactionService=Object.freeze({owner:'MeshManager',begin(mesh,label='mesh-edit'){const tx=ThreeDLiteTopologyMutationService.begin(mesh,label);if(!tx)return null;window.ThreeDLiteTransactionService?.begin?.('mesh:'+label);return tx;},commit(id,reason='mesh-edit'){const ok=ThreeDLiteTopologyMutationService.commit(id,reason);if(ok)window.ThreeDLiteTransactionService?.commit?.();return ok;},cancel(id){const ok=ThreeDLiteTopologyMutationService.cancel(id);if(ok)window.ThreeDLiteTransactionService?.rollback?.();return ok;}}); window.ThreeDLiteMeshEditTransactionService=ThreeDLiteMeshEditTransactionService;
+18984: /* Change 156 — derived-geometry invalidation */
+18985: const ThreeDLiteDerivedGeometryInvalidationService=Object.freeze({owner:'MeshManager',invalidate(mesh,{normals=true,bounds=true,wireframe=true}={}){const g=mesh?.geometry;if(!g)return false;if(normals&&g.attributes?.normal)g.attributes.normal.needsUpdate=true;if(bounds){g.boundingBox=null;g.boundingSphere=null;g.computeBoundingBox?.();g.computeBoundingSphere?.();}if(wireframe&&g.userData)delete g.userData.__threeDLiteWireCache;ThreeDLiteGeometryRevisionService.touch(g,'derived-invalidation');window.ThreeDLiteRenderInvalidationService?.invalidate?.('derived-geometry');return true;}}); window.ThreeDLiteDerivedGeometryInvalidationService=ThreeDLiteDerivedGeometryInvalidationService;
+18986: /* Change 157 — structural mesh validation */
+18987: const ThreeDLiteMeshValidationService=Object.freeze({owner:'MeshManager',validate(mesh){const errors=[],warnings=[];const g=mesh?.geometry;if(!mesh)errors.push('mesh-missing');if(mesh&&!g)errors.push('geometry-missing');const pos=g?.attributes?.position;if(g&&!pos)errors.push('position-attribute-missing');if(pos&&pos.itemSize!==3)errors.push('position-itemsize-not-3');if(pos&&pos.count===0)warnings.push('geometry-empty');const idx=g?.index;if(idx&&idx.count%3!==0)errors.push('index-count-not-triangular');if(pos){const a=pos.array;for(let i=0;i<a.length;i++){if(!Number.isFinite(a[i])){errors.push('non-finite-position');break;}}}return Object.freeze({ok:errors.length===0,errors:Object.freeze(errors),warnings:Object.freeze(warnings),meshId:ThreeDLiteMeshRegistryService.idOf(mesh),revision:g?ThreeDLiteGeometryRevisionService.get(g):0});}}); window.ThreeDLiteMeshValidationService=ThreeDLiteMeshValidationService;
+18988: function register3DLiteBatch16Gen2(){const c=window.ThreeDLiteAppContext;if(!c?.register)return false;for(const [n,s] of Object.entries({MeshEditTransactionService:ThreeDLiteMeshEditTransactionService,DerivedGeometryInvalidationService:ThreeDLiteDerivedGeometryInvalidationService,MeshValidationService:ThreeDLiteMeshValidationService}))if(!c.get?.(n))c.register(n,s);return true;} window.register3DLiteBatch16Gen2=register3DLiteBatch16Gen2; register3DLiteBatch16Gen2();
+18989: 
+18990: 
