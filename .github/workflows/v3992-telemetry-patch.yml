@@ -1,0 +1,76 @@
+name: v3.99.2 LiteTrace Telemetry Patch
+
+on:
+  push:
+    branches: [v3.99.2-telemetry-gate]
+    paths:
+      - '.github/workflows/v3992-telemetry-patch.yml'
+      - 'patches/v3.99.2/**'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v3.99.2-telemetry-gate
+          fetch-depth: 0
+
+      - name: Patch telemetry against actual LiteTrace job path
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          if 'id="l3n-litetrace-telemetry-3992"' in s:
+              print('v3.99.2 telemetry already present')
+              raise SystemExit(0)
+          if '</body>' not in s:
+              raise SystemExit('release-blocking: </body> anchor missing')
+          if 'var BasicDirectRenderer=Object.freeze({' not in s:
+              raise SystemExit('release-blocking: BasicDirectRenderer anchor missing')
+          if 'const FastRenderDiagnostics=Object.freeze({' not in s:
+              raise SystemExit('release-blocking: FastRenderDiagnostics anchor missing')
+          if 'class RenderJobController' not in s or 'this.activeJob=job;' not in s or 'this.lastJob=job;' not in s:
+              raise SystemExit('release-blocking: RenderJobController job ownership mismatch')
+          if 'job.beautyFrame=diagnostic;' not in s:
+              raise SystemExit('release-blocking: renderer result storage anchor missing')
+          if 'job.performance=Object.freeze({' not in s:
+              raise SystemExit('release-blocking: final performance storage anchor missing')
+          patch=Path('patches/v3.99.2/litetrace-telemetry.js').read_text(encoding='utf-8')
+          s=s.replace('</body>', patch+'\n</body>', 1)
+          s=s.replace('<title>3DLite v3.99.1 Adaptive Render Code Export</title>', '<title>3DLite v3.99.2 LiteTrace Telemetry Gate</title>', 1)
+          p.write_text(s,encoding='utf-8')
+          PY
+
+      - name: Structural gate
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs=require('fs');const h=fs.readFileSync('index.html','utf8');const f=[];
+          if(!/id="l3n-litetrace-telemetry-3992"/.test(h))f.push('telemetry block missing');
+          if(!/RenderFramework\?\.jobs\?\.activeJob/.test(h))f.push('actual active-job path missing');
+          if(!/const\s+metadata\s*=\s*frame\?\.metadata/.test(h))f.push('renderer metadata source missing');
+          if(!/fastDiagnostics\s*=.*metadata\?\.diagnostics/.test(h))f.push('Fast diagnostics source missing');
+          if(!/rendererPerformance\s*=\s*metadata\?\.performance/.test(h))f.push('renderer metadata performance source missing');
+          if(!/finalPerformance\s*=\s*job\?\.performance/.test(h))f.push('final job performance source missing');
+          const ids=[...h.matchAll(/\bid\s*=\s*["']([^"']+)["']/gi)].map(x=>x[1]);const seen=new Set(),dup=[];for(const id of ids){if(seen.has(id))dup.push(id);else seen.add(id)}if(dup.length)f.push('duplicate ids: '+[...new Set(dup)].join(','));
+          const ext=[...h.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].filter(m=>/\bsrc\s*=/.test(m[1])&&(m[2]||'').trim());if(ext.length)f.push('external script inline bodies: '+ext.length);
+          const loops=(h.match(/requestAnimationFrame\s*\(\s*animate\s*\)/g)||[]).length;if(loops!==1)f.push('animation loop owners='+loops);
+          if(f.length){console.error(f.join('\n'));process.exit(1)}
+          console.log('v3.99.2 telemetry structural gate passed');
+          NODE
+
+      - name: Commit gated index
+        shell: bash
+        run: |
+          if git diff --quiet -- index.html; then exit 0; fi
+          git config user.name '3DLite Gate'
+          git config user.email 'actions@users.noreply.github.com'
+          git add index.html
+          git commit -m 'Gate 3DLite v3.99.2 LiteTrace telemetry wiring'
+          git push origin HEAD:v3.99.2-telemetry-gate
