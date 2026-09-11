@@ -142,7 +142,7 @@
   "legacyTelemetry": {
     "schema": 3,
     "version": "4.44.0",
-    "generatedAt": "2026-09-11T22:15:24.197Z",
+    "generatedAt": "2026-09-11T22:17:09.927Z",
     "renderer": "LitePix",
     "status": null,
     "progress": null,
@@ -303,10 +303,10 @@
       "note": "Historical MaxPix source/API was not found as a separately identifiable module in the protected pre-LitePix repository, so symbol-by-symbol certification remains intentionally false."
     },
     "performance": {
-      "totalMs": 307.89999999990687,
-      "traceMs": 198.89999999990687,
+      "totalMs": 304.30000000001746,
+      "traceMs": 202.89999999999418,
       "actualRays": 4268,
-      "raysPerSecond": 21458,
+      "raysPerSecond": 21035,
       "samples": 4080,
       "yields": 32,
       "bvhBuildMs": null
