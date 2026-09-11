@@ -1,0 +1,80 @@
+name: v3.99.2 Live Pages Runtime Gate
+
+on:
+  push:
+    branches: [v3.99.2-live-runtime-gate]
+    paths:
+      - '.github/workflows/v3992-live-runtime-gate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  live-runtime-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install browser probe
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium
+
+      - name: Probe deployed v3.99.2 runtime
+        shell: bash
+        run: |
+          node <<'NODE'
+          const { chromium } = require('playwright');
+          (async()=>{
+            const url='https://3dmk.github.io/3D_Lite/';
+            const browser=await chromium.launch({headless:true,args:['--use-gl=swiftshader','--enable-webgl','--ignore-gpu-blocklist']});
+            const page=await browser.newPage({viewport:{width:1440,height:1000}});
+            const consoleErrors=[];
+            const pageErrors=[];
+            page.on('console',msg=>{ if(msg.type()==='error') consoleErrors.push(msg.text()); });
+            page.on('pageerror',err=>pageErrors.push(String(err?.stack||err)));
+            const response=await page.goto(url,{waitUntil:'domcontentloaded',timeout:120000});
+            await page.waitForTimeout(7000);
+            const status=response?.status()||0;
+            const title=await page.title();
+            const result=await page.evaluate(()=>{
+              const t=window.ThreeDLiteLiteTraceTelemetry3992;
+              const snap=t?.snapshot?.()||null;
+              const buttons=[...document.querySelectorAll('button')].map((b,i)=>({i,text:(b.textContent||'').trim(),id:b.id||null,disabled:!!b.disabled})).filter(x=>x.text||x.id);
+              const inputs=[...document.querySelectorAll('input,select')].map((e,i)=>({i,tag:e.tagName,id:e.id||null,name:e.getAttribute('name'),type:e.getAttribute('type'),value:e.value}));
+              return {
+                marker:window.__3DLiteLiteTraceTelemetry3992===true,
+                telemetryVersion:t?.version||null,
+                datasetVersion:document.documentElement.dataset.liteTraceTelemetryVersion||null,
+                snapshot:snap,
+                renderFramework:!!window.RenderFramework,
+                jobs:!!window.RenderFramework?.jobs,
+                activeJob:!!window.RenderFramework?.jobs?.activeJob,
+                lastJob:!!window.RenderFramework?.jobs?.lastJob,
+                canvases:document.querySelectorAll('canvas').length,
+                buttons,
+                inputs
+              };
+            });
+            console.log(JSON.stringify({url,status,title,...result,consoleErrors,pageErrors},null,2));
+            const failures=[];
+            if(status<200||status>=400) failures.push('HTTP status '+status);
+            if(!/3DLite v3\.99\.2/.test(title)) failures.push('title is not v3.99.2');
+            if(!result.marker) failures.push('runtime telemetry marker missing');
+            if(result.telemetryVersion!=='3.99.2') failures.push('telemetry object version mismatch');
+            if(result.datasetVersion!=='3.99.2') failures.push('DOM dataset telemetry version mismatch');
+            if(!result.renderFramework||!result.jobs) failures.push('RenderFramework.jobs unavailable');
+            if(result.canvases<1) failures.push('no viewport canvas found');
+            if(pageErrors.length) failures.push('page errors: '+pageErrors.length);
+            if(failures.length){ console.error('LIVE RUNTIME GATE FAILED\n'+failures.join('\n')); process.exitCode=1; }
+            else console.log('LIVE RUNTIME GATE PASSED');
+            await browser.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
