@@ -1,0 +1,88 @@
+name: LitePix v4.44 Legacy Migration Gate
+on:
+  push:
+    branches: [litepix-v4.44-legacy-migration]
+permissions:
+  contents: write
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - name: Apply legacy migration bridge
+        run: python3 patches/litepix/v4.44/apply-legacy-migration.py
+      - name: Structural and syntax release gate
+        run: |
+          set -euo pipefail
+          node --check litepix/legacy-migration-v4.44.js
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('index.html').read_text(encoding='utf-8')
+          req=['3D Lite — LitePix v4.44.0 Legacy Migration',"version:'4.44.0'",'legacy-migration-v4.44.js','litePixLegacyMigration:window.LitePixLegacyMigration444?.audit?.()','root.__3DLiteMaterialLinearColor3996=true;']
+          miss=[x for x in req if x not in s]
+          if miss: raise SystemExit('missing '+repr(miss))
+          ids=re.findall(r'\bid\s*=\s*["\']([^"\']+)["\']',s,re.I)
+          if len(ids)!=len(set(ids)): raise SystemExit('duplicate ids found')
+          scripts=re.findall(r'<script\b([^>]*)>([\s\S]*?)</script>',s,re.I)
+          if any(re.search(r'\bsrc\s*=',a) and b.strip() for a,b in scripts): raise SystemExit('external script inline body found')
+          if len(re.findall(r'requestAnimationFrame\s*\(\s*animate\s*\)',s))!=1: raise SystemExit('animation loop owner mismatch')
+          print('LitePix v4.44 structural gate passed')
+          PY
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null
+      - name: Browser legacy migration gate
+        run: |
+          set -euo pipefail
+          python3 -m http.server 8000 >/tmp/lp444-http.log 2>&1 &
+          PID=$!
+          trap 'kill $PID || true' EXIT
+          node <<'NODE' | tee /tmp/lp444.json
+          const {chromium}=require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--use-gl=swiftshader','--enable-webgl','--ignore-gpu-blocklist']});
+            const page=await browser.newPage({viewport:{width:1280,height:900}}),pageErrors=[],consoleErrors=[];
+            page.on('pageerror',e=>pageErrors.push(String(e?.stack||e)));page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
+            const response=await page.goto('http://127.0.0.1:8000/index.html',{waitUntil:'domcontentloaded',timeout:120000});await page.waitForTimeout(2500);
+            const result=await page.evaluate(async()=>{
+              const bridge=window.LitePixLegacyMigration444;
+              const normalized=bridge.normalizeSettings({renderEngine:'PATH',maxBounces:5,spp:7,noiseThreshold:.02,renderWidth:320,renderHeight:180});
+              const audit=bridge.audit();
+              const legacyTelemetry=window.ThreeDLiteLiteTraceTelemetry3992?.snapshot?.()||null;
+              const mat=new THREE.MeshStandardMaterial({color:0xb8b8b8,roughness:.6,metalness:.05});
+              const g=new THREE.BoxGeometry(30,30,30),m=new THREE.Mesh(g,mat);m.name='LP444_AuditBox';m.position.set(0,0,15);scene.add(m);objects.push(m);
+              camera.position.set(90,-120,80);camera.up.set(0,0,1);camera.lookAt(0,0,15);camera.updateMatrixWorld(true);camera.updateProjectionMatrix();
+              window.__3DLiteSceneRevision=(window.__3DLiteSceneRevision||0)+1;window.__3DLiteGeometryRevision=(window.__3DLiteGeometryRevision||0)+1;
+              const sv=(id,v)=>{const e=document.getElementById(id);if(!e)return;e.value=String(v);e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));};
+              sv('rsEngine','path');sv('rsWidth',80);sv('rsHeight',48);sv('rsBounces',2);sv('rsMinSamples',1);sv('rsMaxSamples',1);sv('rsNoise',.05);sv('rsExposure',0);
+              const prior=RenderFramework?.jobs?.lastJob?.id||0;document.getElementById('renderNowBtn').click();let job=null;
+              while(true){await new Promise(r=>setTimeout(r,40));const j=RenderFramework.jobs.lastJob;if(j&&j.id!==prior&&j.finished&&j.performance){job=j;break;}}
+              const meta=job.beautyFrame?.metadata||{};
+              return{identity:{title:document.title,version:window.LitePixVersion?.version,marker:window.__LitePixLegacyMigration444===true},normalized,audit,legacyTelemetry,render:{secondaryGI:meta.secondaryGI||null,migration:meta.litePixLegacyMigration||null,performance:job.performance||null}};
+            });
+            const f=[];if(response?.status()!==200)f.push('HTTP != 200');if(result.identity.version!=='4.44.0'||!result.identity.marker||!result.identity.title.startsWith('3D Lite'))f.push('identity mismatch');
+            if(result.normalized.engine!=='path'||result.normalized.bounces!==5||result.normalized.maxSamples!==7||result.normalized.noise!==.02||result.normalized.width!==320||result.normalized.height!==180)f.push('legacy settings normalization failed');
+            if(!result.audit.operationalComplete)f.push('runtime migration capabilities incomplete '+JSON.stringify(result.audit.missingRuntimeCapabilities));
+            if(result.audit.historicalComplete)f.push('historical MaxPix completeness must remain uncertified without source');
+            if(!result.legacyTelemetry||result.legacyTelemetry.renderer!=='LitePix')f.push('LiteTrace telemetry compatibility alias missing');
+            if(!result.render.migration||result.render.migration.version!=='4.44.0')f.push('migration audit metadata missing');
+            if(result.render.secondaryGI!=='Light Cache')f.push('Light Cache inactive');if(pageErrors.length)f.push('page errors '+pageErrors.length);if(consoleErrors.length)f.push('console errors '+consoleErrors.length);
+            const out={passed:!f.length,...result,pageErrors,consoleErrors,failures:f};console.log(JSON.stringify(out,null,2));await browser.close();if(f.length)process.exit(1);
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+      - name: Save report
+        run: mkdir -p reports/litepix && cp /tmp/lp444.json reports/litepix/v4.44-legacy-migration-report.json
+      - name: Commit gated build
+        run: |
+          git config user.name 'LitePix v4.44 Gate'
+          git config user.email 'actions@users.noreply.github.com'
+          git add index.html reports/litepix/v4.44-legacy-migration-report.json
+          git commit -m 'Gate 3D Lite LitePix v4.44 legacy migration bridge' || exit 0
+          git push origin HEAD:litepix-v4.44-legacy-migration
