@@ -1,0 +1,59 @@
+name: L3N v3.98.1 Light Gizmo Browser Smoke
+on:
+  push:
+    branches: [l3n-dev]
+    paths:
+      - '.l3n-browser-smoke-v3981-trigger'
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Playwright
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null
+          npx playwright install --with-deps chromium >/dev/null
+      - name: Start local server
+        run: python3 -m http.server 8000 >/tmp/3dlite-server.log 2>&1 &
+      - name: Run light gizmo browser smoke
+        run: |
+          cat > smoke3981.js <<'NODE'
+          const { chromium } = require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--use-angle=swiftshader','--enable-webgl','--ignore-gpu-blocklist']});
+            const page=await browser.newPage({viewport:{width:1280,height:900}});
+            const errors=[];
+            page.on('pageerror',e=>errors.push(String(e)));
+            page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
+            await page.goto('http://127.0.0.1:8000/index.html',{waitUntil:'load',timeout:60000});
+            await page.waitForFunction(()=>window.THREE&&window.EditorLightSystem&&window.ThreeDLiteLightGizmo3981,{timeout:30000});
+            const result=await page.evaluate(()=>{
+              const types=['point','spot','rectangle','disc','sphere','sun','dome','mesh'];
+              const made=[];
+              for(const type of types){
+                const o=EditorLightSystem.create(type,{size:12,color:'#ffd27a',width:40,height:24,coneAngle:42});
+                made.push({type,isLineSegments:!!o?.isLineSegments,count:o?.geometry?.getAttribute?.('position')?.count||0,depthTest:o?.material?.depthTest,renderOrder:o?.renderOrder,serial:EditorLightSystem.serialize(o)});
+              }
+              const snap=RenderSceneBoundary.buildSnapshot();
+              return {made,lightCount:snap.lights.length,version:window.ThreeDLiteLightGizmo3981.version,title:document.title,canvas:!!document.querySelector('canvas')};
+            });
+            if(result.version!=='3.98.1')throw new Error('wrong gizmo version '+result.version);
+            if(!result.canvas)throw new Error('viewport canvas missing');
+            if(result.made.length!==8||result.lightCount<8)throw new Error('light creation/snapshot failed '+JSON.stringify(result));
+            for(const x of result.made){
+              if(!x.isLineSegments||x.count<2||x.depthTest!==false||x.renderOrder!==1000)throw new Error('bad gizmo '+JSON.stringify(x));
+              if(!x.serial||!Array.isArray(x.serial.direction)||x.serial.direction.some(v=>!Number.isFinite(v)))throw new Error('bad serialization '+JSON.stringify(x));
+            }
+            if(errors.length)throw new Error('page errors '+errors.join('\n'));
+            console.log(JSON.stringify(result,null,2));
+            await browser.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+          node smoke3981.js
