@@ -71,10 +71,10 @@ jobs:
           for (const name of serviceNames) { if (seenServices.has(name)) duplicateServices.add(name); else seenServices.add(name); }
           if (duplicateServices.size) failures.push('Duplicate project service declarations: ' + [...duplicateServices].join(', '));
 
-          const titleMatch = html.match(/<title>(?:LitePix|3DLite)\s+v(\d+\.\d+\.\d+)[^<]*<\/title>/i);
-          if (!titleMatch) failures.push('LitePix/3DLite semantic version missing from document title');
+          const titleMatch = html.match(/<title>(?:(?:LitePix|3DLite)\s+v|3D\s+Lite(?:\s+—\s+LitePix)?\s+v?)(\d+\.\d+\.\d+)[^<]*<\/title>/i) || html.match(/<title>3D\s+Lite\s+—\s+LitePix\s+v(\d+\.\d+\.\d+)[^<]*<\/title>/i);
+          if (!titleMatch) failures.push('3D Lite/LitePix semantic version missing from document title');
           const versionMatch = html.match(/const LitePixVersion=Object\.freeze\(\{name:'LitePix',version:'(\d+\.\d+\.\d+)'/);
-          if (/<title>LitePix\b/i.test(html) && !versionMatch) failures.push('LitePix title present without central LitePixVersion owner');
+          if (!versionMatch) failures.push('Central LitePixVersion owner missing');
           if (titleMatch && versionMatch && titleMatch[1] !== versionMatch[1]) failures.push(`LitePix title/version owner mismatch: ${titleMatch[1]} vs ${versionMatch[1]}`);
           if (/3DLite v3\.93\.0 — L3N Runtime Learning/.test(html)) warnings.push('Stale v3.93.0 Runtime Learning section comment remains; non-blocking documentation debt.');
 
@@ -93,7 +93,7 @@ jobs:
         shell: bash
         run: |
           {
-            echo '## LitePix / 3DLite L3N Release Gate'
+            echo '## 3D Lite / LitePix L3N Release Gate'
             echo ''
             echo '- Branch: `${{ github.ref_name }}`'
             echo '- Commit: `${{ github.sha }}`'
