@@ -55,13 +55,16 @@ jobs:
             const response=await page.goto('http://127.0.0.1:8000/index.html',{waitUntil:'domcontentloaded',timeout:120000});
             await page.waitForTimeout(2500);
             const result=await page.evaluate(async()=>{
-              for(const o of [...scene.children])if(o?.isMesh||o?.isLight){scene.remove(o);try{o.geometry?.dispose?.();}catch(_){} }
+              for(const o of [...objects]){try{scene.remove(o);}catch(_){}try{o.geometry?.dispose?.();}catch(_){}}
               objects.length=0;
               const floorMat=new THREE.MeshStandardMaterial({color:0x9a9a9a,roughness:.72,metalness:0});
               const boxMat=new THREE.MeshStandardMaterial({color:0xb86d43,roughness:.48,metalness:.03});
               const floor=new THREE.Mesh(new THREE.PlaneGeometry(180,140,1,1),floorMat);floor.name='LP445_Floor';floor.position.set(0,0,0);scene.add(floor);objects.push(floor);
               const box=new THREE.Mesh(new THREE.BoxGeometry(34,34,34),boxMat);box.name='LP445_Blocker';box.position.set(0,0,17);scene.add(box);objects.push(box);
-              const light=new THREE.PointLight(0xffffff,1600,260,2);light.name='LP445_Point';light.position.set(-38,-35,78);light.castShadow=true;scene.add(light);
+              if(!window.EditorLightSystem?.create)throw new Error('EditorLightSystem unavailable');
+              const light=EditorLightSystem.create('point',{intensity:1600,color:'#ffffff',range:260,size:1,castShadows:true});
+              light.name='LP445_Point';light.position.set(-38,-35,78);light.updateMatrixWorld(true);
+              window.__3DLiteLightRevision=(window.__3DLiteLightRevision||0)+1;
               camera.position.set(105,-135,92);camera.up.set(0,0,1);camera.lookAt(0,0,12);camera.updateMatrixWorld(true);camera.updateProjectionMatrix();
               window.__3DLiteSceneRevision=(window.__3DLiteSceneRevision||0)+1;window.__3DLiteGeometryRevision=(window.__3DLiteGeometryRevision||0)+1;
               const val=(id,v)=>{const e=document.getElementById(id);if(!e)return;e.value=String(v);e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));};
@@ -76,7 +79,7 @@ jobs:
                 while(performance.now()<deadline){await new Promise(r=>setTimeout(r,30));const j=RenderFramework.jobs.lastJob;if(j&&j.id!==prior&&j.finished&&j.performance){job=j;break;}}
                 if(!job)throw new Error('render timeout');
                 const frame=job.beautyFrame,meta=frame?.metadata||{};
-                return {rgba:Array.from(frame?.rgba||[]),budget:meta.litePixRayBudget||null,performance:meta.performance||job.performance||null,secondaryGI:meta.secondaryGI||null,core2:meta.litePixCore2Production||null};
+                return {rgba:Array.from(frame?.rgba||[]),budget:meta.litePixRayBudget||null,performance:meta.performance||job.performance||null,secondaryGI:meta.secondaryGI||null,core2:meta.litePixCore2Production||null,lights:job.renderScene?.lights||null};
               };
               const baseline=await render(false);
               const optimized=await render(true);
@@ -91,6 +94,7 @@ jobs:
             const b=result.baseline.budget,o=result.optimized.budget;
             if(!b||!o)f.push('ray budget metadata missing');
             if(b?.enabled!==false||o?.enabled!==true)f.push('feature toggle ownership failed');
+            if(!(result.optimized.lights||[]).some(l=>l?.castShadows!==false))f.push('controlled render light missing or shadows disabled');
             if((b?.requestedShadowTests||0)<20000)f.push('controlled scene produced too few baseline shadow tests');
             if((o?.shadowReductionRatio||0)<6)f.push('shadow reduction below 6x');
             if((o?.tracedShadowRays||Infinity)>15000)f.push('optimized traced shadow rays above 15k target');
