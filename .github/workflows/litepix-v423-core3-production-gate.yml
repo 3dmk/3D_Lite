@@ -1,0 +1,81 @@
+name: LitePix v4.23 Core3 Production Gate
+on:
+  push:
+    branches: [litepix-v4.20-v4.23-core3-production]
+permissions:
+  contents: write
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - name: Apply cumulative Core3 stages
+        run: python3 patches/litepix/v4.23/apply-core3-production.py
+      - name: Structural and syntax release gate
+        run: |
+          set -euo pipefail
+          node --check litepix/core3-raster-guide.js
+          node --check litepix/core3-gbuffer-v4.20.js
+          node --check litepix/core3-pyramid-v4.21.js
+          node --check litepix/core3-temporal-v4.22.js
+          node --check litepix/core3-production-v4.23.js
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('index.html').read_text(encoding='utf-8')
+          req=['LitePix v4.23.0 Core3 Production Raster Guide',"version:'4.23.0'",'core3-gbuffer-v4.20.js','core3-pyramid-v4.21.js','core3-temporal-v4.22.js','core3-production-v4.23.js','job.litePixCore3Production423=litePixCore3Production423','litePixCore3Production423.recordPrimary','litePixCore3Production:job.litePixCore3Stats423','root.__3DLiteMaterialLinearColor3996=true;','core2-production-v4.19.js']
+          miss=[x for x in req if x not in s]
+          if miss: raise SystemExit('missing '+repr(miss))
+          ids=re.findall(r'\bid\s*=\s*["\']([^"\']+)["\']',s,re.I)
+          if len(ids)!=len(set(ids)): raise SystemExit('duplicate ids found')
+          scripts=re.findall(r'<script\b([^>]*)>([\s\S]*?)</script>',s,re.I)
+          if any(re.search(r'\bsrc\s*=',a) and b.strip() for a,b in scripts): raise SystemExit('external script inline body found')
+          if len(re.findall(r'requestAnimationFrame\s*\(\s*animate\s*\)',s))!=1: raise SystemExit('animation loop owner mismatch')
+          print('LitePix v4.23 structural gate passed')
+          PY
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null
+      - name: Browser Core3 production gate
+        run: |
+          set -euo pipefail
+          python3 -m http.server 8000 >/tmp/lp423-http.log 2>&1 &
+          PID=$!
+          trap 'kill $PID || true' EXIT
+          node <<'NODE' | tee /tmp/lp423.json
+          const {chromium}=require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--use-gl=swiftshader','--enable-webgl','--ignore-gpu-blocklist']});
+            const page=await browser.newPage({viewport:{width:1280,height:900}}),pageErrors=[],consoleErrors=[];
+            page.on('pageerror',e=>pageErrors.push(String(e?.stack||e)));page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
+            const response=await page.goto('http://127.0.0.1:8000/index.html',{waitUntil:'domcontentloaded',timeout:120000});await page.waitForTimeout(2500);
+            const result=await page.evaluate(async()=>{
+              const mat0=new THREE.MeshStandardMaterial({color:0xb0b0b0,roughness:.72,metalness:.05}),mat1=new THREE.MeshStandardMaterial({color:0x7898bc,roughness:.28,metalness:.32});
+              const g0=new THREE.BoxGeometry(18,18,18),g1=new THREE.SphereGeometry(10,12,8),test=[];
+              for(let i=0;i<18;i++){const m=new THREE.Mesh(i<9?g0:g1,i<9?mat0:mat1);m.name='LP423_'+i;m.position.set((i%6-2.5)*27,(Math.floor(i/6)-1)*29,13+(i>=9?4:0));scene.add(m);objects.push(m);test.push(m);}
+              camera.position.set(145,-205,125);camera.up.set(0,0,1);camera.lookAt(0,0,12);camera.updateMatrixWorld(true);camera.updateProjectionMatrix();window.__3DLiteSceneRevision=(window.__3DLiteSceneRevision||0)+1;window.__3DLiteGeometryRevision=(window.__3DLiteGeometryRevision||0)+1;
+              const sv=(id,v)=>{const e=document.getElementById(id);if(!e)return;e.value=String(v);e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));};sv('rsEngine','path');sv('rsWidth',96);sv('rsHeight',54);sv('rsBounces',3);sv('rsMinSamples',1);sv('rsMaxSamples',2);sv('rsNoise',.05);sv('rsExposure',0);
+              async function render(enabled){window.__LitePixCore3Production423Enabled=enabled;const prior=RenderFramework?.jobs?.lastJob?.id||0,t=Date.now();document.getElementById('renderNowBtn').click();while(true){await new Promise(r=>setTimeout(r,40));const j=RenderFramework.jobs.lastJob;if(j&&j.id!==prior&&j.finished&&j.performance){const rgba=j.beautyFrame?.rgba||j.beautyFrame?.data||null;return{wallMs:Date.now()-t,performance:j.performance,secondaryGI:j.beautyFrame?.metadata?.secondaryGI||null,core3:j.beautyFrame?.metadata?.litePixCore3Production||null,core2:j.beautyFrame?.metadata?.litePixCore2Production||null,rgba:rgba?Array.from(rgba):null};}}}
+              const first=await render(true),second=await render(true),off=await render(false);let maxPixelDiff=Infinity,meanPixelDiff=Infinity;if(second.rgba&&off.rgba&&second.rgba.length===off.rgba.length){let mx=0,sum=0;for(let i=0;i<off.rgba.length;i++){const d=Math.abs(second.rgba[i]-off.rgba[i]);if(d>mx)mx=d;sum+=d;}maxPixelDiff=mx;meanPixelDiff=sum/off.rgba.length;}for(const x of [first,second,off])delete x.rgba;
+              return{identity:{title:document.title,version:window.LitePixVersion?.version,m423:window.__LitePixCore3Production423===true,m422:window.__LitePixCore3Temporal422===true,m421:window.__LitePixCore3Pyramid421===true,m420:window.__LitePixCore3GBuffer420===true,core3Version:window.LitePixNative?.Core3?.version},first,second,off,maxPixelDiff,meanPixelDiff};
+            });
+            const f=[];if(response?.status()!==200)f.push('HTTP != 200');if(result.identity.version!=='4.23.0'||result.identity.core3Version!=='4.23.0'||!result.identity.m423||!result.identity.m422||!result.identity.m421||!result.identity.m420)f.push('Core3 identity mismatch');
+            const c=result.first.core3;if(!c||c.version!=='4.23.0')f.push('Core3 production metadata missing');if(!(c.gbuffer?.validPixels>0&&c.gbuffer?.coverage>0))f.push('G-buffer captured no primary hits');if(!(c.pyramid?.levels?.length>1))f.push('guide pyramid not built');if(!(result.second.core3?.temporal?.frames>=2))f.push('temporal history did not persist');if(!(result.second.core3?.temporalTests>0&&result.second.core3?.temporal?.accepted>0))f.push('temporal reprojection validation inactive');if(result.first.secondaryGI!=='Light Cache'||result.second.secondaryGI!=='Light Cache'||result.off.secondaryGI!=='Light Cache')f.push('Light Cache inactive');if(!result.first.core2||result.first.core2.version!=='4.19.0')f.push('Core2 production path lost');if(!(result.maxPixelDiff<=1&&result.meanPixelDiff<=0.02))f.push('Core3 observer changed render output '+result.maxPixelDiff+'/'+result.meanPixelDiff);if(pageErrors.length)f.push('page errors '+pageErrors.length);if(consoleErrors.length)f.push('console errors '+consoleErrors.length);
+            const out={passed:!f.length,...result,pageErrors,consoleErrors,failures:f};console.log(JSON.stringify(out,null,2));await browser.close();if(f.length)process.exit(1);
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+      - name: Save report
+        run: mkdir -p reports/litepix && cp /tmp/lp423.json reports/litepix/v4.23-core3-production-report.json
+      - name: Commit gated build
+        run: |
+          git config user.name 'LitePix v4.23 Gate'
+          git config user.email 'actions@users.noreply.github.com'
+          git add index.html reports/litepix/v4.23-core3-production-report.json
+          git commit -m 'Gate LitePix v4.23 Core3 production pass' || exit 0
+          git push origin HEAD:litepix-v4.20-v4.23-core3-production
