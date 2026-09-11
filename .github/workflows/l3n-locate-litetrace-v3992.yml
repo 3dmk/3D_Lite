@@ -1,0 +1,12 @@
+name: L3N Locate LiteTrace v3.99.2
+on:
+  push:
+    branches: [l3n-dev]
+    paths: ['.l3n-locate-litetrace-v3992-trigger']
+jobs:
+  locate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: l3n-dev}
+      - run: python tools/l3n_locate_litetrace_v3992.py
