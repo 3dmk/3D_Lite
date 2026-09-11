@@ -1,0 +1,25 @@
+name: L3N inspect LiteTrace v3.97.8
+on:
+  push:
+    branches: [l3n-dev]
+    paths: ['.l3n-inspect-litetrace-v3978-trigger']
+permissions:
+  contents: write
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: l3n-dev
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - run: python tools/inspect_litetrace_v3978.py
+      - name: Commit inspection
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tools/litetrace_context_v3978.txt
+          git commit -m 'Temporary LiteTrace v3.97.8 inspection' || true
+          git push origin HEAD:l3n-dev
