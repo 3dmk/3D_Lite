@@ -27,9 +27,9 @@ if 'const visible445=job.litePixRayBudget445' not in g:
     if g.count(old_vis)!=1: raise SystemExit('release-blocking: Group9 shadow visibility anchor mismatch')
     g=g.replace(old_vis,new_vis,1)
 s=s[:start]+g+s[end:]
-# Path renderer owns one budget/cache per render job
+# Path renderer always owns the budget object so baseline/off runs retain telemetry.
 anchor='job.pathGuide=RenderCoreH.createPathGuide(job,acceleration);'
-insert=anchor+"\n    const litePixRayBudget445=(window.__LitePixRayBudget445Enabled!==false&&typeof window.LitePixRayBudget445==='function')?new window.LitePixRayBudget445(job,acceleration,compiled,width,height):null;\n    job.litePixRayBudget445=litePixRayBudget445;"
+insert=anchor+"\n    const litePixRayBudget445=(typeof window.LitePixRayBudget445==='function')?new window.LitePixRayBudget445(job,acceleration,compiled,width,height):null;\n    job.litePixRayBudget445=litePixRayBudget445;"
 if 'job.litePixRayBudget445=litePixRayBudget445' not in s:
     if anchor not in s: raise SystemExit('release-blocking: Path guide anchor missing')
     s=s.replace(anchor,insert,1)
