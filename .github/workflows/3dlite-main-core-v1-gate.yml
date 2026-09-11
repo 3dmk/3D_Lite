@@ -73,7 +73,7 @@ jobs:
             if(response?.status()!==200)failures.push('HTTP != 200');
             if(result.missing||!result.marker||result.version!=='1.0.0')failures.push('Main Core identity missing');
             if(result.value!==42||!(result.after.transform>result.before.transform))failures.push('committed transaction/generation failed');
-            if(!(result.afterLegacy>=result.beforeLegacy))failures.push('legacy revision bridge regressed');
+            if(!(result.afterLegacy>result.beforeLegacy))failures.push('legacy revision bridge did not invalidate scene');
             if(!result.rollbackCaught||result.rollbackValue!==1)failures.push('rollback failed');
             if(!result.nestedRejected)failures.push('nested transaction guard failed');
             if((result.canvasCount||0)<1)failures.push('viewport canvas missing');
