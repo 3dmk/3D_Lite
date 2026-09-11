@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LitePix v4.43.0 All 8 Cores Production</title>
+<title>3D Lite — LitePix v4.44.0 Legacy Migration</title>
 <style>
 :root{
   --bg:#202020;--panel:#2a2a2a;--panel2:#303030;--line:#444;--line2:#555;
@@ -4185,7 +4185,7 @@ function validateArchitectureCore(){
   return {ok:errors.length===0,errors};
 }
 
-const LitePixVersion=Object.freeze({name:'LitePix',version:'4.43.0',legacyName:'3DLite',legacyVersion:'3.99.6',architecture:'All Cores Optimized'});
+const LitePixVersion=Object.freeze({name:'LitePix',version:'4.44.0',legacyName:'3DLite',legacyVersion:'3.99.6',architecture:'All Cores Optimized'});
 // Compatibility bridge: existing 3DLite services keep working while the renderer migrates to LitePix ownership.
 const ThreeDLiteVersion=LitePixVersion;
 
@@ -8685,6 +8685,7 @@ var PathGIRenderer=Object.freeze({
         litePixNativePath:litePixPath410?.snapshot?.()||null,
         litePixCore3Production:job.litePixCore3Stats423||litePixCore3Production423?.snapshot?.()||null,
         litePixCores4to8Production:job.litePixCores4to8Stats443||litePixCores4to8Production443?.snapshot?.()||null,
+        litePixLegacyMigration:window.LitePixLegacyMigration444?.audit?.()||null,
         litePixCore2Production:job.litePixCore2Production419?.snapshot?.()||null,
         litePixCore2Partial:job.litePixCore2Partial415?.snapshot?.()||null,
         litePixCore2Persistent:job.litePixCore2Persistent414?.snapshot?.()||null,
@@ -23696,6 +23697,7 @@ root.__3DLiteMaterialLinearColor3996=true;
 <script src="./litepix/core8-telemetry-optimization.js"></script>
 <script src="./litepix/core8-production-v4.43.js"></script>
 <script src="./litepix/cores4-8-production-v4.43.js"></script>
+<script src="./litepix/legacy-migration-v4.44.js"></script>
 <script src="./litepix/runtime-v4.09.js"></script>
 <script src="./litepix/path-integration-v4.10.js"></script>
 <script src="./litepix/core2-path-v4.12.js"></script>
