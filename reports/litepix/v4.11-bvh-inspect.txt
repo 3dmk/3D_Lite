@@ -1,279 +1,45 @@
 
-===== BoxGeometry @ 2368 =====
-2333:     if(color==null||!ch.material)return;
-2334:     const mats=Array.isArray(ch.material)?ch.material:[ch.material];
-2335:     for(const m of mats){
-2336:       if(!m||!m.color||m.opacity===0)continue;
-2337:       m.color.setHex(color);
-2338:       if(m._color?.setHex)m._color.setHex(color);
-2339:       const isPlane=name.length===2 && name!=='E';
-2340:       const op=isPlane?ClassicMinimalTransformTheme.planeOpacity:ClassicMinimalTransformTheme.handleOpacity;
-2341:       if(m.opacity>0){m.transparent=isPlane||m.transparent;m.opacity=Math.min(m.opacity,op);}
-2342:       if('_opacity' in m && m._opacity>0)m._opacity=Math.min(m._opacity,op);
-2343:       m.depthWrite=false;
-2344:       m.needsUpdate=true;
-2345:     }
-2346:   });
-2347:   uniformScaleHandle?.material?.color?.setHex(ClassicMinimalTransformTheme.neutral);
-2348:   if(uniformScaleHandle?.material){uniformScaleHandle.material.opacity=.94;uniformScaleHandle.material.needsUpdate=true;}
-2349: }
-2350: function classicMinimalTransformCursor(axis=transform.axis,mode=transform.getMode()){
-2351:   if(!axis)return '';
-2352:   if(mode==='rotate')return 'var(--cursor-rotate)';
-2353:   if(mode==='scale'){
-2354:     if(axis==='XYZ'||axis==='XYZE')return 'var(--cursor-uniform-scale)';
-2355:     if(axis.length===2)return 'var(--cursor-plane)';
-2356:     return 'var(--cursor-scale)';
-2357:   }
-2358:   if(axis.length===2)return 'var(--cursor-plane)';
-2359:   return 'var(--cursor-move)';
-2360: }
-2361: 
-2362: // Native Z-up transform behavior. The editor camera is already configured
-2363: // with camera.up = (0, 0, 1), so TransformControls must keep its original
-2364: // X/Y/Z handle identities. Do not swap Y and Z names here.
-2365: 
-2366: // Dedicated center cube for uniform XYZ scaling.
-2367: const uniformScaleHandle=new THREE.Mesh(
-2368:   new THREE.BoxGeometry(.16,.16,.16),
-2369:   new THREE.MeshBasicMaterial({color:0xd8d8d8,depthTest:false,transparent:true,opacity:.95})
-2370: );
-2371: uniformScaleHandle.renderOrder=10001;
-2372: uniformScaleHandle.visible=false;
-2373: uniformScaleHandle.userData.isUniformScaleHandle=true;
-2374: scene.add(uniformScaleHandle);
-2375: applyClassicMinimalTransformTheme();
-2376: 
-2377: let uniformScaleDrag=null;
-2378: 
-2379: function updateUniformScaleHandle(){
-2380:   const obj=transform.object;
-2381:   const active=!!obj && transform.visible && transform.enabled && transform.getMode()==='scale';
-2382:   uniformScaleHandle.visible=active;
-2383:   if(!active)return;
-2384:   obj.updateMatrixWorld(true);
-2385:   const wp=new THREE.Vector3();
-2386:   obj.getWorldPosition(wp);
-2387:   uniformScaleHandle.position.copy(wp);
-2388:   const dist=Math.max(.001,camera.position.distanceTo(wp));
-2389:   const s=Math.max(.12,dist*.022);
-2390:   uniformScaleHandle.scale.setScalar(s);
-2391: }
-2392: 
-2393: function uniformScaleHandleHit(e){
-2394:   if(!uniformScaleHandle.visible)return false;
-2395:   const r=renderer.domElement.getBoundingClientRect();
-2396:   const p=uniformScaleHandle.position.clone().project(camera);
-2397:   const sx=r.left+(p.x*.5+.5)*r.width;
-2398:   const sy=r.top+(-p.y*.5+.5)*r.height;
-2399:   return Math.hypot(e.clientX-sx,e.clientY-sy)<=14;
-2400: }
-2401: 
-2402: function beginUniformScale(e){
-2403:   if(e.button!==0 || !transform.object || transform.getMode()!=='scale')return false;
-2404:   if(!uniformScaleHandleHit(e))return false;
-2405: 
-2406:   const target=transform.object;
-2407:   uniformScaleDrag={
-2408:     pointerId:e.pointerId,
-2409:     target,
-2410:     startY:e.clientY,
-2411:     startScale:target.scale.clone(),
-2412:     before:(subMode&&subPivot&&target===subPivot)?null:transformState(target),
-2413:     sub:!!(subMode&&subPivot&&target===subPivot)
-2414:   };
-2415:   if(uniformScaleDrag.sub) beginSubTransform();
-2416:   routerOwner='uniformScale';
-2417:   routerPointerId=e.pointerId;
-2418:   orbit.enabled=false;
-2419:   try{renderer.domElement.setPointerCapture(e.pointerId)}catch(_){}
-2420:   return true;
-2421: }
-2422: 
-2423: function moveUniformScale(e){
-2424:   if(!uniformScaleDrag || e.pointerId!==uniformScaleDrag.pointerId)return;
-2425:   const dy=uniformScaleDrag.startY-e.clientY;
-2426:   const precision=(TransformSystem.modifiers.shift||TransformConfig.fine)?.25:1;
-2427:   const f=Math.max(.001,Math.exp(dy*.01*precision));
-2428:   const s=uniformScaleDrag.startScale;
-2429:   uniformScaleDrag.target.scale.set(s.x*f,s.y*f,s.z*f);
-2430:   uniformScaleDrag.target.updateMatrixWorld(true);
-2431:   if(uniformScaleDrag.sub)applySubTransform();
-2432:   TransformSystem.showFeedback();TransformSystem.updateFeedback();
-2433:   refreshModifyPanel();
-2434: }
-2435: 
-2436: function endUniformScale(e){
-2437:   if(!uniformScaleDrag || e.pointerId!==uniformScaleDrag.pointerId)return;
-2438:   const d=uniformScaleDrag;
-2439:   if(d.sub)finishSubTransform();
-2440:   else{
-2441:     const after=transformState(d.target);
-2442:     if(stateChanged(d.before,after))pushUndo({type:'transform',object:d.target,before:d.before,after});
-2443:   }
-2444:   try{renderer.domElement.releasePointerCapture(e.pointerId)}catch(_){}
-2445:   uniformScaleDrag=null;
-2446:   if(routerOwner==='uniformScale')routerOwner=null;
-2447:   routerPointerId=null;
-2448:   orbit.enabled=true;TransformSystem.hideFeedback();
-2449: }
-2450: 
-2451: // Hide only TransformControls' neutral white helper/guide lines.
-2452: // Colored X/Y/Z handles and their hit areas remain active.
-2453: function hideTransformGuideLines(){
-2454:   transform.traverse(child=>{
-2455:     if(!(child.isLine||child.isLineSegments)||!child.material)return;
-2456:     const mats=Array.isArray(child.material)?child.material:[child.material];
-2457:     for(const mat of mats){
-2458:       if(!mat || !mat.color)continue;
-2459:       const c=mat.color;
-2460:       const neutral=Math.abs(c.r-c.g)<0.04 && Math.abs(c.g-c.b)<0.04;
-2461:       const bright=(c.r+c.g+c.b)/3>0.45;
-2462:       if(neutral && bright){
-2463:         mat.visible=false;
-2464:         mat.opacity=0;
-2465:         mat.transparent=true;
-2466:         mat.depthWrite=false;
-2467:         mat.needsUpdate=true;
-
-===== PlaneGeometry @ 13490 =====
-13455:   geometry.computeBoundingSphere();
-13456:   return geometry;
-13457: }
-13458: 
-13459: function primitiveGeometry(type,sizeA=100,sizeB=100,height=100,params=null){
-13460:   params=params||getCreateParams(type);
-13461:   switch(type){
-13462:     case 'box': {
-13463:       if(params.chamferEnabled&&params.chamfer>0){
-13464:         let amount=params.chamfer;if(params.clampChamfer)amount=Math.min(amount,Math.min(sizeA,sizeB,height)*.49);
-13465:         const segs=Math.max(1,Math.round(Number(params.chamferSegs)||1));
-13466:         const chamferType=params.chamferType||'tri';
-13467:         // Corner Radius is currently informational only and makes no geometry changes.
-13468:         // Box chamfer geometry is driven only by Amount, Chamfer Segs and Chamfer Type.
-13469:         const g=makeChamferBox(
-13470:           Math.max(sizeA,.001),Math.max(sizeB,.001),Math.max(height,.001),
-13471:           amount,segs,chamferType
-13472:         );
-13473:         if(params.smoothChamfer)g.computeVertexNormals();return g;
-13474:       }
-13475:       return new THREE.BoxGeometry(Math.max(sizeA,.001),Math.max(sizeB,.001),Math.max(height,.001),params.lengthSegs,params.widthSegs,params.heightSegs);
-13476:     }
-13477:     case 'chbox': return makeChamferBox(Math.max(sizeA,.001),Math.max(sizeB,.001),Math.max(height,.001),params.chamfer,params.chamferSegs);
-13478:     case 'cbox': return makeCBox(Math.max(sizeA,.001),Math.max(sizeB,.001),Math.max(height,.001),params.wall,params.opening);
-13479:     case 'sphere':{const thetaLength=Math.PI*(1-Math.max(0,Math.min(1,params.hemisphere)));return applyPrimitiveSmoothGeometry(makeZUpGeometry(new THREE.SphereGeometry(Math.max(sizeA,.001),params.segments,Math.max(3,Math.floor(params.segments/2)),0,Math.PI*2,0,thetaLength)),params.smooth);}
-13480:     case 'qsphere': return applyPrimitiveSmoothGeometry(makeZUpGeometry(new THREE.IcosahedronGeometry(Math.max(sizeA,.001),Math.max(0,params.iterations-1))),params.smooth);
-13481:     case 'geosphere': return applyPrimitiveSmoothGeometry(makeZUpGeometry(new THREE.IcosahedronGeometry(Math.max(sizeA,.001),Math.max(0,params.iterations-1))),params.smooth);
-13482:     case 'cylinder': return applyPrimitiveSmoothGeometry(makeCylinderWithCapSegments(Math.max(sizeA,.001),Math.max(height,.001),params.sides,params.heightSegs,params.capSegs),params.smooth);
-13483:     case 'cone': return applyPrimitiveSmoothGeometry(makeConeWithCapSegments(Math.max(sizeA,0),Math.max(params.radius2,0),Math.max(height,.001),params.sides,params.heightSegs,params.capSegs),params.smooth);
-13484:     case 'pyramid': return makeZUpGeometry(new THREE.ConeGeometry(Math.max(sizeA,.001),Math.max(height,.001),params.sides,params.heightSegs,false));
-13485:     case 'tube': return makeTubeWithCapSegments(Math.max(sizeA,.001),Math.min(params.inner,Math.max(sizeA,.001)*.98),Math.max(height,.001),params.sides,params.heightSegs,params.capSegs);
-13486:     case 'capsule': return makeCapsule(Math.max(sizeA,.001),Math.max(height,.001),params.roundness,params.caHeight,params.chamfer,params.segments);
-13487:     case 'torus': return new THREE.TorusGeometry(Math.max(sizeA,.001),Math.max(params.tube,.001),params.sides,params.segments);
-13488:     case 'knot': return new THREE.TorusKnotGeometry(Math.max(sizeA,.001),Math.max(params.tube,.001),params.pathSegs,params.tubeSegs,params.p,params.q);
-13489:     case 'helix': return makeHelix(Math.max(sizeA,.001),params.tube,Math.max(height,.001),params.turns,params.segments,params.tubeSegs);
-13490:     case 'plane': return new THREE.PlaneGeometry(Math.max(sizeA,.001),Math.max(sizeB,.001),params.lengthSegs,params.widthSegs);
-13491:   }
-13492: }
-13493: 
-13494: 
-13495: function normalizePrimitiveParams(type,input){
-13496:   const p={...(input||{})};
-13497:   const n=(k,fb,min=0,max=Infinity)=>{
-13498:     let v=Number(p[k]);if(!Number.isFinite(v))v=fb;
-13499:     p[k]=Math.min(max,Math.max(min,v));return p[k];
-13500:   };
-13501:   const i=(k,fb,min=1,max=512)=>{p[k]=Math.round(n(k,fb,min,max));return p[k];};
-13502:   switch(type){
-13503:     case 'box':
-13504:       n('length',100,.001);n('width',100,.001);n('height',100,.001);
-13505:       i('lengthSegs',1,1,200);i('widthSegs',1,1,200);i('heightSegs',1,1,200);
-13506:       p.chamferEnabled=p.chamferEnabled===true;n('chamfer',2,0,Math.min(p.length,p.width,p.height)*.49);i('chamferSegs',2,1,12);n('cornerRadius',2,0,Math.min(p.length,p.width,p.height)*.49);
-13507:       p.chamferType=['standard','round','concave','miter','quad'].includes(p.chamferType)?p.chamferType:'standard';p.smoothChamfer=p.smoothChamfer!==false;p.clampChamfer=p.clampChamfer!==false;p.generateMapping=p.generateMapping!==false;p.realWorldMap=!!p.realWorldMap;break;
-13508:     case 'chbox':
-13509:       n('length',100,.001);n('width',100,.001);n('height',100,.001);
-13510:       n('chamfer',8,0,Math.min(p.length,p.width,p.height)*.49);i('chamferSegs',2,1,12);break;
-13511:     case 'cbox':
-13512:       n('length',100,.001);n('width',100,.001);n('height',100,.001);
-13513:       n('wall',20,.001,Math.min(p.length*.45,p.height*.45));
-13514:       n('opening',60,.001,Math.max(.001,p.height-2*p.wall));break;
-13515:     case 'plane':
-13516:       n('length',100,.001);n('width',100,.001);i('lengthSegs',1,1,200);i('widthSegs',1,1,200);break;
-13517:     case 'sphere':
-13518:       n('radius',50,.001);i('segments',24,4,128);n('hemisphere',0,0,1);p.smooth=p.smooth!==false;break;
-13519:     case 'qsphere':case 'geosphere':
-13520:       n('radius',50,.001);i('iterations',3,1,6);p.smooth=p.smooth!==false;break;
-13521:     case 'cylinder':
-13522:       n('radius',50,.001);n('height',100,.001);i('sides',24,3,128);i('heightSegs',1,1,200);i('capSegs',1,1,100);p.smooth=p.smooth!==false;break;
-13523:     case 'cone':
-13524:       n('radius1',50,0);n('radius2',0,0);n('height',100,.001);i('sides',24,3,128);i('heightSegs',1,1,200);i('capSegs',1,1,100);p.smooth=p.smooth!==false;break;
-13525:     case 'pyramid':
-13526:       n('radius',50,.001);n('height',100,.001);i('sides',4,3,32);i('heightSegs',1,1,100);break;
-13527:     case 'tube':
-13528:       n('outer',50,.001);n('inner',30,.001,Math.max(.001,p.outer*.98));n('height',100,.001);i('sides',24,3,128);i('heightSegs',1,1,200);i('capSegs',1,1,100);break;
-13529:     case 'capsule':
-13530:       n('radius',30,.001);n('height',100,.001);n('roundness',100,0,100);n('caHeight',0,-200,200);n('chamfer',0,0,100);i('segments',16,6,64);break;
-13531:     case 'torus':
-13532:       n('radius',50,.001);n('tube',12,.001);i('segments',32,3,128);i('sides',12,3,64);break;
-13533:     case 'knot':
-13534:       n('radius',45,.001);n('tube',10,.001);i('pathSegs',96,12,512);i('tubeSegs',12,3,128);i('p',2,1,12);i('q',3,1,12);break;
-13535:     case 'helix':
-13536:       n('radius',40,.001);n('tube',4,.001);n('height',100,.001);i('turns',3,1,40);i('segments',96,12,512);i('tubeSegs',8,3,64);break;
-13537:   }
-13538:   return p;
-13539: }
-13540: 
-13541: function geometryFromPrimitiveParams(type,input){
-13542:   const p=normalizePrimitiveParams(type,input);
-13543:   switch(type){
-13544:     case 'box':case 'chbox':case 'cbox':return {geometry:primitiveGeometry(type,p.length,p.width,p.height,p),params:p};
-13545:     case 'plane':return {geometry:primitiveGeometry(type,p.length,p.width,1,p),params:p};
-13546:     case 'sphere':case 'qsphere':case 'geosphere':case 'torus':case 'knot':
-13547:       return {geometry:primitiveGeometry(type,p.radius,p.radius,p.radius*2,p),params:p};
-13548:     case 'cylinder':case 'pyramid':case 'capsule':case 'helix':
-13549:       return {geometry:primitiveGeometry(type,p.radius,p.radius,p.height,p),params:p};
-13550:     case 'cone':return {geometry:primitiveGeometry(type,p.radius1,p.radius1,p.height,p),params:p};
-13551:     case 'tube':return {geometry:primitiveGeometry(type,p.outer,p.outer,p.height,p),params:p};
-13552:   }
-13553:   return {geometry:null,params:p};
-13554: }
-13555: 
-13556: function replacePrimitiveGeometry(mesh,input){
-13557:   if(!mesh||mesh.userData.editPoly||!mesh.userData.primitiveType)return false;
-13558:   const built=geometryFromPrimitiveParams(mesh.userData.primitiveType,input);
-13559:   if(!built.geometry)return false;
-13560:   const old=mesh.geometry;
-13561:   mesh.geometry=built.geometry;
-13562:   mesh.userData.creationParams={...built.params};
-13563:   old?.dispose();
-13564:   if(mesh.material){
-13565:     if(built.params.color)mesh.material.color.set(built.params.color);
-13566:     mesh.material.flatShading=built.params.smooth===false;
-13567:     mesh.material.needsUpdate=true;
-13568:     mesh.userData.baseColor=mesh.material.color.getHex();
-13569:   }
-13570:   rebuildWire(mesh);
-13571:   return true;
-13572: }
-13573: 
-13574: function primitiveTypeDisplayName(type){
-13575:   const names={
-13576:     box:'Box',chbox:'CHBox',cbox:'CBox',plane:'Plane',pyramid:'Pyramid',
-13577:     cone:'Cone',sphere:'Sphere',qsphere:'QSphere',geosphere:'GeoSphere',
-13578:     cylinder:'Cylinder',tube:'Tube',capsule:'Capsule',torus:'Torus',
-13579:     knot:'Knot',helix:'Helix'
-13580:   };
-13581:   return names[type]||type.charAt(0).toUpperCase()+type.slice(1);
-13582: }
-13583: 
-13584: function nextPrimitiveNumber(type){
-13585:   let maxNum=0;
-13586:   const base=primitiveTypeDisplayName(type);
-13587:   const rx=new RegExp('^'+base.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\\\s+(\\\\d+)$','i');
-13588: 
-13589:   for(const o of objects){
-
-===== SphereGeometry @ 13479 =====
+===== primitiveGeometry( @ 13459 =====
+13404:     const z=-hz+(zseg/heightSegs)*height;
+13405:     for(let i=0;i<sides;i++){
+13406:       const a=i/sides*Math.PI*2,b=((i+1)%sides)/sides*Math.PI*2;
+13407:       pushLine(Math.cos(a)*radius,Math.sin(a)*radius,z,
+13408:                Math.cos(b)*radius,Math.sin(b)*radius,z);
+13409:     }
+13410:   }
+13411: 
+13412:   // Cap concentric rings and radial edges. The outer ring is already shared
+13413:   // visually with the side rim, but keeping it here makes cap topology explicit.
+13414:   for(const z of [hz,-hz]){
+13415:     for(let ring=1;ring<=capSegs;ring++){
+13416:       const rr=radius*(ring/capSegs);
+13417:       for(let i=0;i<sides;i++){
+13418:         const a=i/sides*Math.PI*2,b=((i+1)%sides)/sides*Math.PI*2;
+13419:         pushLine(Math.cos(a)*rr,Math.sin(a)*rr,z,
+13420:                  Math.cos(b)*rr,Math.sin(b)*rr,z);
+13421:       }
+13422:     }
+13423:     for(let i=0;i<sides;i++){
+13424:       const a=i/sides*Math.PI*2;
+13425:       pushLine(0,0,z,Math.cos(a)*radius,Math.sin(a)*radius,z);
+13426:     }
+13427:   }
+13428:   g.userData.cleanTopologyWire=topoWire;
+13429: 
+13430:   g.computeVertexNormals();g.computeBoundingBox();g.computeBoundingSphere();
+13431:   return g;
+13432: }
+13433: 
+13434: function applyPrimitiveSmoothGeometry(geometry,smooth=true){
+13435:   if(!geometry)return geometry;
+13436:   // Smooth OFF must be a real geometry-normal change, not only a material flag.
+13437:   // Converting to non-indexed geometry gives every triangle independent vertices,
+13438:   // so computeVertexNormals() produces explicit flat/faceted face normals.
+13439:   if(smooth===false){
+13440:     const oldUserData={...(geometry.userData||{})};
+13441:     let flat=geometry.index?geometry.toNonIndexed():geometry;
+13442:     if(flat!==geometry)geometry.dispose?.();
+13443:     flat.userData={...(flat.userData||{}),...oldUserData};
 13444:     flat.deleteAttribute?.('normal');
 13445:     flat.computeVertexNormals();
 13446:     flat.computeBoundingBox();
@@ -409,551 +175,1275 @@
 13576:     box:'Box',chbox:'CHBox',cbox:'CBox',plane:'Plane',pyramid:'Pyramid',
 13577:     cone:'Cone',sphere:'Sphere',qsphere:'QSphere',geosphere:'GeoSphere',
 13578:     cylinder:'Cylinder',tube:'Tube',capsule:'Capsule',torus:'Torus',
+13579:     knot:'Knot',helix:'Helix'
+13580:   };
+13581:   return names[type]||type.charAt(0).toUpperCase()+type.slice(1);
+13582: }
+13583: 
+13584: function nextPrimitiveNumber(type){
+13585:   let maxNum=0;
+13586:   const base=primitiveTypeDisplayName(type);
+13587:   const rx=new RegExp('^'+base.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\\\s+(\\\\d+)$','i');
+13588: 
+13589:   for(const o of objects){
+13590:     if(o.userData?.primitiveType!==type)continue;
+13591:     const n=Number(o.userData?.primitiveInstanceNumber||0);
+13592:     if(Number.isFinite(n))maxNum=Math.max(maxNum,n);
+13593:     const m=String(o.name||'').match(rx);
+13594:     if(m)maxNum=Math.max(maxNum,Number(m[1])||0);
+13595:   }
+13596:   return maxNum+1;
+13597: }
+13598: 
+13599: function defaultNumberedPrimitiveName(type,number){
+13600:   return primitiveTypeDisplayName(type)+' '+String(number).padStart(2,'0');
+13601: }
+13602: 
+13603: function createMesh(type,geom){
+13604:   const color=new THREE.Color(document.getElementById('createColor').value).getHex();
+13605:   const mesh=new THREE.Mesh(geom,makeObjectMaterial(color));
+13606:   const instanceNumber=nextPrimitiveNumber(type);
+13607:   const defaultBase=primitiveTypeDisplayName(type);
+13608:   const requestedName=(document.getElementById('createName')?.value||'').trim();
 
-===== scene.add( @ 2310 =====
-2275:   }else{
-2276:     toTarget.multiplyScalar(1/distance);
-2277:   }
-2278: 
-2279:   // Normalize trackpads/mice without allowing a single event to jump excessively.
-2280:   const wheelUnits=Math.min(3,Math.max(1,Math.abs(e.deltaY)/100));
-2281:   const proportional=Math.min(distance*VIEW_ZOOM.maxFraction,
-2282:                               Math.max(distance*VIEW_ZOOM.fraction,VIEW_ZOOM.minStep));
-2283:   let step=proportional*wheelUnits;
-2284: 
-2285:   if(delta<0){ // zoom in
-2286:     if(distance>VIEW_ZOOM.closeDistance){
-2287:       // Approach the orbit target normally, but never collapse onto it.
-2288:       step=Math.min(step,Math.max(VIEW_ZOOM.minStep,distance-VIEW_ZOOM.closeDistance));
-2289:       camera.position.addScaledVector(toTarget,step);
-2290:     }else{
-2291:       // Near the target, translate camera and target together. This prevents
-2292:       // the familiar "zoom barely moves near the object" stall.
-2293:       camera.position.addScaledVector(toTarget,step);
-2294:       orbit.target.addScaledVector(toTarget,step);
-2295:     }
-2296:   }else{ // zoom out
-2297:     camera.position.addScaledVector(toTarget,-step);
-2298:   }
-2299: 
-2300:   orbit.update();
-2301: }
-2302: 
-2303: renderer.domElement.addEventListener('wheel',adaptiveViewportWheelZoom,{passive:false,capture:true});
-2304: 
-2305: const transform=new THREE.TransformControls(camera,renderer.domElement);
-2306: transform.setMode('translate');
-2307: transform.setSpace('local');
-2308: transform.setSize(.9);
-2309: transform.showX=transform.showY=transform.showZ=true;
-2310: scene.add(transform);
-2311: 
-2312: 
-2313: /* Classic Minimal transform-widget visual theme. Geometry and hit testing remain native. */
-2314: const ClassicMinimalTransformTheme=Object.freeze({
-2315:   x:0xe4574f,y:0x4ecb64,z:0x3f7cff,neutral:0xd7d7d7,screen:0xbfc3c7,
-2316:   planeOpacity:.18,handleOpacity:.96
-2317: });
-2318: function classicMinimalColorForHandle(name){
-2319:   if(name==='X')return ClassicMinimalTransformTheme.x;
-2320:   if(name==='Y')return ClassicMinimalTransformTheme.y;
-2321:   if(name==='Z')return ClassicMinimalTransformTheme.z;
-2322:   if(name==='XY')return ClassicMinimalTransformTheme.z;
-2323:   if(name==='YZ')return ClassicMinimalTransformTheme.x;
-2324:   if(name==='XZ')return ClassicMinimalTransformTheme.y;
-2325:   if(name==='XYZ'||name==='XYZE')return ClassicMinimalTransformTheme.neutral;
-2326:   if(name==='E')return ClassicMinimalTransformTheme.screen;
-2327:   return null;
-2328: }
-2329: function applyClassicMinimalTransformTheme(){
-2330:   transform.traverse(ch=>{
-2331:     const name=ch.name||'';
-2332:     const color=classicMinimalColorForHandle(name);
-2333:     if(color==null||!ch.material)return;
-2334:     const mats=Array.isArray(ch.material)?ch.material:[ch.material];
-2335:     for(const m of mats){
-2336:       if(!m||!m.color||m.opacity===0)continue;
-2337:       m.color.setHex(color);
-2338:       if(m._color?.setHex)m._color.setHex(color);
-2339:       const isPlane=name.length===2 && name!=='E';
-2340:       const op=isPlane?ClassicMinimalTransformTheme.planeOpacity:ClassicMinimalTransformTheme.handleOpacity;
-2341:       if(m.opacity>0){m.transparent=isPlane||m.transparent;m.opacity=Math.min(m.opacity,op);}
-2342:       if('_opacity' in m && m._opacity>0)m._opacity=Math.min(m._opacity,op);
-2343:       m.depthWrite=false;
-2344:       m.needsUpdate=true;
-2345:     }
-2346:   });
-2347:   uniformScaleHandle?.material?.color?.setHex(ClassicMinimalTransformTheme.neutral);
-2348:   if(uniformScaleHandle?.material){uniformScaleHandle.material.opacity=.94;uniformScaleHandle.material.needsUpdate=true;}
-2349: }
-2350: function classicMinimalTransformCursor(axis=transform.axis,mode=transform.getMode()){
-2351:   if(!axis)return '';
-2352:   if(mode==='rotate')return 'var(--cursor-rotate)';
-2353:   if(mode==='scale'){
-2354:     if(axis==='XYZ'||axis==='XYZE')return 'var(--cursor-uniform-scale)';
-2355:     if(axis.length===2)return 'var(--cursor-plane)';
-2356:     return 'var(--cursor-scale)';
-2357:   }
-2358:   if(axis.length===2)return 'var(--cursor-plane)';
-2359:   return 'var(--cursor-move)';
-2360: }
-2361: 
-2362: // Native Z-up transform behavior. The editor camera is already configured
-2363: // with camera.up = (0, 0, 1), so TransformControls must keep its original
-2364: // X/Y/Z handle identities. Do not swap Y and Z names here.
-2365: 
-2366: // Dedicated center cube for uniform XYZ scaling.
-2367: const uniformScaleHandle=new THREE.Mesh(
-2368:   new THREE.BoxGeometry(.16,.16,.16),
-2369:   new THREE.MeshBasicMaterial({color:0xd8d8d8,depthTest:false,transparent:true,opacity:.95})
-2370: );
-2371: uniformScaleHandle.renderOrder=10001;
-2372: uniformScaleHandle.visible=false;
-2373: uniformScaleHandle.userData.isUniformScaleHandle=true;
-2374: scene.add(uniformScaleHandle);
-2375: applyClassicMinimalTransformTheme();
-2376: 
-2377: let uniformScaleDrag=null;
-2378: 
-2379: function updateUniformScaleHandle(){
-2380:   const obj=transform.object;
-2381:   const active=!!obj && transform.visible && transform.enabled && transform.getMode()==='scale';
-2382:   uniformScaleHandle.visible=active;
-2383:   if(!active)return;
-2384:   obj.updateMatrixWorld(true);
-2385:   const wp=new THREE.Vector3();
-2386:   obj.getWorldPosition(wp);
-2387:   uniformScaleHandle.position.copy(wp);
-2388:   const dist=Math.max(.001,camera.position.distanceTo(wp));
-2389:   const s=Math.max(.12,dist*.022);
-2390:   uniformScaleHandle.scale.setScalar(s);
-2391: }
-2392: 
-2393: function uniformScaleHandleHit(e){
-2394:   if(!uniformScaleHandle.visible)return false;
-2395:   const r=renderer.domElement.getBoundingClientRect();
-2396:   const p=uniformScaleHandle.position.clone().project(camera);
-2397:   const sx=r.left+(p.x*.5+.5)*r.width;
-2398:   const sy=r.top+(-p.y*.5+.5)*r.height;
-2399:   return Math.hypot(e.clientX-sx,e.clientY-sy)<=14;
-2400: }
-2401: 
-2402: function beginUniformScale(e){
-2403:   if(e.button!==0 || !transform.object || transform.getMode()!=='scale')return false;
-2404:   if(!uniformScaleHandleHit(e))return false;
-2405: 
-2406:   const target=transform.object;
-2407:   uniformScaleDrag={
-2408:     pointerId:e.pointerId,
-2409:     target,
+===== makeObject @ 3773 =====
+3718: }
+3719: function groundPoint(e,out){
+3720:   setMouseFromEvent(e);
+3721:   raycaster.setFromCamera(mouse,camera);
+3722:   const plane=new THREE.Plane(new THREE.Vector3(0,0,1),0);
+3723:   return raycaster.ray.intersectPlane(plane,out);
+3724: }
+3725: function objectColor(mesh){
+3726:   return mesh.userData.baseColor ?? COLORS.object;
+3727: }
+3728: function setObjectColor(mesh,c){
+3729:   const value=(typeof c==='number')?c:new THREE.Color(c).getHex();
+3730:   mesh.userData.baseColor=value;
+3731:   if(mesh.material){
+3732:     mesh.material.color.setHex(value);
+3733:   }
+3734: }
+3735: function randomName(prefix){
+3736:   let n=1;
+3737:   while(objects.some(o=>o.name===prefix+n)) n++;
+3738:   return prefix+n;
+3739: }
+3740: function polyCount(mesh){
+3741:   if(mesh.userData.editPoly) return mesh.userData.editPoly.faces.length;
+3742:   const pos=mesh.geometry?.getAttribute('position');
+3743:   return pos?Math.floor(pos.count/3):0;
+3744: }
+3745: function totalPolyCount(){ return objects.reduce((s,o)=>s+polyCount(o),0); }
+3746: function worldToLocalPoint(mesh,p){
+3747:   const q=p.clone();
+3748:   mesh.worldToLocal(q);
+3749:   return q;
+3750: }
+3751: function localToWorldPoint(mesh,p){
+3752:   const q=p.clone();
+3753:   return mesh.localToWorld(q);
+3754: }
+3755: 
+3756: /* ---------- Materials / display ---------- */
+3757: /*
+3758:   Back Sides
+3759:   ----------
+3760:   Native Three.js/WebGL culling is authoritative.
+3761: 
+3762:   OFF -> THREE.FrontSide
+3763:   ON  -> THREE.DoubleSide
+3764: 
+3765:   No custom CPU camera-facing test is used for face visibility.
+3766:   Wireframe remains topology-only and is not used to approximate face culling.
+3767: */
+3768: 
+3769: function backSidesMaterialSide(){
+3770:   return showBackSides ? THREE.DoubleSide : THREE.FrontSide;
+3771: }
+3772: 
+3773: function makeObjectMaterial(color=COLORS.object){
+3774:   return new THREE.MeshLambertMaterial({
+3775:     color,
+3776:     side:backSidesMaterialSide(),
+3777:     flatShading:false
+3778:   });
+3779: }
+3780: 
+3781: function objectMaterials(mesh){
+3782:   if(!mesh?.material)return [];
+3783:   return Array.isArray(mesh.material)?mesh.material:[mesh.material];
+3784: }
+3785: 
+3786: function applyBackSidesMaterial(mesh){
+3787:   const side=backSidesMaterialSide();
+3788:   for(const mat of objectMaterials(mesh)){
+3789:     if(!mat)continue;
+3790:     const resolvedSide=mat.userData?.forceDoubleSide ? THREE.DoubleSide : side;
+3791: 
+3792:     // Use Three.js native face culling only.
+3793:     // OFF = render front-facing triangles only.
+3794:     // ON  = render both front and back-facing triangles.
+3795:     if(mat.side!==resolvedSide){
+3796:       mat.side=resolvedSide;
+3797:       mat.needsUpdate=true;
+3798:     }
+3799:   }
+3800: }
+3801: 
+3802: function syncBackSidesUI(){
+3803:   const btn=document.getElementById('backSides');
+3804:   if(btn){
+3805:     btn.classList.toggle('active',showBackSides);
+3806:     btn.setAttribute('aria-pressed',showBackSides?'true':'false');
+3807:     btn.title=showBackSides?'Back Sides: ON':'Back Sides: OFF';
+3808:   }
+3809: 
+3810:   document.querySelectorAll('[data-vpctx="backsides"]').forEach(btn=>{
+3811:     btn.classList.toggle('active',showBackSides);
+3812:     btn.setAttribute('aria-pressed',showBackSides?'true':'false');
+3813:   });
+3814: }
+3815: 
+3816: function setBackSides(enabled){
+3817:   showBackSides=!!enabled;
+3818:   for(const mesh of objects)applyBackSidesMaterial(mesh);
+3819:   syncBackSidesUI();
+3820: }
+3821: 
+3822: const hemi=new THREE.HemisphereLight(0xfffbf4,0x625d55,1.18);
+3823: scene.add(hemi);
+3824: const dir=new THREE.DirectionalLight(0xfff7ed,.52);
+3825: dir.position.set(400,-300,700);
+3826: scene.add(dir);
+3827: 
+3828: 
+3829: function polygonBoundaryWireGeometry(geometry){
+3830:   if(geometry?.userData?.cleanTopologyWire?.length){
+3831:     const g=new THREE.BufferGeometry();
+3832:     g.setAttribute('position',new THREE.Float32BufferAttribute(
+3833:       geometry.userData.cleanTopologyWire,3
+3834:     ));
+3835:     return g;
+3836:   }
+3837: 
+3838:   const pos=geometry?.getAttribute?.('position');
+3839:   if(!pos)return new THREE.BufferGeometry();
+3840: 
+3841:   const idx=geometry.index;
+3842:   const triCount=idx?idx.count/3:pos.count/3;
+3843:   const edges=new Map();
+3844:   const q=1e5;
+3845: 
+3846:   const P=i=>new THREE.Vector3(pos.getX(i),pos.getY(i),pos.getZ(i));
+3847:   const kp=p=>`${Math.round(p.x*q)},${Math.round(p.y*q)},${Math.round(p.z*q)}`;
+3848:   const ek=(a,b)=>{
+3849:     const A=kp(a),B=kp(b);
+3850:     return A<B?`${A}|${B}`:`${B}|${A}`;
+3851:   };
+3852: 
+3853:   function addEdge(a,b,n){
+3854:     const k=ek(a,b);
+3855:     let ed=edges.get(k);
+3856:     if(!ed){
+3857:       ed={a:a.clone(),b:b.clone(),normals:[]};
+3858:       edges.set(k,ed);
+3859:     }
+3860:     ed.normals.push(n.clone());
+3861:   }
+3862: 
+3863:   for(let t=0;t<triCount;t++){
+3864:     const ia=idx?idx.getX(t*3):t*3;
+3865:     const ib=idx?idx.getX(t*3+1):t*3+1;
+3866:     const ic=idx?idx.getX(t*3+2):t*3+2;
+3867: 
+3868:     const a=P(ia), b=P(ib), c=P(ic);
+3869:     const n=new THREE.Vector3()
+3870:       .subVectors(b,a)
+3871:       .cross(new THREE.Vector3().subVectors(c,a))
+3872:       .normalize();
+3873: 
+3874:     addEdge(a,b,n);
+3875:     addEdge(b,c,n);
+3876:     addEdge(c,a,n);
+3877:   }
+3878: 
+3879:   const out=[];
+3880:   for(const ed of edges.values()){
+3881:     let keep=ed.normals.length===1;
+3882: 
+3883:     if(!keep){
+3884:       outer:
+3885:       for(let i=0;i<ed.normals.length;i++){
+3886:         for(let j=i+1;j<ed.normals.length;j++){
+3887:           // Same plane = renderer triangulation diagonal -> hide it.
+3888:           if(ed.normals[i].dot(ed.normals[j])<0.9999){
+3889:             keep=true;
+3890:             break outer;
+3891:           }
+3892:         }
+3893:       }
+3894:     }
+3895: 
+3896:     if(keep){
+3897:       out.push(
+3898:         ed.a.x,ed.a.y,ed.a.z,
+3899:         ed.b.x,ed.b.y,ed.b.z
+3900:       );
+3901:     }
+3902:   }
+3903: 
+3904:   const g=new THREE.BufferGeometry();
+3905:   g.setAttribute('position',new THREE.Float32BufferAttribute(out,3));
+3906:   return g;
+3907: }
+3908: 
+3909: function boxTopologyWireGeometry(mesh){
+3910:   const g=mesh.geometry;
+3911:   const pos=g?.getAttribute?.('position');
+3912:   if(!pos)return new THREE.BufferGeometry();
+3913: 
+3914:   const idx=g.index;
+3915:   const triCount=idx?Math.floor(idx.count/3):Math.floor(pos.count/3);
+3916:   const edgeMap=new Map();
+3917:   const eps=1e-7;
+3918: 
+3919:   function vi(t,c){return idx?idx.getX(t*3+c):t*3+c}
+3920:   function point(i){return new THREE.Vector3().fromBufferAttribute(pos,i)}
+3921:   function pkey(p){
+3922:     const q=1e6;
 
-===== new THREE.Mesh @ 2367 =====
-2332:     const color=classicMinimalColorForHandle(name);
-2333:     if(color==null||!ch.material)return;
-2334:     const mats=Array.isArray(ch.material)?ch.material:[ch.material];
-2335:     for(const m of mats){
-2336:       if(!m||!m.color||m.opacity===0)continue;
-2337:       m.color.setHex(color);
-2338:       if(m._color?.setHex)m._color.setHex(color);
-2339:       const isPlane=name.length===2 && name!=='E';
-2340:       const op=isPlane?ClassicMinimalTransformTheme.planeOpacity:ClassicMinimalTransformTheme.handleOpacity;
-2341:       if(m.opacity>0){m.transparent=isPlane||m.transparent;m.opacity=Math.min(m.opacity,op);}
-2342:       if('_opacity' in m && m._opacity>0)m._opacity=Math.min(m._opacity,op);
-2343:       m.depthWrite=false;
-2344:       m.needsUpdate=true;
-2345:     }
-2346:   });
-2347:   uniformScaleHandle?.material?.color?.setHex(ClassicMinimalTransformTheme.neutral);
-2348:   if(uniformScaleHandle?.material){uniformScaleHandle.material.opacity=.94;uniformScaleHandle.material.needsUpdate=true;}
-2349: }
-2350: function classicMinimalTransformCursor(axis=transform.axis,mode=transform.getMode()){
-2351:   if(!axis)return '';
-2352:   if(mode==='rotate')return 'var(--cursor-rotate)';
-2353:   if(mode==='scale'){
-2354:     if(axis==='XYZ'||axis==='XYZE')return 'var(--cursor-uniform-scale)';
-2355:     if(axis.length===2)return 'var(--cursor-plane)';
-2356:     return 'var(--cursor-scale)';
-2357:   }
-2358:   if(axis.length===2)return 'var(--cursor-plane)';
-2359:   return 'var(--cursor-move)';
-2360: }
-2361: 
-2362: // Native Z-up transform behavior. The editor camera is already configured
-2363: // with camera.up = (0, 0, 1), so TransformControls must keep its original
-2364: // X/Y/Z handle identities. Do not swap Y and Z names here.
-2365: 
-2366: // Dedicated center cube for uniform XYZ scaling.
-2367: const uniformScaleHandle=new THREE.Mesh(
-2368:   new THREE.BoxGeometry(.16,.16,.16),
-2369:   new THREE.MeshBasicMaterial({color:0xd8d8d8,depthTest:false,transparent:true,opacity:.95})
-2370: );
-2371: uniformScaleHandle.renderOrder=10001;
-2372: uniformScaleHandle.visible=false;
-2373: uniformScaleHandle.userData.isUniformScaleHandle=true;
-2374: scene.add(uniformScaleHandle);
-2375: applyClassicMinimalTransformTheme();
-2376: 
-2377: let uniformScaleDrag=null;
-2378: 
-2379: function updateUniformScaleHandle(){
-2380:   const obj=transform.object;
-2381:   const active=!!obj && transform.visible && transform.enabled && transform.getMode()==='scale';
-2382:   uniformScaleHandle.visible=active;
-2383:   if(!active)return;
-2384:   obj.updateMatrixWorld(true);
-2385:   const wp=new THREE.Vector3();
-2386:   obj.getWorldPosition(wp);
-2387:   uniformScaleHandle.position.copy(wp);
-2388:   const dist=Math.max(.001,camera.position.distanceTo(wp));
-2389:   const s=Math.max(.12,dist*.022);
-2390:   uniformScaleHandle.scale.setScalar(s);
-2391: }
-2392: 
-2393: function uniformScaleHandleHit(e){
-2394:   if(!uniformScaleHandle.visible)return false;
-2395:   const r=renderer.domElement.getBoundingClientRect();
-2396:   const p=uniformScaleHandle.position.clone().project(camera);
-2397:   const sx=r.left+(p.x*.5+.5)*r.width;
-2398:   const sy=r.top+(-p.y*.5+.5)*r.height;
-2399:   return Math.hypot(e.clientX-sx,e.clientY-sy)<=14;
-2400: }
-2401: 
-2402: function beginUniformScale(e){
-2403:   if(e.button!==0 || !transform.object || transform.getMode()!=='scale')return false;
-2404:   if(!uniformScaleHandleHit(e))return false;
-2405: 
-2406:   const target=transform.object;
-2407:   uniformScaleDrag={
-2408:     pointerId:e.pointerId,
-2409:     target,
-2410:     startY:e.clientY,
-2411:     startScale:target.scale.clone(),
-2412:     before:(subMode&&subPivot&&target===subPivot)?null:transformState(target),
-2413:     sub:!!(subMode&&subPivot&&target===subPivot)
-2414:   };
-2415:   if(uniformScaleDrag.sub) beginSubTransform();
-2416:   routerOwner='uniformScale';
-2417:   routerPointerId=e.pointerId;
-2418:   orbit.enabled=false;
-2419:   try{renderer.domElement.setPointerCapture(e.pointerId)}catch(_){}
-2420:   return true;
-2421: }
-2422: 
-2423: function moveUniformScale(e){
-2424:   if(!uniformScaleDrag || e.pointerId!==uniformScaleDrag.pointerId)return;
-2425:   const dy=uniformScaleDrag.startY-e.clientY;
-2426:   const precision=(TransformSystem.modifiers.shift||TransformConfig.fine)?.25:1;
-2427:   const f=Math.max(.001,Math.exp(dy*.01*precision));
-2428:   const s=uniformScaleDrag.startScale;
-2429:   uniformScaleDrag.target.scale.set(s.x*f,s.y*f,s.z*f);
-2430:   uniformScaleDrag.target.updateMatrixWorld(true);
-2431:   if(uniformScaleDrag.sub)applySubTransform();
-2432:   TransformSystem.showFeedback();TransformSystem.updateFeedback();
-2433:   refreshModifyPanel();
-2434: }
-2435: 
-2436: function endUniformScale(e){
-2437:   if(!uniformScaleDrag || e.pointerId!==uniformScaleDrag.pointerId)return;
-2438:   const d=uniformScaleDrag;
-2439:   if(d.sub)finishSubTransform();
-2440:   else{
-2441:     const after=transformState(d.target);
-2442:     if(stateChanged(d.before,after))pushUndo({type:'transform',object:d.target,before:d.before,after});
-2443:   }
-2444:   try{renderer.domElement.releasePointerCapture(e.pointerId)}catch(_){}
-2445:   uniformScaleDrag=null;
-2446:   if(routerOwner==='uniformScale')routerOwner=null;
-2447:   routerPointerId=null;
-2448:   orbit.enabled=true;TransformSystem.hideFeedback();
-2449: }
-2450: 
-2451: // Hide only TransformControls' neutral white helper/guide lines.
-2452: // Colored X/Y/Z handles and their hit areas remain active.
-2453: function hideTransformGuideLines(){
-2454:   transform.traverse(child=>{
-2455:     if(!(child.isLine||child.isLineSegments)||!child.material)return;
-2456:     const mats=Array.isArray(child.material)?child.material:[child.material];
-2457:     for(const mat of mats){
-2458:       if(!mat || !mat.color)continue;
-2459:       const c=mat.color;
-2460:       const neutral=Math.abs(c.r-c.g)<0.04 && Math.abs(c.g-c.b)<0.04;
-2461:       const bright=(c.r+c.g+c.b)/3>0.45;
-2462:       if(neutral && bright){
-2463:         mat.visible=false;
-2464:         mat.opacity=0;
-2465:         mat.transparent=true;
-2466:         mat.depthWrite=false;
+===== createObject @ 4941 =====
+4886:       }
+4887:       const r=prepareGeometry(m);
+4888:       const transfer=[];
+4889:       if(r.bounds)transfer.push(r.bounds.buffer);
+4890:       if(r.triangleIndices)transfer.push(r.triangleIndices.buffer);
+4891:       self.postMessage(r,transfer);
+4892:     }
+4893:   }catch(err){
+4894:     self.postMessage({
+4895:       type:'workerError',
+4896:       jobId:m.jobId,
+4897:       taskId:m.taskId,
+4898:       message:String(err&&err.message||err)
+4899:     });
+4900:   }
+4901: };
+4902: `;
+4903: 
+4904: const LiteTraceWorkerTracing=Object.freeze({
+4905:   enabled:false,
+4906:   canUse:pool=>!!pool?.available&&pool.size>0,
+4907:   architecture:'worker tile tracing boundary; current proven integrator remains fallback',
+4908:   activationRule:'Enable only after browser-proven serialized integrator kernel.'
+4909: });
+4910: window.LiteTraceWorkerTracing=LiteTraceWorkerTracing;
+4911: 
+4912: var RenderWorkerPool = class RenderWorkerPool{
+4913:   constructor(size=0){
+4914:     const hc=Math.max(1,Number(navigator.hardwareConcurrency)||2);
+4915:     this.autoSize=Math.max(1,Math.min(Math.max(1,hc-1),64));
+4916:     this.size=this._normalizeSize(size||this.autoSize);
+4917:     this.workers=[];
+4918:     this.idle=[];
+4919:     this.queue=[];
+4920:     this.activeTasks=new Map();
+4921:     this.nextTaskId=1;
+4922:     this.nextWorkerId=1;
+4923:     this.workerURL=null;
+4924:     this.available=typeof Worker!=='undefined';
+4925:     this.disposed=false;
+4926:     this.paused=false;
+4927:     this.generation=1;
+4928:     this.failureCount=0;
+4929:     this.completedCount=0;
+4930:     this.cancelledCount=0;
+4931:     this.timeoutCount=0;
+4932:   }
+4933: 
+4934:   _normalizeSize(value){
+4935:     return Math.max(1,Math.min(Number(value)||1,64));
+4936:   }
+4937: 
+4938:   _ensureURL(){
+4939:     if(this.workerURL||!this.available)return;
+4940:     const blob=new Blob([RenderWorkerKernelSource],{type:'text/javascript'});
+4941:     this.workerURL=URL.createObjectURL(blob);
+4942:   }
+4943: 
+4944:   _spawnWorker(){
+4945:     if(this.disposed||!this.available)return null;
+4946:     this._ensureURL();
+4947:     const worker=new Worker(this.workerURL);
+4948:     worker.__renderWorkerId=this.nextWorkerId++;
+4949:     worker.__renderBusy=false;
+4950:     worker.__renderState=this.paused?'paused':'idle';
+4951:     worker.__renderTaskId=null;
+4952:     worker.__renderJobId=null;
+4953:     worker.__renderPoolGeneration=this.generation;
+4954:     worker.__perf={tasks:0,totalMs:0,lastMs:0,failures:0,idleSince:performance.now(),busySince:0};
+4955:     worker.onmessage=e=>this._handleMessage(worker,e.data||{});
+4956:     worker.onerror=e=>{
+4957:       e?.preventDefault?.();
+4958:       this._handleFailure(worker,e?.message||'Worker error');
+4959:     };
+4960:     this.workers.push(worker);
+4961:     if(!this.paused)this.idle.push(worker);
+4962:     return worker;
+4963:   }
+4964: 
+4965:   _retireWorker(worker,{terminate=true,replace=false}={}){
+4966:     if(!worker)return;
+4967:     this.idle=this.idle.filter(w=>w!==worker);
+4968:     this.workers=this.workers.filter(w=>w!==worker);
+4969:     worker.__renderBusy=false;
+4970:     worker.__renderState='retired';
+4971:     worker.__renderTaskId=null;
+4972:     worker.__renderJobId=null;
+4973:     if(terminate){try{worker.terminate();}catch(_){}}
+4974:     if(replace&&!this.disposed&&this.available&&this.workers.length<this.size){
+4975:       this._spawnWorker();
+4976:     }
+4977:   }
+4978: 
+4979:   ensure(){
+4980:     if(this.disposed||!this.available)return;
+4981:     this._ensureURL();
+4982:     while(this.workers.length<this.size)this._spawnWorker();
+4983:     while(this.workers.length>this.size){
+4984:       const idleWorker=this.idle.pop();
+4985:       if(idleWorker)this._retireWorker(idleWorker,{terminate:true,replace:false});
+4986:       else break; // active workers retire naturally after their current task
+4987:     }
+4988:   }
+4989: 
+4990:   setSize(size){
+4991:     const next=this._normalizeSize(size);
+4992:     if(next===this.size)return this.size;
+4993:     this.size=next;
+4994:     if(this.disposed)return this.size;
+4995:     this.ensure();
+4996:     this._pump();
+4997:     return this.size;
+4998:   }
+4999: 
+5000:   setThreadSetting(setting){
+5001:     const hc=Math.max(1,Number(navigator.hardwareConcurrency)||2);
+5002:     if(setting==='Responsive')return this.setSize(Math.max(1,Math.min(64,Math.ceil(hc*.5))));
+5003:     if(setting==='Balanced')return this.setSize(Math.max(1,Math.min(64,hc-1)));
+5004:     if(setting==='Maximum')return this.setSize(Math.max(1,Math.min(64,hc)));
+5005:     if(setting==='Auto'||setting==null||setting==='')return this.setSize(this.autoSize);
+5006:     return this.setSize(setting);
+5007:   }
+5008: 
+5009:   _releaseWorker(worker){
+5010:     if(!worker||!this.workers.includes(worker))return;
+5011:     worker.__renderBusy=false;
+5012:     worker.__renderTaskId=null;
+5013:     worker.__renderJobId=null;
+5014:     worker.__renderState=this.paused?'paused':'idle';
+5015:     if(this.workers.length>this.size){
+5016:       this._retireWorker(worker,{terminate:true,replace:false});
+5017:       return;
+5018:     }
+5019:     if(!this.paused&&!this.idle.includes(worker))this.idle.push(worker);
+5020:   }
+5021: 
+5022:   _handleMessage(worker,message){
+5023:     if(this.disposed||!this.workers.includes(worker))return;
+5024:     if(worker.__renderPoolGeneration!==this.generation)return;
+5025: 
+5026:     const task=this.activeTasks.get(message.taskId);
+5027:     if(!task){
+5028:       // Stale/cancelled result: never let it complete a newer job.
+5029:       this._releaseWorker(worker);
+5030:       this._pump();
+5031:       return;
+5032:     }
+5033: 
+5034:     // Worker may only complete the task it was assigned.
+5035:     if(task.worker!==worker || task.poolGeneration!==this.generation){
+5036:       return;
+5037:     }
+5038: 
+5039:     const taskMs=Math.max(0,performance.now()-(task.startedAt||performance.now()));
+5040:     worker.__perf.lastMs=taskMs;
+5041:     worker.__perf.totalMs+=taskMs;
+5042:     worker.__perf.busySince=0;
+5043:     worker.__perf.idleSince=performance.now();
+5044:     this.activeTasks.delete(message.taskId);
+5045:     this._releaseWorker(worker);
+5046: 
+5047:     if(message.type==='workerError'){
+5048:       this.failureCount++;
+5049:       task.reject(new WorkerError(message.message||'Worker task failed'));
+5050:     }else if(message.type==='cancelled'){
+5051:       this.cancelledCount++;
+5052:       task.reject(Object.assign(new WorkerError('Render job cancelled'),{cancelled:true}));
+5053:     }else{
+5054:       this.completedCount++;
+5055:       task.resolve(message);
+5056:     }
+5057:     this._pump();
+5058:   }
+5059: 
+5060:   _handleFailure(worker,message){
+5061:     if(this.disposed||!worker)return;
+5062:     this.failureCount++;
+5063:     const taskId=worker.__renderTaskId;
+5064:     const task=taskId!=null?this.activeTasks.get(taskId):null;
+5065:     if(task){
+5066:       this.activeTasks.delete(taskId);
+5067:       task.reject(new WorkerError(message||'Worker failed'));
+5068:     }
+5069:     this._retireWorker(worker,{terminate:true,replace:true});
+5070:     this._pump();
+5071:   }
+5072: 
+5073:   _pump(){
+5074:     if(this.disposed||this.paused)return;
+5075:     this.ensure();
+5076:     while(this.idle.length&&this.queue.length){
+5077:       const worker=this.idle.shift();
+5078:       if(!worker||!this.workers.includes(worker))continue;
+5079:       const task=this.queue.shift();
+5080:       if(!task||task.cancelled)continue;
+5081: 
+5082:       worker.__renderBusy=true;
+5083:       worker.__renderState=(task.message.type==='prepareGeometry')?'preparing':'tracing';
+5084:       worker.__renderTaskId=task.taskId;
+5085:       worker.__renderJobId=task.message.jobId;
+5086:       task.worker=worker;
+5087:       task.poolGeneration=this.generation;
+5088:       task.startedAt=RenderProfiler16.begin();
+5089:       worker.__perf.busySince=task.startedAt;
+5090:       worker.__perf.tasks++;
 
-===== const scene= @ 2099 =====
-2064:     if(e.target?.id==='boxChamferEnabled'||e.target?.id==='boxGenerateMapping')syncBoxOptions();
-2065:   });
-2066:   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',syncBoxOptions);
-2067:   else syncBoxOptions();
-2068: })();
-2069: 
-2070: 
-2071: /* ============================================================
-2072:    3DLite 2.5
-2073:    Clean-room lightweight modeling editor.
-2074:    Interaction/UI reference: 3ds Max-style workflow.
-2075:    ============================================================ */
-2076: 
-2077: const COLORS={
-2078:   background:0x3a3a3a,
-2079:   object:0xb8b0a3,
-2080:   wire:0x242424,
-2081:   selectedWire:0x242424,
-2082:   vertex:0x268cff,
-2083:   selectedVertex:0xff3030,
-2084:   vertexHover:0x55d66b,
-2085:   selectedEdge:0xff3030,
-2086:   selectedPoly:0xff4545,
-2087:   hover:0x55bfff,
-2088:   backEdge:0x2b2b2b,
-2089:   gridMajor:0x53616a,
-2090:   gridMinor:0x3f494f
-2091: };
-2092: 
-2093: const viewport=document.getElementById('viewport');
-2094: const viewportWrap=document.getElementById('viewportWrap');
-2095: const statsEl=document.getElementById('stats');
-2096: const hintEl=document.getElementById('hint');
-2097: const marqueeEl=document.getElementById('marquee');
-2098: 
-2099: const scene=new THREE.Scene();
-2100: scene.background=new THREE.Color(COLORS.background);
-2101: 
-2102: const camera=new THREE.PerspectiveCamera(45,1,1,100000);
-2103: camera.up.set(0,0,1);
-2104: camera.position.set(800,800,600);
-2105: 
-2106: const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
-2107: 
-2108: const viewportEl=document.getElementById('viewport');
-2109: const modernCursor=document.getElementById('modernCursor');
-2110: const cursorCross=document.getElementById('cursorCross');
-2111: const cursorOrbit=document.getElementById('cursorOrbit');
-2112: 
-2113: let cursorMode='default';
-2114: let cursorX=0,cursorY=0;
-2115: 
-2116: function setCursorMode(mode){
-2117:   if(cursorMode===mode)return;
-2118:   cursorMode=mode;
-2119: 
-2120:   viewportEl.classList.remove(
-2121:     'cursor-object',
-2122:     'cursor-pan',
-2123:     'cursor-pan-active',
-2124:     'cursor-orbit'
-2125:   );
-2126: 
-2127:   modernCursor.style.display='none';
-2128:   cursorCross.style.display='none';
-2129:   cursorOrbit.style.display='none';
-2130: 
-2131:   if(mode==='object'){
-2132:     viewportEl.classList.add('cursor-object');
-2133:   }else if(mode==='pan'){
-2134:     viewportEl.classList.add('cursor-pan');
-2135:   }else if(mode==='pan-active'){
-2136:     viewportEl.classList.add('cursor-pan-active');
-2137:   }else if(mode==='orbit'){
-2138:     viewportEl.classList.add('cursor-orbit');
-2139:   }
-2140: }
-2141: 
-2142: function updateModernCursorPosition(e){
-2143:   cursorX=e.clientX;
-2144:   cursorY=e.clientY;
-2145:   modernCursor.style.left=cursorX+'px';
-2146:   modernCursor.style.top=cursorY+'px';
-2147: }
-2148: 
-2149: function objectUnderPointer(e){
-2150:   const r=renderer.domElement.getBoundingClientRect();
-2151:   mouse.x=((e.clientX-r.left)/r.width)*2-1;
-2152:   mouse.y=-((e.clientY-r.top)/r.height)*2+1;
-2153: 
-2154:   raycaster.setFromCamera(mouse,camera);
-2155:   const hits=raycaster.intersectObjects(
-2156:     objects.filter(o=>o.visible&&!o.userData.frozen),
-2157:     false
-2158:   );
-2159:   return hits.length>0;
-2160: }
-2161: 
-2162: function refreshViewportCursor(e){
-2163:   updateModernCursorPosition(e);
-2164: 
-2165:   if(altMMBOrbit||routerOwner==='viewportOrbit'){
-2166:     setCursorMode('orbit');
-2167:     return;
-2168:   }
-2169: 
-2170:   if((e.buttons&4)!==0){
-2171:     setCursorMode(e.altKey?'orbit':'pan-active');
-2172:     return;
-2173:   }
-2174: 
-2175:   if(createTool||transform.dragging){
-2176:     setCursorMode('default');
-2177:     return;
-2178:   }
-2179: 
-2180:   // v3.78.4: while Editable Poly sub-object/Edit mode is active, keep the
-2181:   // crosshair everywhere in the viewport. Navigation and gizmo dragging above
-2182:   // still keep their dedicated cursors.
-2183:   if(subMode && selected?.userData?.editPoly){
-2184:     setCursorMode('object');
-2185:   }else if(objectUnderPointer(e)){
-2186:     setCursorMode('object');
-2187:   }else{
-2188:     setCursorMode('default');
-2189:   }
-2190: }
-2191: 
-2192: renderer.domElement.addEventListener('pointermove',refreshViewportCursor,{passive:true});
-2193: renderer.domElement.addEventListener('pointerleave',()=>{
-2194:   setCursorMode('default');
-2195: });
-2196: renderer.domElement.addEventListener('pointerenter',e=>{
-2197:   refreshViewportCursor(e);
-2198: });
+===== scene.add(mesh) @ 13945 =====
+13890: 
+13891:   const t=Math.max(Math.abs(createThicknessStartY-e.clientY)/createThicknessPixelsPerUnit,.25);
+13892:   const id=createTool==='torus'?'torusTube':createTool==='knot'?'knotTube':'helixTube';
+13893:   const el=document.getElementById(id);if(el)el.value=t.toFixed(2);
+13894:   const p=getCreateParams(createTool);
+13895:   createPreview.userData.creationParams=p;
+13896:   createPreview.scale.set(1,1,1);
+13897:   createPreview.position.set(createStart.x,createStart.y,createTool==='helix'?0:0);
+13898:   const old=createPreview.geometry;
+13899:   if(createTool==='torus')createPreview.geometry=primitiveGeometry('torus',createBaseParams.radius,createBaseParams.radius,1,p);
+13900:   else if(createTool==='knot')createPreview.geometry=primitiveGeometry('knot',createBaseParams.radius,createBaseParams.radius,1,p);
+13901:   else createPreview.geometry=primitiveGeometry('helix',createBaseParams.radius,createBaseParams.radius,Math.max(p.height,.001),p);
+13902:   old?.dispose();rebuildWire(createPreview);
+13903:   createPreview.visible=true;
+13904:   if(createPreview.userData.wire)createPreview.userData.wire.visible=true;
+13905: }
+13906: function beginTubeHeightStage(e){
+13907:   createStage=2;
+13908:   createHeightStartY=e.clientY;
+13909:   const probe=TEMP_V3.get().set(createStart.x,createStart.y,0);
+13910:   createHeightPixelsPerUnit=Math.max(screenPixelsPerWorldZ(probe),.001);
+13911:   createPreview.position.set(createStart.x,createStart.y,.5);
+13912:   createPreview.scale.set(1,1,1);
+13913:   createPreview.visible=true;
+13914:   if(createPreview.userData.wire)createPreview.userData.wire.visible=true;
+13915:   hintEl.textContent='Move mouse vertically: set Height • LMB click to create';
+13916:   routerOwner=null;routerPointerId=null;orbit.enabled=false;
+13917: }
+13918: function beginHelixHeightStage(e){
+13919:   createStage=2;
+13920:   createHeightStartY=e.clientY;
+13921:   const probe=TEMP_V3.get().set(createStart.x,createStart.y,0);
+13922:   createHeightPixelsPerUnit=Math.max(screenPixelsPerWorldZ(probe),.001);
+13923:   createPreview.position.set(createStart.x,createStart.y,0);
+13924:   createPreview.scale.set(1,1,1);
+13925:   createPreview.visible=true;
+13926:   if(createPreview.userData.wire)createPreview.userData.wire.visible=true;
+13927:   hintEl.textContent='Move mouse vertically: set Z Height • LMB click to create';
+13928: }
+13929: function commitCreate(){
+13930:   if(!createPreview) return;
+13931:   const mesh=createPreview;
+13932:   bakeCreationPreview(mesh);
+13933: 
+13934:   createPreview=null;
+13935:   createStage=0;
+13936:   createTool=null;
+13937:   createBaseParams=null;
+13938:   createHeightPixelsPerUnit=1;
+13939:   createThicknessPixelsPerUnit=1;
+13940:   createThicknessStartY=0;
+13941:   routerOwner=null;
+13942:   routerPointerId=null;
+13943: 
+13944:   objects.push(mesh);
+13945:   if(mesh.parent!==scene)scene.add(mesh);
+13946: 
+13947:   pushUndo({type:'create',object:mesh});
+13948:   selectOnly(mesh);
+13949:   const createNameEl=document.getElementById('createName');
+13950:   if(createNameEl)createNameEl.value=primitiveTypeDisplayName(mesh.userData.primitiveType);
+13951: 
+13952:   // Restore normal viewport + TransformControls state after staged creation.
+13953:   orbit.enabled=true;
+13954:   transform.enabled=true;
+13955:   transform.visible=true;
+13956:   syncTransformTarget();
+13957:   hideTransformGuideLines();
+13958: 
+13959:   document.querySelectorAll('[data-create]').forEach(b=>b.classList.remove('active'));
+13960:   hintEl.textContent='LMB select • MMB pan • Alt+MMB orbit • Wheel zoom • W/E/R transform';
+13961:   updateStats();
+13962: }
+13963: 
+13964: /* ---------- Selection ---------- */
+13965: function selectOnly(obj){
+13966:   selectedObjects=obj?[obj]:[];
+13967:   selected=obj||null;
+13968:   refreshSelection();
+13969:   if(obj && !createTool){
+13970:     const modifyBtn=document.getElementById('modifyTabBtn');
+13971:     if(modifyBtn && !modifyBtn.classList.contains('active'))modifyBtn.click();
+13972:   }
+13973: }
+13974: function toggleSelect(obj){
+13975:   const i=selectedObjects.indexOf(obj);
+13976:   if(i>=0) selectedObjects.splice(i,1); else selectedObjects.push(obj);
+13977:   selected=selectedObjects.length?selectedObjects[selectedObjects.length-1]:null;
+13978:   refreshSelection();
+13979:   if(selected && !createTool){
+13980:     const modifyBtn=document.getElementById('modifyTabBtn');
+13981:     if(modifyBtn && !modifyBtn.classList.contains('active'))modifyBtn.click();
+13982:   }
+13983: }
+13984: function clearSelection(){
+13985:   selectedObjects=[];
+13986:   selected=null;
+13987:   exitSubMode();
+13988:   refreshSelection();
+13989: }
+13990: function updateObjectWireVisual(o){
+13991:   if(!o?.userData?.wire)return;
+13992:   const isSelected=selectedObjects.includes(o);
+13993:   const isHovered=(hovered===o);
+13994:   const mat=o.userData.wire.material;
+13995:   mat.color.setHex(isSelected?COLORS.selected:(isHovered?COLORS.hover:COLORS.wire));
+13996:   mat.linewidth=isSelected?1.52:(isHovered?1.42:0.98);
+13997:   mat.opacity=(isSelected||isHovered)?1.0:.94;
+13998:   mat.needsUpdate=true;
+13999: }
+14000: function refreshSelection(){
+14001:   objects.forEach(updateObjectWireVisual);
+14002:   syncTransformTarget();
+14003:   refreshModifyPanel();
+14004:   updateStats();
+14005: }
+14006: function pickObject(e){
+14007:   setMouseFromEvent(e);
+14008:   raycaster.setFromCamera(mouse,camera);
+14009:   const hits=raycaster.intersectObjects(objects.filter(o=>o.visible&&!o.userData.frozen),false);
+14010:   if(hits.length){
+14011:     const obj=hits[0].object;
+14012:     if(e.ctrlKey) toggleSelect(obj); else selectOnly(obj);
+14013:     return true;
+14014:   }
+14015:   return false;
+14016: }
+14017: 
+14018: 
+14019: /* ============================================================
+14020:    3DLite POLY KERNEL 2.0
+14021:    Architecture inspired by concepts documented in Autodesk's
+14022:    public 3ds Max SDK: MNMesh/MNVert/MNEdge/MNFace and the
+14023:    Base Object -> Derived Object -> Modifier pipeline.
+14024: 
+14025:    This is an original implementation. It does not contain or
+14026:    reproduce Autodesk source code.
+14027:    ============================================================ */
+14028: 
+14029: /* 3DLite 3.48 sub-object hover palette:
+14030:    Polygon / Edge / Border = blue, Vertex = green. */
+14031: 
+14032: var MN_DEAD=1<<0;
+14033: const MN_SEL=1<<1;
+14034: const MN_TARG=1<<2;
+14035: const MN_HIDDEN=1<<3;
+14036: 
+14037: 
+14038: /* ---------- High-performance kernel services ----------
+14039:    Modern design goals:
+14040:    - topology and geometry version counters
+14041:    - lazy adjacency rebuild
+14042:    - packed typed-array cache for hot numeric loops
+14043:    - reusable render buffers
+14044:    - allocation-free temporary-vector pool
+14045:    - command-oriented undo snapshots
+14046: */
+14047: const DIRTY_NONE=0;
+14048: const DIRTY_GEOMETRY=1<<0;
+14049: const DIRTY_TOPOLOGY=1<<1;
+14050: const DIRTY_NORMALS=1<<2;
+14051: const DIRTY_SELECTION=1<<3;
+14052: const DIRTY_ALL=DIRTY_GEOMETRY|DIRTY_TOPOLOGY|DIRTY_NORMALS|DIRTY_SELECTION;
+14053: 
+14054: class TempVectorPool{
+14055:   constructor(size=64){
+14056:     this.items=Array.from({length:size},()=>new THREE.Vector3());
+14057:     this.cursor=0;
+14058:   }
+14059:   reset(){this.cursor=0}
+14060:   get(){
+14061:     if(this.cursor>=this.items.length)this.items.push(new THREE.Vector3());
+14062:     return this.items[this.cursor++].set(0,0,0);
+14063:   }
+14064: }
+14065: const TEMP_V3=new TempVectorPool(96);
+14066: 
+14067: class PolyRenderCache{
+14068:   constructor(){
+14069:     this.positionCapacity=0;
+14070:     this.indexCapacity=0;
+14071:     this.positionArray=null;
+14072:     this.indexArray=null;
+14073:     this.triangleToFace=[];
+14074:     this.renderToMN=[];
+14075:     this.topologyVersion=-1;
+14076:     this.geometryVersion=-1;
+14077:   }
+14078:   ensurePositions(vertexCount){
+14079:     const required=vertexCount*3;
+14080:     if(required<=this.positionCapacity)return false;
+14081:     let cap=Math.max(24,this.positionCapacity||24);
+14082:     while(cap<required)cap=Math.ceil(cap*1.6);
+14083:     this.positionCapacity=cap;
+14084:     this.positionArray=new Float32Array(cap);
+14085:     return true;
+14086:   }
+14087:   ensureIndices(indexCount){
+14088:     if(indexCount<=this.indexCapacity)return false;
+14089:     let cap=Math.max(36,this.indexCapacity||36);
+14090:     while(cap<indexCount)cap=Math.ceil(cap*1.6);
+14091:     this.indexCapacity=cap;
+14092:     this.indexArray=new Uint32Array(cap);
+14093:     return true;
+14094:   }
 
-===== window.scene @ 18891 =====
-18856:   }));
-18857:   document.getElementById('materialResetUVBtn')?.addEventListener('click',()=>{
-18858:     const mesh=MaterialWorkspace.selectedMesh();if(mesh)UVWSystem.reset(mesh);
-18859:   });
-18860: 
-18861:   updateMaterialPanelState();
-18862:   window.MaterialWorkspace=MaterialWorkspace;
-18863: })();
-18864: 
-18865: 
-18866: 
-18867: // Central input observation keeps the original event router intact while making
-18868: // pointer state available to new tool/picking architecture owners.
-18869: renderer.domElement.addEventListener('pointerdown',e=>InputController.notePointer(e),{capture:true,passive:true});
-18870: renderer.domElement.addEventListener('pointermove',e=>InputController.notePointer(e),{capture:true,passive:true});
-18871: renderer.domElement.addEventListener('pointerup',e=>InputController.notePointer(e),{capture:true,passive:true});
-18872: 
-18873: function validateGenerationKnowledge(){
-18874:   const issues=[];
-18875:   const k=window.GENERATION_KNOWLEDGE;
-18876:   if(!k)issues.push('Generation knowledge manifest missing');
-18877:   if(typeof boot3DLite!=='function')issues.push('boot3DLite owner missing');
-18878:   if(typeof updateDisplayForMesh!=='function')issues.push('viewport display owner missing');
-18879:   if(typeof syncTransformTarget!=='function')issues.push('transform target owner missing');
-18880:   if(typeof MeshWireManager==='undefined')issues.push('MeshWireManager missing');
-18881:   if(typeof window.selectedObject!=='undefined')issues.push('legacy selectedObject global present');
-18882:   return {ok:issues.length===0,issues};
-18883: }
-18884: window.validateGenerationKnowledge=validateGenerationKnowledge;
-18885: 
-18886: 
-18887: window.CLASSIC_MINIMAL_TRANSFORM_THEME='3.78.29';
-18888: /* ---------- Architecture Refactor Batch 13: scene/object ownership — Gen1 ---------- */
-18889: const ThreeDLiteSceneRegistryService=(()=>{const records=new Map();return Object.freeze({owner:'SceneManager',track(object,meta={}){if(!object?.uuid)return false;records.set(object.uuid,{object,meta:{...meta},trackedAt:performance.now()});return true;},untrack(objectOrId){const id=typeof objectOrId==='string'?objectOrId:objectOrId?.uuid;return id?records.delete(id):false;},get(id){return records.get(id)?.object||null;},has(id){return records.has(id);},snapshot(){return Object.freeze([...records].map(([id,r])=>Object.freeze({id,name:r.object?.name||'',type:r.object?.type||'',meta:Object.freeze({...r.meta})})));}});})(); window.ThreeDLiteSceneRegistryService=ThreeDLiteSceneRegistryService;
-18890: const ThreeDLiteObjectIdentityService=Object.freeze({owner:'SceneManager',describe(o){return Object.freeze({uuid:o?.uuid||null,name:o?.name||'',type:o?.type||null,parent:o?.parent?.uuid||null});}}); window.ThreeDLiteObjectIdentityService=ThreeDLiteObjectIdentityService;
-18891: const ThreeDLiteSceneMutationService=Object.freeze({owner:'SceneManager',add(o,parent=window.scene){if(!o||!parent?.add)return false;parent.add(o);ThreeDLiteSceneRegistryService.track(o);window.ThreeDLiteDirtyFlagService?.mark?.('scene');return true;},remove(o){if(!o?.parent)return false;o.parent.remove(o);ThreeDLiteSceneRegistryService.untrack(o);window.ThreeDLiteDirtyFlagService?.mark?.('scene');return true;}}); window.ThreeDLiteSceneMutationService=ThreeDLiteSceneMutationService;
-18892: const ThreeDLiteHierarchyService=Object.freeze({owner:'SceneManager',children(o){return Object.freeze([...(o?.children||[])]);},ancestors(o){const a=[];for(let p=o?.parent;p;p=p.parent)a.push(p);return Object.freeze(a);},isDescendant(o,parent){for(let p=o?.parent;p;p=p.parent)if(p===parent)return true;return false;}}); window.ThreeDLiteHierarchyService=ThreeDLiteHierarchyService;
-18893: function register3DLiteBatch13Gen1(){const c=window.ThreeDLiteAppContext;if(!c?.register)return false;for(const [n,s] of Object.entries({SceneRegistryService:ThreeDLiteSceneRegistryService,ObjectIdentityService:ThreeDLiteObjectIdentityService,SceneMutationService:ThreeDLiteSceneMutationService,HierarchyService:ThreeDLiteHierarchyService}))if(!c.get?.(n))c.register(n,s);return true;} window.register3DLiteBatch13Gen1=register3DLiteBatch13Gen1; register3DLiteBatch13Gen1();
-18894: 
-18895: /* ---------- Architecture Refactor Batch 13: scene/object ownership — Gen2 ---------- */
-18896: const ThreeDLiteObjectLifecycleService=Object.freeze({owner:'SceneManager',dispose(o,{recursive=true}={}){if(!o)return false;const nodes=recursive?[o,...(o.children||[]).flatMap(function walk(n){return [n,...(n.children||[]).flatMap(walk)]})]:[o];for(const n of nodes){try{n.geometry?.dispose?.();const mats=Array.isArray(n.material)?n.material:[n.material];for(const m of mats)if(m)m.dispose?.();}catch(e){window.ThreeDLiteErrorBoundaryService?.report?.('object-dispose',e);}ThreeDLiteSceneRegistryService.untrack(n);}o.parent?.remove?.(o);return true;}}); window.ThreeDLiteObjectLifecycleService=ThreeDLiteObjectLifecycleService;
-18897: const ThreeDLiteSceneQueryService=Object.freeze({owner:'SceneManager',all(root=window.scene){const a=[];root?.traverse?.(o=>a.push(o));return Object.freeze(a);},byType(type,root=window.scene){return Object.freeze(this.all(root).filter(o=>o.type===type));},byName(name,root=window.scene){return this.all(root).find(o=>o.name===name)||null;}}); window.ThreeDLiteSceneQueryService=ThreeDLiteSceneQueryService;
-18898: const ThreeDLiteSceneSnapshotService=Object.freeze({owner:'SceneManager',capture(root=window.scene){const objects=ThreeDLiteSceneQueryService.all(root).map(o=>ThreeDLiteObjectIdentityService.describe(o));return Object.freeze({count:objects.length,objects:Object.freeze(objects),selected:window.selected?.uuid||null});}}); window.ThreeDLiteSceneSnapshotService=ThreeDLiteSceneSnapshotService;
-18899: function register3DLiteBatch13Gen2(){const c=window.ThreeDLiteAppContext;if(!c?.register)return false;for(const [n,s] of Object.entries({ObjectLifecycleService:ThreeDLiteObjectLifecycleService,SceneQueryService:ThreeDLiteSceneQueryService,SceneSnapshotService:ThreeDLiteSceneSnapshotService}))if(!c.get?.(n))c.register(n,s);return true;} window.register3DLiteBatch13Gen2=register3DLiteBatch13Gen2; register3DLiteBatch13Gen2();
-18900: 
-18901: /* ---------- Architecture Refactor Batch 13: scene/object ownership — Gen3 ---------- */
-18902: const ThreeDLiteSceneAuditService=Object.freeze({owner:'ArchitectureCore',run(root=window.scene){const errors=[],seen=new Set();for(const o of ThreeDLiteSceneQueryService.all(root)){if(!o.uuid)errors.push('object-without-uuid');else if(seen.has(o.uuid))errors.push('duplicate-object-uuid:'+o.uuid);else seen.add(o.uuid);if(o.parent===o)errors.push('self-parent:'+o.uuid);}return Object.freeze({ok:errors.length===0,errors:Object.freeze(errors),objectCount:seen.size});}}); window.ThreeDLiteSceneAuditService=ThreeDLiteSceneAuditService;
-18903: const ThreeDLiteSceneFacade=Object.freeze({owner:'ArchitectureCore',get registry(){return ThreeDLiteSceneRegistryService;},get mutations(){return ThreeDLiteSceneMutationService;},get hierarchy(){return ThreeDLiteHierarchyService;},get lifecycle(){return ThreeDLiteObjectLifecycleService;},get query(){return ThreeDLiteSceneQueryService;},snapshot(){return ThreeDLiteSceneSnapshotService.capture();},audit(){return ThreeDLiteSceneAuditService.run();}}); window.ThreeDLiteSceneFacade=ThreeDLiteSceneFacade;
-18904: const ThreeDLiteSceneOwnershipContract=Object.freeze({owner:'SceneManager',rule:'SceneManager owns scene graph mutation; SelectionManager references objects but does not own them.',services:Object.freeze(['ThreeDLiteSceneRegistryService','ThreeDLiteObjectIdentityService','ThreeDLiteSceneMutationService','ThreeDLiteHierarchyService','ThreeDLiteObjectLifecycleService','ThreeDLiteSceneQueryService','ThreeDLiteSceneSnapshotService','ThreeDLiteSceneAuditService','ThreeDLiteSceneFacade'])}); window.ThreeDLiteSceneOwnershipContract=ThreeDLiteSceneOwnershipContract;
-18905: function register3DLiteBatch13Services(){const c=window.ThreeDLiteAppContext;if(!c?.register)return false;for(const [n,s] of Object.entries({SceneAuditService:ThreeDLiteSceneAuditService,SceneFacade:ThreeDLiteSceneFacade,SceneOwnershipContract:ThreeDLiteSceneOwnershipContract}))if(!c.get?.(n))c.register(n,s);return true;} window.register3DLiteBatch13Services=register3DLiteBatch13Services; register3DLiteBatch13Services();
-18906: function validate3DLiteBatch13(){const required=['ThreeDLiteSceneRegistryService','ThreeDLiteObjectIdentityService','ThreeDLiteSceneMutationService','ThreeDLiteHierarchyService','ThreeDLiteObjectLifecycleService','ThreeDLiteSceneQueryService','ThreeDLiteSceneSnapshotService','ThreeDLiteSceneAuditService','ThreeDLiteSceneFacade','ThreeDLiteSceneOwnershipContract'],errors=[];for(const n of required)if(!window[n])errors.push(n+' missing');return Object.freeze({ok:errors.length===0,errors:Object.freeze(errors)});} window.validate3DLiteBatch13=validate3DLiteBatch13;
-18907: window.ThreeDLiteSceneArchitecture=Object.freeze({version:'3.84.2-batch13-gen3',changes:Object.freeze([121,122,123,124,125,126,127,128,129,130]),ownership:ThreeDLiteSceneOwnershipContract,validate:validate3DLiteBatch13});
-18908: 
-18909: 
-18910: 
-18911: /* ---------- Architecture Refactor Batch 14: viewport/render ownership — Gen1 ---------- */
-18912: const ThreeDLiteViewportRegistryService=(()=>{const views=new Map();return Object.freeze({owner:'ViewportManager',register(id,view){if(!id||!view)return false;views.set(id,view);return true;},unregister(id){return views.delete(id);},get(id){return views.get(id)||null;},ids(){return Object.freeze([...views.keys()]);},snapshot(){return Object.freeze([...views].map(([id,v])=>Object.freeze({id,hasCamera:!!v?.camera,hasRenderer:!!v?.renderer,enabled:v?.enabled!==false})));}});})(); window.ThreeDLiteViewportRegistryService=ThreeDLiteViewportRegistryService;
-18913: const ThreeDLiteRenderOwnershipService=Object.freeze({owner:'ViewportManager',contract:Object.freeze({renderer:'ViewportManager',camera:'ViewportManager',scene:'SceneManager',selection:'SelectionManager',loop:'AnimationLoopOwner'}),canRender(){return !!(window.renderer&&window.scene&&window.camera);}}); window.ThreeDLiteRenderOwnershipService=ThreeDLiteRenderOwnershipService;
-18914: const ThreeDLiteViewportRuntimeStateService=(()=>{let revision=0;return Object.freeze({owner:'ViewportManager',touch(){return ++revision;},snapshot(){return Object.freeze({revision,cameraType:window.camera?.type||null,rendererReady:!!window.renderer,sceneReady:!!window.scene});}});})(); window.ThreeDLiteViewportRuntimeStateService=ThreeDLiteViewportRuntimeStateService;
-18915: const ThreeDLiteRenderInvalidationService=(()=>{let dirty=true,reasons=new Set(['startup']);return Object.freeze({owner:'ViewportManager',invalidate(reason='unknown'){dirty=true;reasons.add(reason);window.ThreeDLiteDirtyFlagService?.mark?.('viewport');},consume(){const r=Object.freeze([...reasons]);dirty=false;reasons.clear();return Object.freeze({dirty:true,reasons:r});},peek(){return Object.freeze({dirty,reasons:Object.freeze([...reasons])});}});})(); window.ThreeDLiteRenderInvalidationService=ThreeDLiteRenderInvalidationService;
-18916: function register3DLiteBatch14Gen1(){const c=window.ThreeDLiteAppContext;if(!c?.register)return false;for(const [n,s] of Object.entries({ViewportRegistryService:ThreeDLiteViewportRegistryService,RenderOwnershipService:ThreeDLiteRenderOwnershipService,ViewportRuntimeStateService:ThreeDLiteViewportRuntimeStateService,RenderInvalidationService:ThreeDLiteRenderInvalidationService}))if(!c.get?.(n))c.register(n,s);return true;} window.register3DLiteBatch14Gen1=register3DLiteBatch14Gen1; register3DLiteBatch14Gen1();
-18917: 
-18918: /* ---------- Architecture Refactor Batch 14: viewport/render ownership — Gen2 ---------- */
-18919: const ThreeDLiteCameraStateService=Object.freeze({owner:'ViewportManager',snapshot(camera=window.camera){if(!camera)return Object.freeze({ready:false});return Object.freeze({ready:true,type:camera.type||null,position:Object.freeze({x:camera.position?.x||0,y:camera.position?.y||0,z:camera.position?.z||0}),near:camera.near??null,far:camera.far??null,zoom:camera.zoom??null});}}); window.ThreeDLiteCameraStateService=ThreeDLiteCameraStateService;
-18920: const ThreeDLiteRendererStateService=Object.freeze({owner:'ViewportManager',snapshot(renderer=window.renderer){if(!renderer)return Object.freeze({ready:false});const s=renderer.getSize?.(new THREE.Vector2());return Object.freeze({ready:true,width:s?.x||0,height:s?.y||0,pixelRatio:renderer.getPixelRatio?.()||1,contextLost:!!renderer.getContext?.()?.isContextLost?.()});}}); window.ThreeDLiteRendererStateService=ThreeDLiteRendererStateService;
-18921: const ThreeDLiteViewportSnapshotService=Object.freeze({owner:'ViewportManager',capture(){return Object.freeze({viewport:ThreeDLiteViewportRuntimeStateService.snapshot(),camera:ThreeDLiteCameraStateService.snapshot(),renderer:ThreeDLiteRendererStateService.snapshot(),invalidation:ThreeDLiteRenderInvalidationService.peek()});}}); window.ThreeDLiteViewportSnapshotService=ThreeDLiteViewportSnapshotService;
-18922: function register3DLiteBatch14Gen2(){const c=window.ThreeDLiteAppContext;if(!c?.register)return false;for(const [n,s] of Object.entries({CameraStateService:ThreeDLiteCameraStateService,RendererStateService:ThreeDLiteRendererStateService,ViewportSnapshotService:ThreeDLiteViewportSnapshotService}))if(!c.get?.(n))c.register(n,s);return true;} window.register3DLiteBatch14Gen2=register3DLiteBatch14Gen2; register3DLiteBatch14Gen2();
-18923: 
-18924: /* ---------- Architecture Refactor Batch 14: viewport/render ownership — Gen3 ---------- */
-18925: const ThreeDLiteViewportAuditService=Object.freeze({owner:'ArchitectureCore',run(){const errors=[];if(!window.renderer)errors.push('renderer-missing');if(!window.scene)errors.push('scene-missing');if(!window.camera)errors.push('camera-missing');if(window.renderer&&!window.renderer.domElement)errors.push('renderer-dom-missing');const ctx=window.renderer?.getContext?.();if(ctx?.isContextLost?.())errors.push('webgl-context-lost');return Object.freeze({ok:errors.length===0,errors:Object.freeze(errors),snapshot:ThreeDLiteViewportSnapshotService.capture()});}}); window.ThreeDLiteViewportAuditService=ThreeDLiteViewportAuditService;
-18926: const ThreeDLiteViewportFacade=Object.freeze({owner:'ArchitectureCore',get registry(){return ThreeDLiteViewportRegistryService;},get invalidation(){return ThreeDLiteRenderInvalidationService;},snapshot(){return ThreeDLiteViewportSnapshotService.capture();},audit(){return ThreeDLiteViewportAuditService.run();},invalidate(reason){ThreeDLiteRenderInvalidationService.invalidate(reason);}}); window.ThreeDLiteViewportFacade=ThreeDLiteViewportFacade;
-18927: const ThreeDLiteViewportOwnershipContract=Object.freeze({owner:'ViewportManager',rule:'ViewportManager owns renderer/camera state and render invalidation; SceneManager owns scene graph; AnimationLoopOwner alone starts the frame loop.',services:Object.freeze(['ThreeDLiteViewportRegistryService','ThreeDLiteRenderOwnershipService','ThreeDLiteViewportRuntimeStateService','ThreeDLiteRenderInvalidationService','ThreeDLiteCameraStateService','ThreeDLiteRendererStateService','ThreeDLiteViewportSnapshotService','ThreeDLiteViewportAuditService','ThreeDLiteViewportFacade'])}); window.ThreeDLiteViewportOwnershipContract=ThreeDLiteViewportOwnershipContract;
-18928: function register3DLiteBatch14Services(){const c=window.ThreeDLiteAppContext;if(!c?.register)return false;for(const [n,s] of Object.entries({ViewportAuditService:ThreeDLiteViewportAuditService,ViewportFacade:ThreeDLiteViewportFacade,ViewportOwnershipContract:ThreeDLiteViewportOwnershipContract}))if(!c.get?.(n))c.register(n,s);return true;} window.register3DLiteBatch14Services=register3DLiteBatch14Services; register3DLiteBatch14Services();
-18929: function validate3DLiteBatch14(){const required=['ThreeDLiteViewportRegistryService','ThreeDLiteRenderOwnershipService','ThreeDLiteViewportRuntimeStateService','ThreeDLiteRenderInvalidationService','ThreeDLiteCameraStateService','ThreeDLiteRendererStateService','ThreeDLiteViewportSnapshotService','ThreeDLiteViewportAuditService','ThreeDLiteViewportFacade','ThreeDLiteViewportOwnershipContract'],errors=[];for(const n of required)if(!window[n])errors.push(n+' missing');return Object.freeze({ok:errors.length===0,errors:Object.freeze(errors)});} window.validate3DLiteBatch14=validate3DLiteBatch14;
-18930: window.ThreeDLiteViewportArchitecture=Object.freeze({version:'3.84.3.1-batch14-gen3-hotfix',changes:Object.freeze([131,132,133,134,135,136,137,138,139,140]),ownership:ThreeDLiteViewportOwnershipContract,validate:validate3DLiteBatch14});
-18931: 
-18932: 
-18933: /* ---------- Architecture Refactor Batch 15: input/tool interaction ownership — Gen1 ---------- */
-18934: /* Change 141 — canonical input state owner */
-18935: const ThreeDLiteInputStateService=(()=>{const state={enabled:true,revision:0,lastSource:null};return Object.freeze({owner:'InputManager',setEnabled(v){state.enabled=!!v;state.revision++;return state.enabled;},note(source){state.lastSource=source||null;state.revision++;},snapshot(){return Object.freeze({...state});}});})(); window.ThreeDLiteInputStateService=ThreeDLiteInputStateService;
-18936: /* Change 142 — pointer state owner */
-18937: const ThreeDLitePointerStateService=(()=>{const p={x:0,y:0,buttons:0,pointerId:null,pointerType:null,inside:false,revision:0};return Object.freeze({owner:'InputManager',update(e){if(!e)return; if(Number.isFinite(e.clientX))p.x=e.clientX;if(Number.isFinite(e.clientY))p.y=e.clientY;p.buttons=Number.isFinite(e.buttons)?e.buttons:p.buttons;p.pointerId=e.pointerId??p.pointerId;p.pointerType=e.pointerType||p.pointerType;p.revision++;ThreeDLiteInputStateService.note('pointer');},setInside(v){p.inside=!!v;p.revision++;},snapshot(){return Object.freeze({...p});}});})(); window.ThreeDLitePointerStateService=ThreeDLitePointerStateService;
-18938: /* Change 143 — keyboard state owner */
-18939: const ThreeDLiteKeyboardStateService=(()=>{const down=new Set();let revision=0;return Object.freeze({owner:'InputManager',noteDown(e){if(e?.code)down.add(e.code);revision++;ThreeDLiteInputStateService.note('keyboard');},noteUp(e){if(e?.code)down.delete(e.code);revision++;},clear(){down.clear();revision++;},isDown(code){return down.has(code);},snapshot(){return Object.freeze({revision,down:Object.freeze([...down])});}});})(); window.ThreeDLiteKeyboardStateService=ThreeDLiteKeyboardStateService;
-18940: /* Change 144 — pointer capture owner */
-18941: const ThreeDLitePointerCaptureService=(()=>{let owner=null,pointerId=null;return Object.freeze({owner:'InputManager',claim(name,id,element=window.renderer?.domElement){if(owner&&owner!==name)return false;owner=name||'anonymous';pointerId=id??null;try{if(element?.setPointerCapture&&pointerId!=null)element.setPointerCapture(pointerId);}catch(e){window.ThreeDLiteErrorBoundaryService?.report?.('pointer-capture',e);}return true;},release(name,element=window.renderer?.domElement){if(owner&&name&&owner!==name)return false;try{if(element?.releasePointerCapture&&pointerId!=null&&element.hasPointerCapture?.(pointerId))element.releasePointerCapture(pointerId);}catch(e){window.ThreeDLiteErrorBoundaryService?.report?.('pointer-release',e);}owner=null;pointerId=null;return true;},snapshot(){return Object.freeze({owner,pointerId});}});})(); window.ThreeDLitePointerCaptureService=ThreeDLitePointerCaptureService;
-18942: function register3DLiteBatch15Gen1(){const c=window.ThreeDLiteAppContext;if(!c?.register)return false;for(const [n,s] of Object.entries({InputStateService:ThreeDLiteInputStateService,PointerStateService:ThreeDLitePointerStateService,KeyboardStateService:ThreeDLiteKeyboardStateService,PointerCaptureService:ThreeDLitePointerCaptureService}))if(!c.get?.(n))c.register(n,s);return true;} window.register3DLiteBatch15Gen1=register3DLiteBatch15Gen1; register3DLiteBatch15Gen1();
-18943: 
-18944: 
-18945: /* ---------- Architecture Refactor Batch 15: input/tool interaction ownership — Gen2 ---------- */
-18946: /* Change 145 — shortcut routing with explicit priority */
-18947: const ThreeDLiteShortcutRouterService=(()=>{const handlers=[];return Object.freeze({owner:'InputManager',register(id,fn,{priority=0,when=null}={}){if(!id||typeof fn!=='function')return false;const i=handlers.findIndex(h=>h.id===id);const rec={id,fn,priority:Number(priority)||0,when:typeof when==='function'?when:null};if(i>=0)handlers[i]=rec;else handlers.push(rec);handlers.sort((a,b)=>b.priority-a.priority);return true;},unregister(id){const i=handlers.findIndex(h=>h.id===id);if(i<0)return false;handlers.splice(i,1);return true;},route(e,context={}){if(!ThreeDLiteInputStateService.snapshot().enabled)return false;for(const h of handlers){if(h.when&&!h.when(context,e))continue;try{if(h.fn(e,context)===true)return true;}catch(err){window.ThreeDLiteErrorBoundaryService?.report?.('shortcut:'+h.id,err);}}return false;},snapshot(){return Object.freeze(handlers.map(h=>Object.freeze({id:h.id,priority:h.priority})));}});})(); window.ThreeDLiteShortcutRouterService=ThreeDLiteShortcutRouterService;
-18948: /* Change 146 — active tool ownership */
-18949: const ThreeDLiteToolActivationService=(()=>{let active=null,revision=0;const tools=new Map();return Object.freeze({owner:'ToolManager',register(id,tool){if(!id||!tool)return false;tools.set(id,tool);return true;},activate(id,context={}){if(active===id)return true;const next=tools.get(id);if(!next)return false;const prev=tools.get(active);try{prev?.deactivate?.(context);next.activate?.(context);}catch(e){window.ThreeDLiteErrorBoundaryService?.report?.('tool-activate:'+id,e);return false;}active=id;revision++;window.ThreeDLiteDirtyFlagService?.mark?.('tool');return true;},deactivate(context={}){if(!active)return true;const prev=tools.get(active);try{prev?.deactivate?.(context);}catch(e){window.ThreeDLiteErrorBoundaryService?.report?.('tool-deactivate:'+active,e);}active=null;revision++;return true;},active(){return active;},get(id){return tools.get(id)||null;},snapshot(){return Object.freeze({active,revision,registered:Object.freeze([...tools.keys()])});}});})(); window.ThreeDLiteToolActivationService=ThreeDLiteToolActivationService;
-18950: /* Change 147 — bounded interaction transaction owner */
-18951: const ThreeDLiteInteractionTransactionService=(()=>{let current=null,seq=0;return Object.freeze({owner:'ToolManager',begin(kind,meta={}){if(current)return null;current={id:++seq,kind:kind||'interaction',meta:{...meta},startedAt:performance.now()};window.ThreeDLiteTransactionService?.begin?.('interaction:'+current.kind);return Object.freeze({...current,meta:Object.freeze({...current.meta})});},commit(id){if(!current||current.id!==id)return false;window.ThreeDLiteTransactionService?.commit?.();current=null;return true;},cancel(id){if(!current||current.id!==id)return false;window.ThreeDLiteTransactionService?.rollback?.();current=null;return true;},current(){return current?Object.freeze({...current,meta:Object.freeze({...current.meta})}):null;}});})(); window.ThreeDLiteInteractionTransactionService=ThreeDLiteInteractionTransactionService;
-18952: function register3DLiteBatch15Gen2(){const c=window.ThreeDLiteAppContext;if(!c?.register)return false;for(const [n,s] of Object.entries({ShortcutRouterService:ThreeDLiteShortcutRouterService,ToolActivationService:ThreeDLiteToolActivationService,InteractionTransactionService:ThreeDLiteInteractionTransactionService}))if(!c.get?.(n))c.register(n,s);return true;} window.register3DLiteBatch15Gen2=register3DLiteBatch15Gen2; register3DLiteBatch15Gen2();
-18953: 
-18954: 
-18955: /* ---------- Architecture Refactor Batch 15: input/tool interaction ownership — Gen3 ---------- */
-18956: /* Change 148 — one cancellation path for transient interaction state */
-18957: const ThreeDLiteInteractionCancellationService=Object.freeze({owner:'ToolManager',cancel(reason='cancelled'){const tx=ThreeDLiteInteractionTransactionService.current();if(tx)ThreeDLiteInteractionTransactionService.cancel(tx.id);ThreeDLitePointerCaptureService.release();ThreeDLiteKeyboardStateService.clear();try{window.cancelTargetWeld?.();window.cancelCutTool?.();window.TransformSystem?.cancel?.();}catch(e){window.ThreeDLiteErrorBoundaryService?.report?.('interaction-cancel',e);}ThreeDLiteRenderInvalidationService?.invalidate?.('interaction-cancel:'+reason);return true;}}); window.ThreeDLiteInteractionCancellationService=ThreeDLiteInteractionCancellationService;
-18958: /* Change 149 — immutable interaction snapshot + audit */
-18959: const ThreeDLiteInteractionSnapshotService=Object.freeze({owner:'InputManager',capture(){return Object.freeze({input:ThreeDLiteInputStateService.snapshot(),pointer:ThreeDLitePointerStateService.snapshot(),keyboard:ThreeDLiteKeyboardStateService.snapshot(),capture:ThreeDLitePointerCaptureService.snapshot(),tool:ThreeDLiteToolActivationService.snapshot(),transaction:ThreeDLiteInteractionTransactionService.current(),shortcuts:ThreeDLiteShortcutRouterService.snapshot()});},audit(){const errors=[],s=this.capture();if(s.capture.owner&&!s.input.enabled)errors.push('pointer-captured-while-input-disabled');if(s.transaction&&!s.tool.active)errors.push('interaction-transaction-without-active-tool');return Object.freeze({ok:errors.length===0,errors:Object.freeze(errors),snapshot:s});}}); window.ThreeDLiteInteractionSnapshotService=ThreeDLiteInteractionSnapshotService;
-18960: /* Change 150 — consolidated interaction facade + ownership contract */
-18961: const ThreeDLiteInteractionFacade=Object.freeze({owner:'ArchitectureCore',get input(){return ThreeDLiteInputStateService;},get pointer(){return ThreeDLitePointerStateService;},get keyboard(){return ThreeDLiteKeyboardStateService;},get shortcuts(){return ThreeDLiteShortcutRouterService;},get tools(){return ThreeDLiteToolActivationService;},get transactions(){return ThreeDLiteInteractionTransactionService;},cancel(reason){return ThreeDLiteInteractionCancellationService.cancel(reason);},snapshot(){return ThreeDLiteInteractionSnapshotService.capture();},audit(){return ThreeDLiteInteractionSnapshotService.audit();}}); window.ThreeDLiteInteractionFacade=ThreeDLiteInteractionFacade;
-18962: const ThreeDLiteInteractionOwnershipContract=Object.freeze({owner:'InputManager/ToolManager',rule:'InputManager owns raw pointer/keyboard state and shortcut routing; ToolManager owns active-tool lifecycle and interaction transactions; viewport and scene services remain observers/consumers, not input owners.',services:Object.freeze(['ThreeDLiteInputStateService','ThreeDLitePointerStateService','ThreeDLiteKeyboardStateService','ThreeDLitePointerCaptureService','ThreeDLiteShortcutRouterService','ThreeDLiteToolActivationService','ThreeDLiteInteractionTransactionService','ThreeDLiteInteractionCancellationService','ThreeDLiteInteractionSnapshotService','ThreeDLiteInteractionFacade'])}); window.ThreeDLiteInteractionOwnershipContract=ThreeDLiteInteractionOwnershipContract;
-18963: function register3DLiteBatch15Services(){const c=window.ThreeDLiteAppContext;if(!c?.register)return false;for(const [n,s] of Object.entries({InteractionCancellationService:ThreeDLiteInteractionCancellationService,InteractionSnapshotService:ThreeDLiteInteractionSnapshotService,InteractionFacade:ThreeDLiteInteractionFacade,InteractionOwnershipContract:ThreeDLiteInteractionOwnershipContract}))if(!c.get?.(n))c.register(n,s);return true;} window.register3DLiteBatch15Services=register3DLiteBatch15Services; register3DLiteBatch15Services();
-18964: function validate3DLiteBatch15(){const required=['ThreeDLiteInputStateService','ThreeDLitePointerStateService','ThreeDLiteKeyboardStateService','ThreeDLitePointerCaptureService','ThreeDLiteShortcutRouterService','ThreeDLiteToolActivationService','ThreeDLiteInteractionTransactionService','ThreeDLiteInteractionCancellationService','ThreeDLiteInteractionSnapshotService','ThreeDLiteInteractionFacade','ThreeDLiteInteractionOwnershipContract'],errors=[];for(const n of required)if(!window[n])errors.push(n+' missing');return Object.freeze({ok:errors.length===0,errors:Object.freeze(errors)});} window.validate3DLiteBatch15=validate3DLiteBatch15;
-18965: window.ThreeDLiteInteractionArchitecture=Object.freeze({version:'3.84.4-batch15-gen3',changes:Object.freeze([141,142,143,144,145,146,147,148,149,150]),ownership:ThreeDLiteInteractionOwnershipContract,validate:validate3DLiteBatch15});
-18966: 
-18967: 
-18968: /* ---------- Architecture Refactor Batch 16: mesh/topology edit ownership — Gen1 ---------- */
-18969: /* Change 151 — canonical editable-mesh registry */
-18970: const ThreeDLiteMeshRegistryService=(()=>{const meshes=new Map();let seq=0;const keyOf=(mesh)=>{if(!mesh)return null;if(!mesh.userData)mesh.userData={};if(!mesh.userData.__threeDLiteMeshId)mesh.userData.__threeDLiteMeshId='mesh-'+(++seq);return mesh.userData.__threeDLiteMeshId;};return Object.freeze({owner:'MeshManager',register(mesh){const id=keyOf(mesh);if(!id)return null;meshes.set(id,mesh);return id;},unregister(meshOrId){const id=typeof meshOrId==='string'?meshOrId:meshOrId?.userData?.__threeDLiteMeshId;return id?meshes.delete(id):false;},get(id){return meshes.get(id)||null;},idOf(mesh){return mesh?.userData?.__threeDLiteMeshId||null;},ids(){return Object.freeze([...meshes.keys()]);},snapshot(){return Object.freeze([...meshes].map(([id,m])=>Object.freeze({id,name:m?.name||'',visible:m?.visible!==false,hasGeometry:!!m?.geometry})));}});})(); window.ThreeDLiteMeshRegistryService=ThreeDLiteMeshRegistryService;
-18971: /* Change 152 — geometry/topology revision ownership */
-18972: const ThreeDLiteGeometryRevisionService=(()=>{const revisions=new WeakMap();const ensure=(g)=>{if(!g)return 0;if(!revisions.has(g))revisions.set(g,0);return revisions.get(g);};return Object.freeze({owner:'MeshManager',get(geometry){return ensure(geometry);},touch(geometry,reason='edit'){if(!geometry)return 0;const next=ensure(geometry)+1;revisions.set(geometry,next);geometry.userData=geometry.userData||{};geometry.userData.__threeDLiteRevision=next;geometry.userData.__threeDLiteLastEdit=reason;return next;},snapshot(geometry){return Object.freeze({revision:ensure(geometry),lastEdit:geometry?.userData?.__threeDLiteLastEdit||null});}});})(); window.ThreeDLiteGeometryRevisionService=ThreeDLiteGeometryRevisionService;
-18973: /* Change 153 — guarded topology mutation entry point */
-18974: const ThreeDLiteTopologyMutationService=(()=>{let active=null,seq=0;return Object.freeze({owner:'MeshManager',begin(mesh,label='topology-edit'){if(active||!mesh?.geometry)return null;ThreeDLiteMeshRegistryService.register(mesh);active={id:++seq,mesh,label,revisionBefore:ThreeDLiteGeometryRevisionService.get(mesh.geometry)};return Object.freeze({id:active.id,label,revisionBefore:active.revisionBefore});},commit(id,reason='topology-edit'){if(!active||active.id!==id)return false;const mesh=active.mesh;ThreeDLiteGeometryRevisionService.touch(mesh.geometry,reason);mesh.geometry.attributes?.position&&(mesh.geometry.attributes.position.needsUpdate=true);mesh.geometry.computeBoundingBox?.();mesh.geometry.computeBoundingSphere?.();active=null;window.ThreeDLiteDirtyFlagService?.mark?.('scene');window.ThreeDLiteRenderInvalidationService?.invalidate?.('topology:'+reason);return true;},cancel(id){if(!active||active.id!==id)return false;active=null;return true;},current(){return active?Object.freeze({id:active.id,label:active.label,meshId:ThreeDLiteMeshRegistryService.idOf(active.mesh),revisionBefore:active.revisionBefore}):null;}});})(); window.ThreeDLiteTopologyMutationService=ThreeDLiteTopologyMutationService;
-18975: /* Change 154 — geometry resource disposal boundary */
-18976: const ThreeDLiteGeometryResourceService=Object.freeze({owner:'MeshManager',disposeGeometry(geometry){if(!geometry)return false;try{geometry.dispose?.();return true;}catch(e){window.ThreeDLiteErrorBoundaryService?.report?.('geometry-dispose',e);return false;}},replaceGeometry(mesh,nextGeometry,{disposePrevious=true}={}){if(!mesh||!nextGeometry)return false;const prev=mesh.geometry;mesh.geometry=nextGeometry;ThreeDLiteGeometryRevisionService.touch(nextGeometry,'replace-geometry');if(disposePrevious&&prev&&prev!==nextGeometry)this.disposeGeometry(prev);window.ThreeDLiteRenderInvalidationService?.invalidate?.('replace-geometry');return true;}}); window.ThreeDLiteGeometryResourceService=ThreeDLiteGeometryResourceService;
-18977: function register3DLiteBatch16Gen1(){const c=window.ThreeDLiteAppContext;if(!c?.register)return false;for(const [n,s] of Object.entries({MeshRegistryService:ThreeDLiteMeshRegistryService,GeometryRevisionService:ThreeDLiteGeometryRevisionService,TopologyMutationService:ThreeDLiteTopologyMutationService,GeometryResourceService:ThreeDLiteGeometryResourceService}))if(!c.get?.(n))c.register(n,s);return true;} window.register3DLiteBatch16Gen1=register3DLiteBatch16Gen1; register3DLiteBatch16Gen1();
-18978: 
-18979: 
-18980: 
-18981: /* ---------- Architecture Refactor Batch 16: mesh/topology edit ownership — Gen2 ---------- */
-18982: /* Change 155 — mesh edit transaction bridge */
-18983: const ThreeDLiteMeshEditTransactionService=Object.freeze({owner:'MeshManager',begin(mesh,label='mesh-edit'){const tx=ThreeDLiteTopologyMutationService.begin(mesh,label);if(!tx)return null;window.ThreeDLiteTransactionService?.begin?.('mesh:'+label);return tx;},commit(id,reason='mesh-edit'){const ok=ThreeDLiteTopologyMutationService.commit(id,reason);if(ok)window.ThreeDLiteTransactionService?.commit?.();return ok;},cancel(id){const ok=ThreeDLiteTopologyMutationService.cancel(id);if(ok)window.ThreeDLiteTransactionService?.rollback?.();return ok;}}); window.ThreeDLiteMeshEditTransactionService=ThreeDLiteMeshEditTransactionService;
-18984: /* Change 156 — derived-geometry invalidation */
-18985: const ThreeDLiteDerivedGeometryInvalidationService=Object.freeze({owner:'MeshManager',invalidate(mesh,{normals=true,bounds=true,wireframe=true}={}){const g=mesh?.geometry;if(!g)return false;if(normals&&g.attributes?.normal)g.attributes.normal.needsUpdate=true;if(bounds){g.boundingBox=null;g.boundingSphere=null;g.computeBoundingBox?.();g.computeBoundingSphere?.();}if(wireframe&&g.userData)delete g.userData.__threeDLiteWireCache;ThreeDLiteGeometryRevisionService.touch(g,'derived-invalidation');window.ThreeDLiteRenderInvalidationService?.invalidate?.('derived-geometry');return true;}}); window.ThreeDLiteDerivedGeometryInvalidationService=ThreeDLiteDerivedGeometryInvalidationService;
-18986: /* Change 157 — structural mesh validation */
-18987: const ThreeDLiteMeshValidationService=Object.freeze({owner:'MeshManager',validate(mesh){const errors=[],warnings=[];const g=mesh?.geometry;if(!mesh)errors.push('mesh-missing');if(mesh&&!g)errors.push('geometry-missing');const pos=g?.attributes?.position;if(g&&!pos)errors.push('position-attribute-missing');if(pos&&pos.itemSize!==3)errors.push('position-itemsize-not-3');if(pos&&pos.count===0)warnings.push('geometry-empty');const idx=g?.index;if(idx&&idx.count%3!==0)errors.push('index-count-not-triangular');if(pos){const a=pos.array;for(let i=0;i<a.length;i++){if(!Number.isFinite(a[i])){errors.push('non-finite-position');break;}}}return Object.freeze({ok:errors.length===0,errors:Object.freeze(errors),warnings:Object.freeze(warnings),meshId:ThreeDLiteMeshRegistryService.idOf(mesh),revision:g?ThreeDLiteGeometryRevisionService.get(g):0});}}); window.ThreeDLiteMeshValidationService=ThreeDLiteMeshValidationService;
-18988: function register3DLiteBatch16Gen2(){const c=window.ThreeDLiteAppContext;if(!c?.register)return false;for(const [n,s] of Object.entries({MeshEditTransactionService:ThreeDLiteMeshEditTransactionService,DerivedGeometryInvalidationService:ThreeDLiteDerivedGeometryInvalidationService,MeshValidationService:ThreeDLiteMeshValidationService}))if(!c.get?.(n))c.register(n,s);return true;} window.register3DLiteBatch16Gen2=register3DLiteBatch16Gen2; register3DLiteBatch16Gen2();
-18989: 
-18990: 
+===== objects.push @ 7034 =====
+6979:     const g=new THREE.BufferGeometry();
+6980:     g.setAttribute('position',new THREE.Float32BufferAttribute(pts,3));
+6981:     g.computeBoundingSphere();
+6982:     g.userData={...(g.userData||{}),lightViewportIcon:true,iconType:type,uiThemed:true};
+6983:     return g;
+6984:   },
+6985: 
+6986:   updateViewportIconScale(obj,camera,renderer){
+6987:     if(!obj||!camera||!renderer)return;
+6988:     const h=Math.max(1,renderer.domElement?.clientHeight||renderer.domElement?.height||720);
+6989:     const px=Number(obj.userData?.lightViewportIcon?.pixels)||22;
+6990:     let worldPerPixel=1/h;
+6991:     if(camera.isPerspectiveCamera){
+6992:       const op=obj.getWorldPosition(new THREE.Vector3()),cp=camera.getWorldPosition(new THREE.Vector3());
+6993:       const d=Math.max(.01,op.distanceTo(cp));
+6994:       worldPerPixel=2*d*Math.tan(THREE.MathUtils.degToRad(camera.fov||50)*.5)/h;
+6995:     }else if(camera.isOrthographicCamera){
+6996:       worldPerPixel=Math.abs((camera.top-camera.bottom)/(camera.zoom||1))/h;
+6997:     }
+6998:     const sc=Math.max(.001,worldPerPixel*px);
+6999:     obj.scale.setScalar(sc);
+7000:   },
+7001: 
+7002:   create(type,opts={}){
+7003:     type=LightTypes.includes(type)?type:'point';
+7004:     const d=LightDefaults[type]||LightDefaults.point;
+7005:     const size=Math.max(.01,Number(opts.size??d.size??25));
+7006:     const geometry=this.iconGeometry(type);
+7007:     const color=new THREE.Color(opts.color||'#fff2c8');
+7008:     const material=new THREE.LineBasicMaterial({
+7009:       color:new THREE.Color('#aeb4bc'),transparent:true,opacity:.82,
+7010:       depthTest:false,depthWrite:false,toneMapped:false
+7011:     });
+7012:     const obj=new THREE.LineSegments(geometry,material);
+7013:     obj.userData.lightViewportIcon={theme:'editor-neutral',pixels:22,version:'3.98.3'};
+7014:     obj.onBeforeRender=(renderer,_scene,camera)=>this.updateViewportIconScale(obj,camera,renderer);
+7015:     obj.renderOrder=1000;
+7016:     obj.name=(type[0].toUpperCase()+type.slice(1))+' Light '+this.nextId++;
+7017:     obj.userData.renderLight={
+7018:       id:'light-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7),
+7019:       type,
+7020:       enabled:opts.enabled!==false,
+7021:       color:'#'+color.getHexString(),
+7022:       intensity:Math.max(0,Number(opts.intensity??d.intensity??10)),
+7023:       range:Math.max(0,Number(opts.range??d.range??0)),
+7024:       size,
+7025:       width:Math.max(.01,Number(opts.width??d.width??size*2)),
+7026:       height:Math.max(.01,Number(opts.height??d.height??size*2)),
+7027:       coneAngle:Math.max(1,Math.min(179,Number(opts.coneAngle??d.coneAngle??45))),
+7028:       penumbra:Math.max(0,Math.min(1,Number(opts.penumbra??d.penumbra??.15))),
+7029:       castShadows:opts.castShadows!==false,
+7030:       renderOnly:true
+7031:     };
+7032:     obj.userData.isRenderLight=true;
+7033:     obj.position.set(0,0,Math.max(20,size));
+7034:     scene.add(obj);objects.push(obj);
+7035:     window.__3DLiteLightRevision=(window.__3DLiteLightRevision||0)+1;
+7036:     selectOnly(obj);
+7037:     refreshModifyPanel();
+7038:     requestRender();
+7039:     return obj;
+7040:   },
+7041: 
+7042:   updateIcon(obj){
+7043:     if(!this.isLightObject(obj))return;
+7044:     const l=obj.userData.renderLight;
+7045:     const old=obj.geometry;
+7046:     obj.geometry=this.iconGeometry(l.type);
+7047:     old?.dispose?.();
+7048:     if(obj.material?.color)obj.material.color.set('#aeb4bc');
+7049:     requestRender();
+7050:   },
+7051: 
+7052:   serialize(obj){
+7053:     if(!this.isLightObject(obj))return null;
+7054:     obj.updateMatrixWorld(true);
+7055:     const l=obj.userData.renderLight;
+7056:     const q=obj.getWorldQuaternion(new THREE.Quaternion());
+7057:     const p=obj.getWorldPosition(new THREE.Vector3());
+7058:     const dir=new THREE.Vector3(0,0,-1).applyQuaternion(q).normalize();
+7059:     return {
+7060:       id:l.id||obj.uuid,
+7061:       name:obj.name||'Light',
+7062:       type:l.type,
+7063:       enabled:l.enabled!==false&&obj.visible!==false,
+7064:       color:l.color||'#ffffff',
+7065:       intensity:Math.max(0,Number(l.intensity)||0),
+7066:       range:Math.max(0,Number(l.range)||0),
+7067:       size:Math.max(.01,Number(l.size)||.01),
+7068:       width:Math.max(.01,Number(l.width)||.01),
+7069:       height:Math.max(.01,Number(l.height)||.01),
+7070:       coneAngle:Math.max(1,Math.min(179,Number(l.coneAngle)||45)),
+7071:       penumbra:Math.max(0,Math.min(1,Number(l.penumbra)||0)),
+7072:       castShadows:l.castShadows!==false,
+7073:       position:p.toArray(),
+7074:       quaternion:q.toArray(),
+7075:       direction:dir.toArray()
+7076:     };
+7077:   }
+7078: };
+7079: 
+7080: window.ThreeDLiteLightViewportIcons3982=Object.freeze({version:'3.98.3',types:LightTypes.slice(),mode:'minimal-ui-themed-viewport-icons',theme:'#aeb4bc',screenPixels:22});
+7081: window.__3DLiteLightViewportIcons3982=true;
+7082: 
+7083: var LightSnapshotTools=Object.freeze({
+7084:   fromEditorObject(obj){
+7085:     const d=EditorLightSystem.serialize(obj);
+7086:     return d?new RenderLightSnapshot(d):null;
+7087:   }
+7088: });
+7089: 
+7090: const RenderLightPolicy=Object.freeze({
+7091:   supported:Object.freeze(['point','spot','rectangle','disc','sphere','sun','dome','mesh']),
+7092:   minLinearSize:0.01,
+7093:   minArea:1e-4,
+7094:   finite3(a,fallback=[0,0,0]){
+7095:     if(!Array.isArray(a)||a.length<3||a.slice(0,3).some(v=>!Number.isFinite(Number(v))))return fallback.slice();
+7096:     return a.slice(0,3).map(Number);
+7097:   },
+7098:   type(t){return this.supported.includes(t)?t:'point';},
+7099:   scalar(v,fallback=0,min=-Infinity,max=Infinity){
+7100:     v=Number(v);if(!Number.isFinite(v))v=fallback;
+7101:     return Math.max(min,Math.min(max,v));
+7102:   },
+7103:   area(light){
+7104:     if(light.type==='rectangle'||light.type==='mesh')return Math.max(this.minArea,light.width*light.height);
+7105:     if(light.type==='disc')return Math.max(this.minArea,Math.PI*Math.pow(light.size*.5,2));
+7106:     if(light.type==='sphere')return Math.max(this.minArea,4*Math.PI*Math.pow(light.size*.5,2));
+7107:     return 1;
+7108:   }
+7109: });
+7110: 
+7111: class RenderSceneLight{
+7112:   constructor(snapshot){
+7113:     this.id=String(snapshot.id||'light');
+7114:     this.name=String(snapshot.name||'Light');
+7115:     this.type=RenderLightPolicy.type(snapshot.type);
+7116:     this.enabled=snapshot.enabled!==false;
+7117:     this.color=Object.freeze(RenderColor.hexToLinear(snapshot.color||'#ffffff'));
+7118:     this.intensity=RenderLightPolicy.scalar(snapshot.intensity,0,0,1e12);
+7119:     this.range=RenderLightPolicy.scalar(snapshot.range,0,0,1e12);
+7120:     this.size=RenderLightPolicy.scalar(snapshot.size,1,RenderLightPolicy.minLinearSize,1e9);
+7121:     this.width=RenderLightPolicy.scalar(snapshot.width,1,RenderLightPolicy.minLinearSize,1e9);
+7122:     this.height=RenderLightPolicy.scalar(snapshot.height,1,RenderLightPolicy.minLinearSize,1e9);
+7123:     this.coneAngle=RenderLightPolicy.scalar(snapshot.coneAngle,45,1,179)*Math.PI/180;
+7124:     this.penumbra=RenderLightPolicy.scalar(snapshot.penumbra,0,0,1);
+7125:     this.castShadows=snapshot.castShadows!==false;
+7126:     this.position=Object.freeze(RenderLightPolicy.finite3(snapshot.position,[0,0,0]));
+7127:     const rawDir=RenderLightPolicy.finite3(snapshot.direction,[0,0,-1]);
+7128:     let dir=RayMath.normalize(rawDir);
+7129:     if(!dir.every(Number.isFinite)||RayMath.length(dir)<1e-10)dir=[0,0,-1];
+7130:     this.direction=Object.freeze(dir);
+7131:     Object.freeze(this);
+7132:   }
+7133: }
+7134: 
+7135: var SceneLightCompiler=Object.freeze({
+7136:   compile(renderScene){
+7137:     const compiled=[];
+7138:     for(const snapshot of (renderScene?.lights||[])){
+7139:       if(snapshot?.enabled===false)continue;
+7140:       try{compiled.push(new RenderSceneLight(snapshot));}
+7141:       catch(err){throw new LightError(`${snapshot?.name||snapshot?.id||'Light'}: ${String(err?.message||err)}`,err);}
+7142:     }
+7143:     return Object.freeze(compiled);
+7144:   }
+7145: });
+7146: 
+7147: const DirectLightSampler=Object.freeze({
+7148:   sample(light,point){
+7149:     if(light.type==='dome'){
+7150:       return {kind:'ambient',direction:null,distance:Infinity,radiance:LightEnergyPolicy.radiance(light)};
+7151:     }
+7152:     if(light.type==='sun'){
+7153:       return {kind:'directional',direction:RayMath.mul(light.direction,-1),distance:Infinity,radiance:LightEnergyPolicy.radiance(light)};
+7154:     }
+7155: 
+7156:     const to=RayMath.sub(light.position,point);
+7157:     const dist=Math.max(RayMath.length(to),1e-4);
+7158:     const dir=RayMath.mul(to,1/dist);
+7159:     let attenuation=LightEnergyPolicy.distanceAttenuation(light,dist);
+7160:     if(attenuation<=0)return {kind:'local',direction:dir,distance:dist,radiance:[0,0,0]};
+7161: 
+7162:     if(light.type==='spot'){
+7163:       const fromLight=RayMath.mul(dir,-1);
+7164:       const cosTheta=RayMath.dot(light.direction,fromLight);
+7165:       const outer=Math.cos(light.coneAngle*.5);
+7166:       const inner=Math.cos(light.coneAngle*.5*(1-light.penumbra));
+7167:       const cone=inner<=outer?(cosTheta>=outer?1:0):Math.max(0,Math.min(1,(cosTheta-outer)/(inner-outer)));
+7168:       if(cone<=0)return {kind:'local',direction:dir,distance:dist,radiance:[0,0,0]};
+7169:       attenuation*=cone;
+7170:     }
+7171: 
+7172:     return {
+7173:       kind:'local',
+7174:       direction:dir,
+7175:       distance:dist,
+7176:       radiance:LightEnergyPolicy.radiance(light,attenuation)
+7177:     };
+7178:   }
+7179: });
+7180: 
+7181: function updateSelectedLightPanel(){
+7182:   const section=document.getElementById('lightModifySection');
+7183:   if(!section)return;
+
+===== selectObject( @ 17366 =====
+17311:   const viewportOptions=document.getElementById('ctxViewportOptions');
+17312:   const convert=document.getElementById('ctxConvertPoly');
+17313:   const editPoly=document.getElementById('ctxEditPoly');
+17314: 
+17315:   const hasObject=!!targetObject;
+17316:   if(objectOptions)objectOptions.style.display=hasObject?'block':'none';
+17317:   if(viewportOptions)viewportOptions.style.display=hasObject?'none':'block';
+17318: 
+17319:   if(hasObject){
+17320:     const editable=!!targetObject.userData.editPoly;
+17321:     if(convert)convert.style.display=editable?'none':'block';
+17322:     if(editPoly)editPoly.style.display=editable?'block':'none';
+17323:   }
+17324: }
+17325: 
+17326: 
+17327: renderer.domElement.addEventListener('pointerdown',e=>{
+17328:   if(e.button!==0)return;
+17329:   if(createTool||transform.dragging||routerOwner==='transform')return;
+17330: 
+17331:   // Gizmo handles are not scene meshes. Never interpret a gizmo click
+17332:   // as an empty viewport click, or selection gets cleared before drag begins.
+17333:   if(pointerOverTransformGizmo(e))return;
+17334: 
+17335:   const hit=contextObjectUnderPointer(e);
+17336:   if(hit)return;
+17337: 
+17338:   // IMPORTANT:
+17339:   // In Editable Poly sub-object mode, empty space is valid marquee-start space.
+17340:   // Keep the active object and current sub-object mode selected so the drag
+17341:   // can become a Vertex/Edge/Border/Polygon/Element rectangle selection.
+17342:   if(subMode && selected?.userData.editPoly){
+17343:     return;
+17344:   }
+17345: 
+17346:   // Object mode: an empty LMB click may clear object selection.
+17347:   clearSelection();
+17348: },true);
+17349: 
+17350: renderer.domElement.addEventListener('contextmenu',e=>{
+17351:   e.preventDefault();
+17352:   e.stopPropagation();
+17353: 
+17354:   if(cutActive&&subMode==='vertex'){
+17355:     document.getElementById('contextMenu').style.display='none';
+17356:     if(cutChainStarted||cutCurrentVertexId>=0){endCutChain();}
+17357:     else{setCutActive(false);hintEl.textContent='Cut exited';}
+17358:     return;
+17359:   }
+17360: 
+17361:   const hit=contextObjectUnderPointer(e);
+17362: 
+17363:   if(hit){
+17364:     // Right-clicking an object makes it the active object before showing its menu.
+17365:     if(selected!==hit){
+17366:       selectObject(hit,false);
+17367:     }
+17368:     refreshContextMenu(hit);
+17369:   }else{
+17370:     // Empty viewport: clear object/sub-object selection, then show viewport menu.
+17371:     if(subMode!=='object')exitSubMode();
+17372:     clearSelection();
+17373:     refreshContextMenu(null);
+17374:   }
+17375: 
+17376:   const menu=document.getElementById('contextMenu');
+17377:   menu.style.display='block';
+17378: 
+17379:   // Clamp popup inside the browser window.
+17380:   const pad=4;
+17381:   const rect=menu.getBoundingClientRect();
+17382:   const left=Math.min(e.clientX,Math.max(pad,window.innerWidth-rect.width-pad));
+17383:   const top=Math.min(e.clientY,Math.max(pad,window.innerHeight-rect.height-pad));
+17384:   menu.style.left=Math.max(pad,left)+'px';
+17385:   menu.style.top=Math.max(pad,top)+'px';
+17386: });
+17387: 
+17388: 
+17389: document.querySelectorAll('[data-vpctx]').forEach(b=>b.onclick=e=>{
+17390:   e.stopPropagation();
+17391:   const a=b.dataset.vpctx;
+17392: 
+17393:   if(a==='shadedwire')setDisplayMode('shadedWire');
+17394:   if(a==='shaded')setDisplayMode('shaded');
+17395:   if(a==='wireframe')setDisplayMode('wire');
+17396: 
+17397:   if(a==='backsides'){
+17398:     setBackSides(!showBackSides);
+17399:   }
+17400: 
+17401:   if(a==='resetview')resetView();
+17402: 
+17403:   document.getElementById('contextMenu').style.display='none';
+17404: });
+17405: 
+17406: window.addEventListener('pointerdown',e=>{
+17407:   if(!document.getElementById('contextMenu').contains(e.target))
+17408:     document.getElementById('contextMenu').style.display='none';
+17409: });
+17410: 
+17411: document.querySelectorAll('[data-ctx]').forEach(b=>b.onclick=()=>{
+17412:   const a=b.dataset.ctx;
+17413:   if(a==='move')setTransformMode('translate');
+17414:   if(a==='rotate')setTransformMode('rotate');
+17415:   if(a==='scale')setTransformMode('scale');
+17416:   if(a==='rename'&&selected){
+17417:     const next=window.prompt('Rename Object',selected.name||'Object');
+17418:     if(next!==null&&next.trim()){
+17419:       selected.name=next.trim();
+17420:       if(selected.userData.node)selected.userData.node.name=selected.name;
+17421:       refreshModifyPanel();
+17422:     }
+17423:   }
+17424:   if(a==='clone')cloneSelected();
+17425: 
+17426:   if(a==='convert'&&selected&&!selected.userData.editPoly){
+17427:     geometryToEditablePoly(selected);
+17428:     refreshContextMenu();
+17429:   }
+17430: 
+17431:   if(a==='delete')deleteSelection();
+17432:   document.getElementById('contextMenu').style.display='none';
+17433: });
+17434: 
+17435: document.querySelectorAll('[data-epmode]').forEach(b=>b.onclick=e=>{
+17436:   e.stopPropagation();
+17437:   if(!selected||!selected.userData.editPoly)return;
+17438: 
+17439:   const mode=b.dataset.epmode;
+17440:   if(mode==='object')exitSubMode();
+17441:   else enterSubMode(mode);
+17442: 
+17443:   refreshContextMenu();
+17444:   document.getElementById('contextMenu').style.display='none';
+17445: });
+17446: 
+17447: 
+17448: /* ---------- File > Import Object (.OBJ / .FBX) ---------- */
+17449: function importedMeshName(fileName,fallback='Imported Object'){
+17450:   const base=String(fileName||fallback).replace(/\.[^.]+$/,'').trim();
+17451:   return base||fallback;
+17452: }
+17453: function getImportOptions(){
+17454:   const radioValue=name=>document.querySelector(`input[name="${name}"]:checked`)?.value;
+17455:   return {
+17456:     fileCount:radioValue('importFileCount')||'single',
+17457:     importAs:radioValue('importAs')||'editable',
+17458:     structure:radioValue('importStructure')||'separate',
+17459:     preservePolygons:!!document.getElementById('importPreservePolygons')?.checked,
+17460:     weldVertices:!!document.getElementById('importWeldVertices')?.checked,
+17461:     cleanMesh:!!document.getElementById('importCleanMesh')?.checked,
+17462:     preserveHardEdges:!!document.getElementById('importPreserveHardEdges')?.checked,
+17463:     normals:!!document.getElementById('importNormals')?.checked,
+17464:     uvs:!!document.getElementById('importUVs')?.checked,
+17465:     vertexColors:!!document.getElementById('importVertexColors')?.checked,
+17466:     materials:!!document.getElementById('importMaterials')?.checked,
+17467:     textures:!!document.getElementById('importTextures')?.checked,
+17468:     cleanupLevel:document.getElementById('importCleanupLevel')?.value||'standard',
+17469:     weldOverlaps:!!document.getElementById('importWeldOverlaps')?.checked,
+17470:     weldThreshold:Math.max(0,Number(document.getElementById('importWeldThreshold')?.value)||0.001),
+17471:     removeDuplicateFaces:!!document.getElementById('importRemoveDuplicateFaces')?.checked,
+17472:     removeDegenerateFaces:!!document.getElementById('importRemoveDegenerateFaces')?.checked,
+17473:     removeIsolatedVerts:!!document.getElementById('importRemoveIsolatedVerts')?.checked,
+17474:     removeZeroEdges:!!document.getElementById('importRemoveZeroEdges')?.checked,
+17475:     fixWinding:!!document.getElementById('importFixWinding')?.checked,
+17476:     fixNonManifold:!!document.getElementById('importFixNonManifold')?.checked,
+17477:     units:document.getElementById('importUnits')?.value||'auto',
+17478:     scale:Math.max(0.0001,Number(document.getElementById('importScale')?.value)||1),
+17479:     upAxis:document.getElementById('importUpAxis')?.value||'editor',
+17480:     center:!!document.getElementById('importCenterObject')?.checked,
+17481:     resetTransform:!!document.getElementById('importResetTransform')?.checked,
+17482:     flipNormals:!!document.getElementById('importFlipNormals')?.checked
+17483:   };
+17484: }
+17485: function importUnitFactor(units){
+17486:   // 3DLite working unit is centimeters. Auto/editor means 1 imported unit = 1 cm.
+17487:   if(units==='mm')return .1;
+17488:   if(units==='m')return 100;
+17489:   if(units==='in')return 2.54;
+17490:   if(units==='ft')return 30.48;
+17491:   return 1;
+17492: }
+17493: function bufferAttrGet(attr,index,component){
+17494:   if(!attr)return 0;
+17495:   if(typeof attr.getComponent==='function')return attr.getComponent(index,component);
+17496:   const i=index*attr.itemSize+component;
+17497:   return attr.array[i];
+17498: }
+17499: function bufferAttrSet(attr,index,component,value){
+17500:   if(!attr)return;
+17501:   if(typeof attr.setComponent==='function'){attr.setComponent(index,component,value);return;}
+17502:   attr.array[index*attr.itemSize+component]=value;
+17503: }
+17504: function flipGeometryNormalsAndWinding(geometry){
+17505:   if(!geometry)return;
+17506:   const idx=geometry.index;
+17507:   if(idx){
+17508:     const a=idx.array;
+17509:     for(let i=0;i+2<a.length;i+=3){const t=a[i+1];a[i+1]=a[i+2];a[i+2]=t;}
+17510:     idx.needsUpdate=true;
+17511:   }else{
+17512:     const pos=geometry.getAttribute('position');
+17513:     if(pos){
+17514:       for(let i=0;i+2<pos.count;i+=3){
+17515:         for(let c=0;c<3;c++){
+
+===== commitCreate @ 13929 =====
+13874:     const outer=Math.max(createBaseParams.radius||getCreateParams('tube').outer||1,.001);
+13875:     const inner=Math.max(.001,Math.min(Math.hypot(pnt.x-createStart.x,pnt.y-createStart.y),outer*.98));
+13876:     const el=document.getElementById('tubeInner');if(el)el.value=inner.toFixed(2);
+13877:     const p=getCreateParams('tube');
+13878:     p.outer=outer;p.inner=inner;
+13879:     createPreview.userData.creationParams=p;
+13880:     const old=createPreview.geometry;
+13881:     createPreview.geometry=primitiveGeometry('tube',outer,outer,1,p);
+13882:     old?.dispose();
+13883:     createPreview.scale.set(1,1,1);
+13884:     createPreview.position.set(createStart.x,createStart.y,.5);
+13885:     rebuildWire(createPreview);
+13886:     createPreview.visible=true;
+13887:     if(createPreview.userData.wire)createPreview.userData.wire.visible=true;
+13888:     return;
+13889:   }
+13890: 
+13891:   const t=Math.max(Math.abs(createThicknessStartY-e.clientY)/createThicknessPixelsPerUnit,.25);
+13892:   const id=createTool==='torus'?'torusTube':createTool==='knot'?'knotTube':'helixTube';
+13893:   const el=document.getElementById(id);if(el)el.value=t.toFixed(2);
+13894:   const p=getCreateParams(createTool);
+13895:   createPreview.userData.creationParams=p;
+13896:   createPreview.scale.set(1,1,1);
+13897:   createPreview.position.set(createStart.x,createStart.y,createTool==='helix'?0:0);
+13898:   const old=createPreview.geometry;
+13899:   if(createTool==='torus')createPreview.geometry=primitiveGeometry('torus',createBaseParams.radius,createBaseParams.radius,1,p);
+13900:   else if(createTool==='knot')createPreview.geometry=primitiveGeometry('knot',createBaseParams.radius,createBaseParams.radius,1,p);
+13901:   else createPreview.geometry=primitiveGeometry('helix',createBaseParams.radius,createBaseParams.radius,Math.max(p.height,.001),p);
+13902:   old?.dispose();rebuildWire(createPreview);
+13903:   createPreview.visible=true;
+13904:   if(createPreview.userData.wire)createPreview.userData.wire.visible=true;
+13905: }
+13906: function beginTubeHeightStage(e){
+13907:   createStage=2;
+13908:   createHeightStartY=e.clientY;
+13909:   const probe=TEMP_V3.get().set(createStart.x,createStart.y,0);
+13910:   createHeightPixelsPerUnit=Math.max(screenPixelsPerWorldZ(probe),.001);
+13911:   createPreview.position.set(createStart.x,createStart.y,.5);
+13912:   createPreview.scale.set(1,1,1);
+13913:   createPreview.visible=true;
+13914:   if(createPreview.userData.wire)createPreview.userData.wire.visible=true;
+13915:   hintEl.textContent='Move mouse vertically: set Height • LMB click to create';
+13916:   routerOwner=null;routerPointerId=null;orbit.enabled=false;
+13917: }
+13918: function beginHelixHeightStage(e){
+13919:   createStage=2;
+13920:   createHeightStartY=e.clientY;
+13921:   const probe=TEMP_V3.get().set(createStart.x,createStart.y,0);
+13922:   createHeightPixelsPerUnit=Math.max(screenPixelsPerWorldZ(probe),.001);
+13923:   createPreview.position.set(createStart.x,createStart.y,0);
+13924:   createPreview.scale.set(1,1,1);
+13925:   createPreview.visible=true;
+13926:   if(createPreview.userData.wire)createPreview.userData.wire.visible=true;
+13927:   hintEl.textContent='Move mouse vertically: set Z Height • LMB click to create';
+13928: }
+13929: function commitCreate(){
+13930:   if(!createPreview) return;
+13931:   const mesh=createPreview;
+13932:   bakeCreationPreview(mesh);
+13933: 
+13934:   createPreview=null;
+13935:   createStage=0;
+13936:   createTool=null;
+13937:   createBaseParams=null;
+13938:   createHeightPixelsPerUnit=1;
+13939:   createThicknessPixelsPerUnit=1;
+13940:   createThicknessStartY=0;
+13941:   routerOwner=null;
+13942:   routerPointerId=null;
+13943: 
+13944:   objects.push(mesh);
+13945:   if(mesh.parent!==scene)scene.add(mesh);
+13946: 
+13947:   pushUndo({type:'create',object:mesh});
+13948:   selectOnly(mesh);
+13949:   const createNameEl=document.getElementById('createName');
+13950:   if(createNameEl)createNameEl.value=primitiveTypeDisplayName(mesh.userData.primitiveType);
+13951: 
+13952:   // Restore normal viewport + TransformControls state after staged creation.
+13953:   orbit.enabled=true;
+13954:   transform.enabled=true;
+13955:   transform.visible=true;
+13956:   syncTransformTarget();
+13957:   hideTransformGuideLines();
+13958: 
+13959:   document.querySelectorAll('[data-create]').forEach(b=>b.classList.remove('active'));
+13960:   hintEl.textContent='LMB select • MMB pan • Alt+MMB orbit • Wheel zoom • W/E/R transform';
+13961:   updateStats();
+13962: }
+13963: 
+13964: /* ---------- Selection ---------- */
+13965: function selectOnly(obj){
+13966:   selectedObjects=obj?[obj]:[];
+13967:   selected=obj||null;
+13968:   refreshSelection();
+13969:   if(obj && !createTool){
+13970:     const modifyBtn=document.getElementById('modifyTabBtn');
+13971:     if(modifyBtn && !modifyBtn.classList.contains('active'))modifyBtn.click();
+13972:   }
+13973: }
+13974: function toggleSelect(obj){
+13975:   const i=selectedObjects.indexOf(obj);
+13976:   if(i>=0) selectedObjects.splice(i,1); else selectedObjects.push(obj);
+13977:   selected=selectedObjects.length?selectedObjects[selectedObjects.length-1]:null;
+13978:   refreshSelection();
+13979:   if(selected && !createTool){
+13980:     const modifyBtn=document.getElementById('modifyTabBtn');
+13981:     if(modifyBtn && !modifyBtn.classList.contains('active'))modifyBtn.click();
+13982:   }
+13983: }
+13984: function clearSelection(){
+13985:   selectedObjects=[];
+13986:   selected=null;
+13987:   exitSubMode();
+13988:   refreshSelection();
+13989: }
+13990: function updateObjectWireVisual(o){
+13991:   if(!o?.userData?.wire)return;
+13992:   const isSelected=selectedObjects.includes(o);
+13993:   const isHovered=(hovered===o);
+13994:   const mat=o.userData.wire.material;
+13995:   mat.color.setHex(isSelected?COLORS.selected:(isHovered?COLORS.hover:COLORS.wire));
+13996:   mat.linewidth=isSelected?1.52:(isHovered?1.42:0.98);
+13997:   mat.opacity=(isSelected||isHovered)?1.0:.94;
+13998:   mat.needsUpdate=true;
+13999: }
+14000: function refreshSelection(){
+14001:   objects.forEach(updateObjectWireVisual);
+14002:   syncTransformTarget();
+14003:   refreshModifyPanel();
+14004:   updateStats();
+14005: }
+14006: function pickObject(e){
+14007:   setMouseFromEvent(e);
+14008:   raycaster.setFromCamera(mouse,camera);
+14009:   const hits=raycaster.intersectObjects(objects.filter(o=>o.visible&&!o.userData.frozen),false);
+14010:   if(hits.length){
+14011:     const obj=hits[0].object;
+14012:     if(e.ctrlKey) toggleSelect(obj); else selectOnly(obj);
+14013:     return true;
+14014:   }
+14015:   return false;
+14016: }
+14017: 
+14018: 
+14019: /* ============================================================
+14020:    3DLite POLY KERNEL 2.0
+14021:    Architecture inspired by concepts documented in Autodesk's
+14022:    public 3ds Max SDK: MNMesh/MNVert/MNEdge/MNFace and the
+14023:    Base Object -> Derived Object -> Modifier pipeline.
+14024: 
+14025:    This is an original implementation. It does not contain or
+14026:    reproduce Autodesk source code.
+14027:    ============================================================ */
+14028: 
+14029: /* 3DLite 3.48 sub-object hover palette:
+14030:    Polygon / Edge / Border = blue, Vertex = green. */
+14031: 
+14032: var MN_DEAD=1<<0;
+14033: const MN_SEL=1<<1;
+14034: const MN_TARG=1<<2;
+14035: const MN_HIDDEN=1<<3;
+14036: 
+14037: 
+14038: /* ---------- High-performance kernel services ----------
+14039:    Modern design goals:
+14040:    - topology and geometry version counters
+14041:    - lazy adjacency rebuild
+14042:    - packed typed-array cache for hot numeric loops
+14043:    - reusable render buffers
+14044:    - allocation-free temporary-vector pool
+14045:    - command-oriented undo snapshots
+14046: */
+14047: const DIRTY_NONE=0;
+14048: const DIRTY_GEOMETRY=1<<0;
+14049: const DIRTY_TOPOLOGY=1<<1;
+14050: const DIRTY_NORMALS=1<<2;
+14051: const DIRTY_SELECTION=1<<3;
+14052: const DIRTY_ALL=DIRTY_GEOMETRY|DIRTY_TOPOLOGY|DIRTY_NORMALS|DIRTY_SELECTION;
+14053: 
+14054: class TempVectorPool{
+14055:   constructor(size=64){
+14056:     this.items=Array.from({length:size},()=>new THREE.Vector3());
+14057:     this.cursor=0;
+14058:   }
+14059:   reset(){this.cursor=0}
+14060:   get(){
+14061:     if(this.cursor>=this.items.length)this.items.push(new THREE.Vector3());
+14062:     return this.items[this.cursor++].set(0,0,0);
+14063:   }
+14064: }
+14065: const TEMP_V3=new TempVectorPool(96);
+14066: 
+14067: class PolyRenderCache{
+14068:   constructor(){
+14069:     this.positionCapacity=0;
+14070:     this.indexCapacity=0;
+14071:     this.positionArray=null;
+14072:     this.indexArray=null;
+14073:     this.triangleToFace=[];
+14074:     this.renderToMN=[];
+14075:     this.topologyVersion=-1;
+14076:     this.geometryVersion=-1;
+14077:   }
+14078:   ensurePositions(vertexCount){
