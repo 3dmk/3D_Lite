@@ -8554,6 +8554,7 @@ var PathGIRenderer=Object.freeze({
     job.pathGuide=RenderCoreH.createPathGuide(job,acceleration);
     const litePixRayBudget445=(typeof window.LitePixRayBudget445==='function')?new window.LitePixRayBudget445(job,acceleration,compiled,width,height):null;
     job.litePixRayBudget445=litePixRayBudget445;
+    window.ThreeDLiteMainCore?.syncLegacyRevisions?.();
     job.progress.gi=settings.secondaryGI==='Light Cache'?'Brute Force + Light Cache':settings.secondaryGI;
     const accumulator=new ProgressiveAccumulator(width,height);
     const aovs=new RenderAOVSet(width,height);
@@ -8691,6 +8692,7 @@ var PathGIRenderer=Object.freeze({
         litePixCores4to8Production:job.litePixCores4to8Stats443||litePixCores4to8Production443?.snapshot?.()||null,
         litePixLegacyMigration:window.LitePixLegacyMigration444?.audit?.()||null,
         litePixRayBudget:job.litePixRayBudget445?.snapshot?.()||null,
+        threeDLiteMainCore:window.ThreeDLiteMainCore?.renderStamp?.()||null,
         litePixCore2Production:job.litePixCore2Production419?.snapshot?.()||null,
         litePixCore2Partial:job.litePixCore2Partial415?.snapshot?.()||null,
         litePixCore2Persistent:job.litePixCore2Persistent414?.snapshot?.()||null,
@@ -23704,6 +23706,7 @@ root.__3DLiteMaterialLinearColor3996=true;
 <script src="./litepix/cores4-8-production-v4.43.js"></script>
 <script src="./litepix/legacy-migration-v4.44.js"></script>
 <script src="./litepix/core5-ray-budget-v4.45.js"></script>
+<script src="./3dlite/main-core-v1.js"></script>
 <script src="./litepix/runtime-v4.09.js"></script>
 <script src="./litepix/path-integration-v4.10.js"></script>
 <script src="./litepix/core2-path-v4.12.js"></script>
