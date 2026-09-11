@@ -1,0 +1,67 @@
+name: v3.99.3 Central Version Sync Patch
+
+on:
+  push:
+    branches: [v3.99.3-version-sync-gate]
+    paths:
+      - '.github/workflows/v3993-version-sync-patch.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v3.99.3-version-sync-gate
+          fetch-depth: 0
+
+      - name: Patch central public version owner
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          old="const ThreeDLiteVersion=Object.freeze({name:'3DLite',version:'3.99.0'});"
+          new="const ThreeDLiteVersion=Object.freeze({name:'3DLite',version:'3.99.3'});"
+          if new not in s:
+              if s.count(old)!=1:
+                  raise SystemExit(f'release-blocking: central version anchor count={s.count(old)}')
+              s=s.replace(old,new,1)
+          old_title='<title>3DLite v3.99.2 LiteTrace Telemetry Gate</title>'
+          new_title='<title>3DLite v3.99.3 L3N GitHub Runtime</title>'
+          if new_title not in s:
+              if s.count(old_title)!=1:
+                  raise SystemExit(f'release-blocking: static title anchor count={s.count(old_title)}')
+              s=s.replace(old_title,new_title,1)
+          p.write_text(s,encoding='utf-8')
+          PY
+
+      - name: Structural version gate
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs=require('fs');const h=fs.readFileSync('index.html','utf8');const f=[];
+          if(!h.includes("const ThreeDLiteVersion=Object.freeze({name:'3DLite',version:'3.99.3'});"))f.push('central ThreeDLiteVersion not 3.99.3');
+          if(h.includes("const ThreeDLiteVersion=Object.freeze({name:'3DLite',version:'3.99.0'});"))f.push('stale central 3.99.0 remains');
+          if(!h.includes('document.title=`3DLite v${value} L3N GitHub Runtime`;'))f.push('public version synchronizer missing');
+          if(!h.includes('<title>3DLite v3.99.3 L3N GitHub Runtime</title>'))f.push('static title not 3.99.3');
+          const ids=[...h.matchAll(/\bid\s*=\s*["']([^"']+)["']/gi)].map(x=>x[1]);const seen=new Set(),dup=[];for(const id of ids){if(seen.has(id))dup.push(id);else seen.add(id)}if(dup.length)f.push('duplicate ids: '+[...new Set(dup)].join(','));
+          const ext=[...h.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].filter(m=>/\bsrc\s*=/.test(m[1])&&(m[2]||'').trim());if(ext.length)f.push('external script inline bodies='+ext.length);
+          const loops=(h.match(/requestAnimationFrame\s*\(\s*animate\s*\)/g)||[]).length;if(loops!==1)f.push('animation loop owners='+loops);
+          if(f.length){console.error(f.join('\n'));process.exit(1)}
+          console.log('v3.99.3 central version structural gate passed');
+          NODE
+
+      - name: Commit gated version fix
+        shell: bash
+        run: |
+          if git diff --quiet -- index.html; then exit 0; fi
+          git config user.name '3DLite Gate'
+          git config user.email 'actions@users.noreply.github.com'
+          git add index.html
+          git commit -m 'Gate 3DLite v3.99.3 central version ownership'
+          git push origin HEAD:v3.99.3-version-sync-gate
