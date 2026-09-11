@@ -1,0 +1,204 @@
+{
+  "passed": true,
+  "identity": {
+    "title": "LitePix v4.12.0 Core Runtime",
+    "version": "4.12.0",
+    "marker": true
+  },
+  "large": [
+    {
+      "cells": 64,
+      "triangles": 8192,
+      "legacyBuildMs": 72.60000000000582,
+      "coreBuildMs": 53.70000000001164,
+      "legacyTraceMs": 24.29999999998836,
+      "coreTraceMs": 14.299999999988358,
+      "traceSpeedup": 1.6993006993012687,
+      "legacyShadowMs": 16.900000000023283,
+      "coreShadowMs": 10.5,
+      "shadowSpeedup": 1.609523809526027,
+      "traceHits": [
+        6000,
+        6000
+      ],
+      "shadowHits": [
+        6000,
+        6000
+      ],
+      "coreSnapshot": {
+        "version": "4.12.0",
+        "provider": "LitePix Core2 SAH BVH packed traversal",
+        "triangles": 8192,
+        "nodes": 4095,
+        "buildMs": 42.3,
+        "traceRays": 6200,
+        "shadowRays": 6000,
+        "nodeTests": 179646,
+        "triangleTests": 39736,
+        "hits": 6200,
+        "anyHits": 6000,
+        "avgNodeTests": 14.725,
+        "avgTriangleTests": 3.257,
+        "traceMs": 19.1,
+        "shadowMs": 8.9,
+        "packedNodes": true,
+        "packedTriangles": true,
+        "sah": {
+          "nodes": 4095,
+          "leaves": 2048,
+          "primitives": 8192,
+          "buildMs": 42.10000000000582,
+          "maxLeaf": 4,
+          "bins": 24,
+          "boundsEvaluations": 8192,
+          "cachedBounds": true
+        }
+      }
+    },
+    {
+      "cells": 224,
+      "triangles": 100352,
+      "legacyBuildMs": 643.5,
+      "coreBuildMs": 322.5,
+      "legacyTraceMs": 70.39999999999418,
+      "coreTraceMs": 31.800000000017462,
+      "traceSpeedup": 2.2138364779860225,
+      "legacyShadowMs": 37.59999999997672,
+      "coreShadowMs": 23.60000000000582,
+      "shadowSpeedup": 1.5932203389816713,
+      "traceHits": [
+        12000,
+        12000
+      ],
+      "shadowHits": [
+        12000,
+        12000
+      ],
+      "coreSnapshot": {
+        "version": "4.12.0",
+        "provider": "LitePix Core2 SAH BVH packed traversal",
+        "triangles": 100352,
+        "nodes": 51199,
+        "buildMs": 260.2,
+        "traceRays": 12200,
+        "shadowRays": 12000,
+        "nodeTests": 466239,
+        "triangleTests": 78104,
+        "hits": 12200,
+        "anyHits": 12000,
+        "avgNodeTests": 19.266,
+        "avgTriangleTests": 3.227,
+        "traceMs": 27.7,
+        "shadowMs": 18.3,
+        "packedNodes": true,
+        "packedTriangles": true,
+        "sah": {
+          "nodes": 51199,
+          "leaves": 25600,
+          "primitives": 100352,
+          "buildMs": 260.19999999998254,
+          "maxLeaf": 4,
+          "bins": 24,
+          "boundsEvaluations": 100352,
+          "cachedBounds": true
+        }
+      }
+    }
+  ],
+  "shadowVisibility": {
+    "blocked": true,
+    "counter": 1,
+    "snapshot": {
+      "version": "4.12.0",
+      "provider": "LitePix Core2 SAH BVH packed traversal",
+      "triangles": 2048,
+      "nodes": 1023,
+      "buildMs": 4,
+      "traceRays": 0,
+      "shadowRays": 1,
+      "nodeTests": 17,
+      "triangleTests": 1,
+      "hits": 0,
+      "anyHits": 1,
+      "avgNodeTests": 17,
+      "avgTriangleTests": 1,
+      "traceMs": 0,
+      "shadowMs": 0,
+      "packedNodes": true,
+      "packedTriangles": true,
+      "sah": {
+        "nodes": 1023,
+        "leaves": 512,
+        "primitives": 2048,
+        "buildMs": 3.8999999999941792,
+        "maxLeaf": 4,
+        "bins": 24,
+        "boundsEvaluations": 2048,
+        "cachedBounds": true
+      }
+    }
+  },
+  "parity": {
+    "legacy": {
+      "wallMs": 792,
+      "performance": {
+        "totalMs": 778.8999999999942,
+        "traceMs": 665.5,
+        "actualRays": 18230,
+        "raysPerSecond": 27393,
+        "samples": 16456,
+        "yields": 130,
+        "bvhBuildMs": null
+      },
+      "secondaryGI": "Light Cache",
+      "core2": null
+    },
+    "core2": {
+      "wallMs": 689,
+      "performance": {
+        "totalMs": 654.5999999999767,
+        "traceMs": 653.0999999999767,
+        "actualRays": 18230,
+        "raysPerSecond": 27913,
+        "samples": 16456,
+        "yields": 130,
+        "bvhBuildMs": null
+      },
+      "secondaryGI": "Light Cache",
+      "core2": {
+        "version": "4.12.0",
+        "provider": "LitePix Core2 SAH BVH packed traversal",
+        "triangles": 12,
+        "nodes": 9,
+        "buildMs": 0.1,
+        "traceRays": 18230,
+        "shadowRays": 0,
+        "nodeTests": 27808,
+        "triangleTests": 9784,
+        "hits": 1774,
+        "anyHits": 0,
+        "avgNodeTests": 1.525,
+        "avgTriangleTests": 0.537,
+        "traceMs": 9.2,
+        "shadowMs": 0,
+        "packedNodes": true,
+        "packedTriangles": true,
+        "sah": {
+          "nodes": 9,
+          "leaves": 5,
+          "primitives": 12,
+          "buildMs": 0.10000000000582077,
+          "maxLeaf": 4,
+          "bins": 24,
+          "boundsEvaluations": 12,
+          "cachedBounds": true
+        }
+      }
+    },
+    "maxPixelDiff": 0,
+    "meanPixelDiff": 0
+  },
+  "pageErrors": [],
+  "consoleErrors": [],
+  "failures": []
+}

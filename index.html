@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LitePix v4.11.0 Core2 Path BVH</title>
+<title>LitePix v4.12.0 Large Scene BVH + Shadow</title>
 <style>
 :root{
   --bg:#202020;--panel:#2a2a2a;--panel2:#303030;--line:#444;--line2:#555;
@@ -4185,7 +4185,7 @@ function validateArchitectureCore(){
   return {ok:errors.length===0,errors};
 }
 
-const LitePixVersion=Object.freeze({name:'LitePix',version:'4.11.0',legacyName:'3DLite',legacyVersion:'3.99.6',architecture:'All Cores Optimized'});
+const LitePixVersion=Object.freeze({name:'LitePix',version:'4.12.0',legacyName:'3DLite',legacyVersion:'3.99.6',architecture:'All Cores Optimized'});
 // Compatibility bridge: existing 3DLite services keep working while the renderer migrates to LitePix ownership.
 const ThreeDLiteVersion=LitePixVersion;
 
@@ -7397,6 +7397,7 @@ const EnvironmentSampler=Object.freeze({
 const ShadowVisibility=Object.freeze({
   visible(acceleration,origin,direction,maxDistance){
     try{LiteTraceExecutionContext.performance?.addRay?.(RenderRayType.SHADOW);}catch(_){}
+    try{if(acceleration instanceof window.LitePixCore2PathAcceleration412)window.__LitePixCore2ShadowVisibility412=(window.__LitePixCore2ShadowVisibility412||0)+1;}catch(_){}
     const eps=RenderRayPolicy.epsilonForPoint(origin);
     if(Number.isFinite(maxDistance)&&maxDistance<=eps*2)return true;
     const o=RayMath.add(origin,RayMath.mul(direction,eps));
@@ -8307,8 +8308,8 @@ var PathIntegrator=Object.freeze({
   },
 
   trace(job,acceleration,compiled,primaryRay,pixelSeed,initialHit=null){
-    if(window.__LitePixCore2Path411Enabled!==false&&typeof window.LitePixCore2PathAcceleration411==='function'){
-      acceleration=window.LitePixCore2PathAcceleration411.wrap(acceleration,job);
+    if(window.__LitePixCore2Path412Enabled!==false&&typeof window.LitePixCore2PathAcceleration412==='function'){
+      acceleration=window.LitePixCore2PathAcceleration412.wrap(acceleration,job);
     }
     let radiance=[0,0,0];
     let throughput=[1,1,1];
@@ -8400,8 +8401,8 @@ var PathIntegrator=Object.freeze({
   },
 
   tracePixel(job,acceleration,compiled,primaryRay,pixelSeed){
-    if(window.__LitePixCore2Path411Enabled!==false&&typeof window.LitePixCore2PathAcceleration411==='function'){
-      acceleration=window.LitePixCore2PathAcceleration411.wrap(acceleration,job);
+    if(window.__LitePixCore2Path412Enabled!==false&&typeof window.LitePixCore2PathAcceleration412==='function'){
+      acceleration=window.LitePixCore2PathAcceleration412.wrap(acceleration,job);
     }
     const primaryHitRecord=acceleration.trace(primaryRay);
     if(!primaryHitRecord.hit){
@@ -8625,7 +8626,7 @@ var PathGIRenderer=Object.freeze({
         diagnostics:RenderPart5Core.diagnostics(job,compiled,acceleration),
         performance:RenderCoreH.performance(job),
         litePixNativePath:litePixPath410?.snapshot?.()||null,
-        litePixCore2BVH:job.litePixCore2Acceleration411?.snapshot?.()||null
+        litePixCore2BVH:job.litePixCore2Acceleration412?.snapshot?.()||null
       })
     };
   }
@@ -23624,6 +23625,6 @@ root.__3DLiteMaterialLinearColor3996=true;
 <script src="./litepix/core8-telemetry-optimization.js"></script>
 <script src="./litepix/runtime-v4.09.js"></script>
 <script src="./litepix/path-integration-v4.10.js"></script>
-<script src="./litepix/core2-path-v4.11.js"></script>
+<script src="./litepix/core2-path-v4.12.js"></script>
 </body>
 </html>
