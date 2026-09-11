@@ -8307,8 +8307,8 @@ var PathIntegrator=Object.freeze({
   },
 
   trace(job,acceleration,compiled,primaryRay,pixelSeed,initialHit=null){
-    if(window.__LitePixCore2Path411Enabled!==false&&typeof LitePixCore2PathAcceleration411==='function'){
-      acceleration=LitePixCore2PathAcceleration411.wrap(acceleration,job);
+    if(window.__LitePixCore2Path411Enabled!==false&&typeof window.LitePixCore2PathAcceleration411==='function'){
+      acceleration=window.LitePixCore2PathAcceleration411.wrap(acceleration,job);
     }
     let radiance=[0,0,0];
     let throughput=[1,1,1];
@@ -8400,6 +8400,9 @@ var PathIntegrator=Object.freeze({
   },
 
   tracePixel(job,acceleration,compiled,primaryRay,pixelSeed){
+    if(window.__LitePixCore2Path411Enabled!==false&&typeof window.LitePixCore2PathAcceleration411==='function'){
+      acceleration=window.LitePixCore2PathAcceleration411.wrap(acceleration,job);
+    }
     const primaryHitRecord=acceleration.trace(primaryRay);
     if(!primaryHitRecord.hit){
       const env=this.safeColor(RenderCoreD.evaluateEnvironment(job,compiled,primaryRay.direction));

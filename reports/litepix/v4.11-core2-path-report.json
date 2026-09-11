@@ -1,18 +1,23 @@
 {
-  "passed": false,
+  "passed": true,
   "core": {
     "title": "LitePix v4.11.0 Core Runtime",
     "version": "4.11.0",
     "marker": true,
     "adapterType": "function"
   },
+  "sceneSetup": {
+    "objects": 1,
+    "name": "LitePix411BenchmarkBox",
+    "triangles": 12
+  },
   "fast": {
-    "wallMs": 272,
+    "wallMs": 434,
     "engine": "fast",
     "renderer": "Part 4 Fast Direct",
     "performance": {
-      "totalMs": 248.3000000000029,
-      "traceMs": 246.10000000000582,
+      "totalMs": 355.8999999999942,
+      "traceMs": 239.59999999999854,
       "actualRays": 0,
       "raysPerSecond": 0,
       "samples": 0,
@@ -23,49 +28,72 @@
     "core2": null
   },
   "legacy": {
-    "wallMs": 1983,
+    "wallMs": 2166,
     "engine": "path",
     "renderer": "Group 9 Progressive Path GI",
     "performance": {
-      "totalMs": 1976.9000000000015,
-      "traceMs": 1976.4000000000015,
-      "actualRays": 28800,
-      "raysPerSecond": 14572,
-      "samples": 28800,
-      "yields": 450,
+      "totalMs": 2084.5,
+      "traceMs": 2082.7000000000044,
+      "actualRays": 32530,
+      "raysPerSecond": 15619,
+      "samples": 29111,
+      "yields": 453,
       "bvhBuildMs": null
     },
     "secondaryGI": "Light Cache",
     "core2": null
   },
   "core2": {
-    "wallMs": 1958,
+    "wallMs": 2153,
     "engine": "path",
     "renderer": "Group 9 Progressive Path GI",
     "performance": {
-      "totalMs": 1949.800000000003,
-      "traceMs": 1949.199999999997,
-      "actualRays": 28800,
-      "raysPerSecond": 14775,
-      "samples": 28800,
-      "yields": 450,
+      "totalMs": 2110.4000000000015,
+      "traceMs": 2108.9000000000015,
+      "actualRays": 32530,
+      "raysPerSecond": 15425,
+      "samples": 29111,
+      "yields": 453,
       "bvhBuildMs": null
     },
     "secondaryGI": "Light Cache",
-    "core2": null
+    "core2": {
+      "version": "4.11.0",
+      "provider": "LitePix Core2 SAH BVH",
+      "triangles": 12,
+      "nodes": 9,
+      "buildMs": 0.5,
+      "traceRays": 32530,
+      "shadowRays": 0,
+      "nodeTests": 50999,
+      "triangleTests": 18710,
+      "hits": 3419,
+      "anyHits": 0,
+      "avgNodeTests": 1.568,
+      "avgTriangleTests": 0.575,
+      "traceMs": 24.7,
+      "sah": {
+        "nodes": 9,
+        "leaves": 5,
+        "primitives": 12,
+        "buildMs": 0.5,
+        "maxLeaf": 4,
+        "bins": 16,
+        "boundsEvaluations": 12,
+        "cachedBounds": true
+      }
+    }
   },
   "comparison": {
     "maxPixelDiff": 0,
     "meanPixelDiff": 0,
-    "traceSpeedup": 1.0139544428483502,
-    "legacyTraceMs": 1976.4000000000015,
-    "core2TraceMs": 1949.199999999997,
-    "legacyWallMs": 1983,
-    "core2WallMs": 1958
+    "traceSpeedup": 0.9875764616624795,
+    "legacyTraceMs": 2082.7000000000044,
+    "core2TraceMs": 2108.9000000000015,
+    "legacyWallMs": 2166,
+    "core2WallMs": 2153
   },
   "pageErrors": [],
   "consoleErrors": [],
-  "failures": [
-    "Core2 BVH did not own real path traversal"
-  ]
+  "failures": []
 }
