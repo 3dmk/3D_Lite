@@ -13,17 +13,15 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           s=Path('index.html').read_text(encoding='utf-8')
-          for term in ['ShadowVisibility','PathGIRenderer','DirectLight','sampleLight','LightSampler','occluded(','lightSamples','shadowRays']:
+          terms=['const Group9DirectMIS=Object.freeze','var PathGIRenderer=Object.freeze','litePixCores4to8Production:','beautyFrame','core5-production-v4.31.js','<title>','const LitePixVersion=Object.freeze']
+          for term in terms:
               print('\n===== TERM',term,'=====')
               start=0
-              count=0
-              while True:
+              for count in range(1,8):
                   i=s.find(term,start)
                   if i<0: break
-                  count+=1
-                  a=max(0,i-900);b=min(len(s),i+1800)
+                  a=max(0,i-500);b=min(len(s),i+6000)
                   print(f'--- hit {count} at {i} ---')
                   print(s[a:b])
                   start=i+len(term)
-                  if count>=8: break
           PY
