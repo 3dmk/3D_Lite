@@ -1,0 +1,897 @@
+372: /* 3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — Classic Minimal cursor set */
+813: 3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix
+996: <option value="fast">LiteTrace Fast</option>
+997: <option value="path">LiteTrace Path GI</option>
+1099: <div class="render-row"><label>Acceleration</label><select id="rsAcceleration"><option selected>BVH</option></select></div>
+1139: <option>Refraction</option>
+1141: <option>Emission</option>
+1474: <div class="row"><label>Hemisphere</label><input id="sphereHemi" type="number" min="0" max="1" step="0.01" value="0"></div>
+1732: <div class="materialMapRow" data-map-row="roughnessMap"><div class="materialMapPreview" data-map-preview="roughnessMap">R</div><button type="button" data-import-map="roughnessMap">Roughness</button><button type="button" data-clear-map="roughnessMap">×</button></div>
+1735: <div class="materialMapRow" data-map-row="emissiveMap"><div class="materialMapPreview" data-map-preview="emissiveMap">E</div><button type="button" data-import-map="emissiveMap">Emissive</button><button type="button" data-clear-map="emissiveMap">×</button></div>
+1743: <div class="row"><label>Roughness</label><input id="materialRoughness" type="number" min="0" max="1" step="0.01" value="0.65"></div>
+1746: <div class="row"><label>Emissive Strength</label><input id="materialEmissiveStrength" type="number" min="0" max="10" step="0.05" value="1"></div>
+1859: window.addEventListener('unhandledrejection',e=>showStartupError(e.reason?.message||e.reason||'Unhandled promise rejection'));
+2155: const hits=raycaster.intersectObjects(
+2685: if(!p){const rect=renderer.domElement.getBoundingClientRect();mouse.x=((e.clientX-rect.left)/rect.width)*2-1;mouse.y=-((e.clientY-rect.top)/rect.height)*2+1;raycaster.setFromCamera(mouse,camera);const plane=new THREE.Plane(new THREE.Vector3(0,0,1),0),hit=new THREE.Vector3();if(raycaster.ray.intersectPlane(plane,hit))p=hit}
+3222: if(checkAdjacency){for(const ei of v.vedg||[])if(!m.e?.[ei]||m.e[ei].dead)errors.push(`vertex ${i}: dead/missing incident edge ${ei}`);for(const fi of v.vfac||[])if(!m.f?.[fi]||m.f[fi].dead)errors.push(`vertex ${i}: dead/missing incident face ${fi}`)}
+3228: if(checkAdjacency&&f.edg?.length!==ids.length)errors.push(`face ${fi}: edge ring size mismatch`);
+3371: pickObject(e){ThreeViewportBackend.setRayFromEvent(e);const hit=raycaster.intersectObjects(objects.filter(o=>o.visible&&!o.userData.frozen),false)[0];return hit?this.record({object:hit.object,type:'object',id:hit.object.userData?.id??-1,depth:hit.distance,raw:hit}):null},
+3374: pickFace(e,mesh=selected){if(!mesh?.userData?.editPoly)return null;ThreeViewportBackend.setRayFromEvent(e);const hit=raycaster.intersectObject(mesh,false)[0];if(!hit)return null;const fi=mesh.userData.triToFace?.[hit.faceIndex]??hit.faceIndex;return this.record({object:mesh,type:'face',id:fi,depth:hit.distance,raw:hit})},
+3723: return raycaster.ray.intersectPlane(plane,out);
+3822: const hemi=new THREE.HemisphereLight(0xfffbf4,0x625d55,1.18);
+4022: for(const [name,value] of Object.entries(required))if(!value)errors.push('missing '+name);
+4178: for(const [name,value] of Object.entries(required))if(!value)errors.push(`missing ${name}`);
+4179: if(typeof syncTransformTarget!=='function')errors.push('missing syncTransformTarget');
+4180: if(typeof updateDisplayForMesh!=='function')errors.push('missing updateDisplayForMesh');
+4181: if(typeof MeshWireManager==='undefined')errors.push('missing MeshWireManager');
+4182: if(typeof OverlayManager==='undefined')errors.push('missing OverlayManager');
+4183: if(typeof MNMesh!=='function'||typeof MNEdge!=='function'||typeof MNFace!=='function')errors.push('missing MNMesh kernel');
+4184: if(typeof DerivedObject!=='function'||typeof SceneNode!=='function')errors.push('missing object pipeline');
+4189: const LiteTraceVersion=Object.freeze({name:'LiteTrace Renderer',version:'1.1 RC1'});
+4191: window.LiteTraceVersion=LiteTraceVersion;
+4256: renderer:Object.freeze(['LiteTraceServices','LiteTraceDiagnostics','RendererBootstrap']),
+4263: RendererBootstrap:Object.freeze(['LiteTraceServices','LiteTraceDiagnostics']),
+4301: AccelerationService:Object.freeze([]),
+4304: RenderExecutionContext:Object.freeze(['RenderSchedulerService','WorkerService','AccelerationService','PerformanceService']),
+4305: RenderExecutionServices:Object.freeze(['RenderSchedulerService','WorkerService','AccelerationService','SamplingService','PerformanceService','RenderExecutionContext']),
+4326: LiteTraceServices:window.LiteTraceServices||null,
+4327: LiteTraceDiagnostics:window.LiteTraceDiagnostics||null,
+4366: AccelerationService:window.ThreeDLiteAccelerationService||null,
+4398: const missing=[];
+4401: for(const dep of deps)if(!ThreeDLiteAppContext.get(dep))missing.push(`${name}->${dep}`);
+4403: return Object.freeze({ok:missing.length===0,missing});
+4414: 3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 1 CLEAN RENDER FRAMEWORK
+4420: 3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 2
+4464: rebuildAcceleration:x.scene||x.geometry,
+4489: const m=o.mesh;if(!m){errors.push('Missing mesh '+o.name);continue}
+4494: if(m.normals?.length&&m.normals.length!==m.positions.length)errors.push('Normal mismatch '+o.name);
+4495: if(m.uvs?.length&&m.uvs.length!==vc*2)errors.push('UV mismatch '+o.name);
+4496: if(m.materialIndices?.length!==tc)errors.push('Material-index count mismatch '+o.name);
+4504: for(const id of o.materialIds||[])if(!mids.has(id))errors.push('Missing material '+id);
+4509: for(const key of RenderRevisionPolicy.keys)if(!Number.isFinite(md[key]))errors.push('Missing revision '+key);
+4522: roughness:Number.isFinite(m?.roughness)?m.roughness:.65,
+4526: transmission:Number.isFinite(m?.transmission)?m.transmission:0,
+4531: emissive:m?.emissive?[m.emissive.r,m.emissive.g,m.emissive.b]:[0,0,0],
+4532: emissiveIntensity:Number.isFinite(m?.emissiveIntensity)?m.emissiveIntensity:0
+4649: if(typeof RenderSceneBoundary.buildSnapshot!=='function')errors.push('Missing buildSnapshot');
+4650: if(typeof RenderSceneBoundary.verifyDetached!=='function')errors.push('Missing detached verification');
+4651: if(typeof RenderSnapshotValidator.validate!=='function')errors.push('Missing snapshot validator');
+4652: if(typeof RenderRevisionPolicy.invalidation!=='function')errors.push('Missing revision invalidation policy');
+4659: 3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 3
+4680: if(!packet)errors.push('Missing geometry packet');
+4685: if(n?.length&&n.length!==p.length)errors.push('Normal count mismatch');
+4686: if(u?.length&&u.length!==vc*2)errors.push('UV count mismatch');
+4687: if(m?.length!==tc)errors.push('Material-index count mismatch');
+4738: if(!p||!p.positions||!p.indices)throw new Error('Missing geometry packet');
+4819: const LiteTraceWorkerTracing=Object.freeze({
+4825: window.LiteTraceWorkerTracing=LiteTraceWorkerTracing;
+5019: if(this.disposed)return Promise.reject(new WorkerError('Worker pool disposed'));
+5021: return Promise.reject(Object.assign(new WorkerError('Web Workers unavailable'),{workerUnavailable:true}));
+5026: return new Promise((resolve,reject)=>{
+5261: await new Promise(resolve=>setTimeout(resolve,25));
+5297: 3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — CORE B
+5302: this.accelerationPackets=RenderGeometryCompiler.compileScene(renderScene);
+5303: this.workerPackets=this.accelerationPackets.map(p=>new RenderGeometryPacket({
+5312: Object.freeze(this.accelerationPackets);
+5324: buildAccelerationFromPackets(packets){
+5328: return new RenderAccelerationSet(store,new RenderBVH(store,4));
+5335: while(job.paused&&!job.cancelled)await new Promise(r=>setTimeout(r,25));
+5365: if(typeof this.createExecutionGeometry!=='function')errors.push('Core B execution geometry missing');
+5366: if(typeof this.buildAccelerationFromPackets!=='function')errors.push('Core B acceleration builder missing');
+5397: if(typeof RenderWorkerPool!=='function')errors.push('RenderWorkerPool missing');
+5398: if(typeof RenderGeometryCompiler.compileScene!=='function')errors.push('RenderGeometryCompiler missing');
+5399: if(typeof RenderGeometryValidation.validatePacket!=='function')errors.push('RenderGeometryValidation missing');
+5400: if(typeof RenderGeometryPreparation.prepare!=='function')errors.push('RenderGeometryPreparation missing');
+5401: if(typeof PreparedGeometrySet!=='function')errors.push('PreparedGeometrySet missing');
+5415: 3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 4
+5416: Rays + Triangle Intersections + BVH + Camera
+5431: const RenderRayType=Object.freeze({CAMERA:'camera',SHADOW:'shadow',DIFFUSE:'diffuse',GLOSSY:'glossy',TRANSMISSION:'transmission'});
+5457: const TriangleIntersector=Object.freeze({
+5458: intersect(ray,p0,p1,p2,hit=new RenderHit()){
+5481: const AABBIntersector=Object.freeze({
+5498: intersect(ray,min,max,tLimit=Infinity){return Number.isFinite(this.entry(ray,min,max,tLimit))}
+5518: // contain shading normals or UVs. Missing optional attributes must not
+5568: class BVHNode{
+5575: var RenderBVH = class RenderBVH{
+5631: this.nodes[nodeIndex]=new BVHNode(rb.min,rb.max,-1,-1,start,count);
+5648: this.nodes[nodeIndex]=new BVHNode(rb.min,rb.max,-1,-1,start,count);
+5652: this.nodes[nodeIndex]=new BVHNode(rb.min,rb.max,left,right,0,0);
+5655: intersect(ray){
+5661: if(!AABBIntersector.intersect(ray,node.min,node.max,best.t))continue;
+5669: TriangleIntersector.intersect(ray,p0,p1,p2,best);
+5678: const lt=AABBIntersector.entry(ray,left.min,left.max,best.t);
+5679: const rt=AABBIntersector.entry(ray,right.min,right.max,best.t);
+5706: if(!AABBIntersector.intersect(ray,node.min,node.max,ray.tMax))continue;
+5711: TriangleIntersector.intersect(
+5778: var RenderAccelerationSet = class RenderAccelerationSet{
+5779: constructor(store,bvh){
+5780: this.store=store;this.bvh=bvh;
+5783: this.nodeCount=bvh.nodes.length;
+5784: this.stats=Object.freeze({geometry:store.stats,bvh:bvh.stats()});
+5787: trace(ray){return this.bvh.intersect(ray)}
+5788: occluded(ray){return this.bvh.anyHit(ray)}
+5792: const RenderAccelerationCache16={
+5794: acceleration:null,
+5796: misses:0,
+5797: reset(){this.geometryRevision=null;this.acceleration=null;this.hits=0;this.misses=0;},
+5798: invalidate(){this.geometryRevision=null;this.acceleration=null;},
+5807: if(this.acceleration&&this.geometryRevision===rev){this.hits++;return this.acceleration;}
+5808: this.misses++;return null;
+5810: put(scene,acceleration){
+5812: this.acceleration=acceleration;
+5813: return acceleration;
+5815: stats(){return Object.freeze({geometryRevision:this.geometryRevision,hits:this.hits,misses:this.misses,reused:!!this.acceleration});}
+5820: - object mesh geometry revisions feed BLAS-equivalent cached acceleration data;
+5823: Current browser renderer still uses the proven binary RenderAccelerationSet.
+5825: const RenderAccelerationHierarchy16=Object.freeze({
+5826: mode:'geometry-revision acceleration cache; TLAS/BLAS boundary reserved',
+5827: cache:RenderAccelerationCache16,
+5829: const cached=RenderAccelerationCache16.get(scene);
+5831: return RenderAccelerationCache16.put(scene,builder());
+5834: window.RenderAccelerationCache16=RenderAccelerationCache16;
+5835: window.RenderAccelerationHierarchy16=RenderAccelerationHierarchy16;
+5837: const RenderAccelerationBuilder=Object.freeze({
+5839: return RenderAccelerationHierarchy16.build(renderScene,()=>{
+5844: return new RenderAccelerationSet(store,new RenderBVH(store,4));
+5850: async render(job,acceleration,onProgress=()=>{}){
+5858: while((job.paused||job.controlToken16?.paused?.())&&!job.cancelled)await new Promise(r=>setTimeout(r,20));
+5863: const hit=acceleration.trace(ray);
+5876: if(y%rowChunk===0)await new Promise(r=>setTimeout(r,0));
+5884: 'ray representation','ray/triangle intersection','ray/AABB intersection',
+5885: 'triangle store','binary BVH','camera ray generation','diagnostic normal render'
+5901: let hit=TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]);
+5905: hit=TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]);
+5909: if(TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]).hit)errors.push('Triangle miss failed');
+5911: if(!AABBIntersector.intersect(new RenderRay([0,0,2],[0,0,-1]),[-1,-1,-1],[1,1,1]))errors.push('AABB hit failed');
+5916: const bvh=new RenderBVH(store,1),closest=bvh.intersect(new RenderRay([0,0,2],[0,0,-1]));
+5917: if(!closest.hit||!approx(closest.t,2))errors.push('BVH closest-hit failed');
+5918: if(!bvh.anyHit(new RenderRay([0,0,2],[0,0,-1],1e-5,2.1,RenderRayType.SHADOW)))errors.push('BVH any-hit failed');
+5919: if(bvh.anyHit(new RenderRay([0,0,2],[0,0,-1],1e-5,1.9,RenderRayType.SHADOW)))errors.push('Finite shadow tMax failed');
+5920: const bs=bvh.stats();if(bs.nodeCount<1||bs.leafCount<1||bs.triangleCount!==2)errors.push('BVH statistics failed');
+5930: const empty=new RenderTriangleStore();empty.finalize();const ebvh=new RenderBVH(empty,4);
+5931: if(ebvh.root!==-1||ebvh.intersect(new RenderRay([0,0,0],[0,0,1])).hit||ebvh.anyHit(new RenderRay([0,0,0],[0,0,1])))errors.push('Empty BVH failed');
+5948: if(typeof RenderRay!=='function')errors.push('RenderRay missing');
+5949: if(typeof TriangleIntersector.intersect!=='function')errors.push('Triangle intersector missing');
+5950: if(typeof RenderBVH!=='function')errors.push('RenderBVH missing');
+5951: if(typeof RenderCameraRayGenerator.ray!=='function')errors.push('Camera ray generator missing');
+5952: if(typeof RenderAccelerationBuilder.build!=='function')errors.push('Acceleration builder missing');
+5958: RenderRay,RenderHit,TriangleIntersector,AABBIntersector,
+5959: RenderTriangleStore,RenderBVH,RenderCameraRayGenerator,
+5960: RenderAccelerationSet,RenderAccelerationBuilder,DiagnosticRenderer,
+5965: 3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 5
+6026: this.roughness=RenderMaterialPolicy.scalar(snapshot.roughness,.65,.045,1);
+6030: this.transmission=RenderMaterialPolicy.scalar(snapshot.transmission,0,0,1);
+6036: const emissiveSrgb=RenderMaterialPolicy.finiteColor(snapshot.emissive,[0,0,0]);
+6037: this.emissive=Object.freeze(RenderColor.srgbToLinear(emissiveSrgb));
+6038: this.emissiveIntensity=RenderMaterialPolicy.scalar(snapshot.emissiveIntensity,0,0,1e8);
+6052: roughness:.65,metalness:0,opacity:1,emissive:[0,0,0],emissiveIntensity:0
+6106: const PhysicalBSDF=Object.freeze({
+6115: distributionGGX(nDotH,roughness){
+6116: const a=roughness*roughness,a2=a*a;
+6120: geometrySchlickGGX(nDotV,roughness){
+6121: const r=roughness+1,k=(r*r)/8;
+6124: geometrySmith(nDotV,nDotL,roughness){
+6125: return this.geometrySchlickGGX(nDotV,roughness)*this.geometrySchlickGGX(nDotL,roughness);
+6142: const D=this.distributionGGX(nDotH,material.roughness);
+6143: const G=this.geometrySmith(nDotV,nDotL,material.roughness);
+6164: normal(acceleration,hit){
+6165: const s=acceleration.store,t=hit.triangleIndex,k=t*3;
+6180: uv(acceleration,hit){
+6181: const s=acceleration.store,t=hit.triangleIndex,k=t*3;
+6191: const RenderAOVNames=Object.freeze([
+6193: 'Reflection','Refraction','Specular','Emission','Shadow',
+6197: class RenderAOVSet{
+6249: const RenderAOVUtil=Object.freeze({
+6254: primary(job,acceleration,compiled,ray,hit,pixelSeed){
+6257: const n=SurfaceInterpolator.normal(acceleration,hit);
+6258: const emission=RenderColor.mul(material.emissive,material.emissiveIntensity);
+6259: const direct=Group9DirectMIS.evaluate(job,acceleration,compiled,ray,hit,pixelSeed);
+6265: emission,
+6271: specular:RenderColor.mul(direct,Math.max(.04,material.metalness+(1-material.roughness)*.25)),
+6273: refraction:RenderColor.mul(direct,Math.max(0,material.transmission||0)),
+6280: set.set3('Albedo',i,a.albedo);set.set3('Diffuse',i,a.diffuse);set.set3('Emission',i,a.emission);
+6284: set.set3('Reflection',i,a.reflection);set.set3('Refraction',i,a.refraction);set.set3('Shadow',i,a.shadow);
+6293: 3DLite / LiteTrace — GROUP 16 GEN3 SAFE REWRITE
+6325: const LiteTraceScratch=Object.freeze({
+6328: window.LiteTraceScratch=LiteTraceScratch;
+6367: this.stageMs={snapshot:0,geometry:0,worker:0,bvh:0,shading:0,lightCache:0,render:0,denoise:0,toneMap:0,post:0};
+6428: 'BVH layout replacement','worker scheduler replacement',
+6455: if(typeof RenderPerformancePolicy16?.tileSize!=='function')errors.push('Performance policy missing');
+6456: if(typeof RenderPerformanceCounters16!=='function')errors.push('Performance counters missing');
+6457: if(typeof RenderPerformanceRuntime16?.attach!=='function')errors.push('Performance runtime missing');
+6502: trace(acceleration,type=RenderRayType.CAMERA){
+6504: for(let i=0;i<this.count;i++)hits[i]=acceleration.trace(this.ray(i,type));
+6553: await Promise.all(runners);
+6579: while(job.paused&&!job.cancelled)await new Promise(r=>setTimeout(r,20));
+6582: if((i&1)===1)await new Promise(r=>setTimeout(r,0));
+6588: /* 3DLite v3.97.9 — LiteTrace execution-context dependency repair */
+6589: var LiteTraceExecutionContext=(function(){
+6590: const existing=window.LiteTraceExecutionContext;
+6593: window.LiteTraceExecutionContext=ctx;
+6596: window.__3DLiteLiteTraceExecutionContext3978=true;
+6599: shade(job,acceleration,materials,lights,ray,hit){
+6602: return RenderColor.add(material.baseColor,RenderColor.mul(material.emissive,material.emissiveIntensity));
+6605: const n=SurfaceInterpolator.normal(acceleration,hit);
+6607: let color=RenderColor.mul(material.emissive,material.emissiveIntensity);
+6610: const sample=DirectLightSampler.sample(light,hit.position);
+6615: const brdf=PhysicalBSDF.evaluate(material,n,v,sample.direction);
+6622: async render(job,acceleration,onProgress=()=>{}){
+6627: const aovs=new RenderAOVSet(width,height);
+6634: LiteTraceExecutionContext.activeJob=job;LiteTraceExecutionContext.performance=perf16;
+6645: const hit=acceleration.trace(ray);
+6650: const linear=RenderPart4Core.evaluate(job,acceleration,compiled,ray,hit,pixelSeed);
+6651: RenderAOVUtil.writePrimary(aovs,y*width+x,RenderAOVUtil.primary(job,acceleration,compiled,ray,hit,pixelSeed));
+6652: aovs.set3('Beauty',y*width+x,linear);
+6653: aovs.set3('Global Illumination',y*width+x,[0,0,0]);
+6654: aovs.set1('Noise',y*width+x,0);
+6662: RenderAOVUtil.writePrimary(aovs,y*width+x,null);
+6663: aovs.set3('Beauty',y*width+x,env);
+6664: aovs.set3('Global Illumination',y*width+x,env);
+6665: aovs.set1('Noise',y*width+x,0);
+6678: if(LiteTraceExecutionContext.performance===perf16){LiteTraceExecutionContext.activeJob=null;LiteTraceExecutionContext.performance=null;}
+6679: job.renderChannels=aovs;
+6682: channels:aovs,
+6689: diagnostics:RenderPart4Core.diagnostics(job,compiled,acceleration),
+6698: 3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — CORE C
+6710: evaluateDirect(job,acceleration,compiled,ray,hit,pixelSeed=1,options={}){
+6711: return DirectLightingIntegrator.evaluate(job,acceleration,compiled,ray,hit,pixelSeed,options);
+6718: if(typeof this.compileScene!=='function')errors.push('Core C scene compiler missing');
+6719: if(typeof this.evaluateDirect!=='function')errors.push('Core C direct evaluator missing');
+6737: 'Core B ray/BVH hit data',
+6760: roughness:.5,metalness:0,opacity:1,emissive:[0,0,0],emissiveIntensity:0
+6762: const brdf=PhysicalBSDF.evaluate(mat,[0,0,1],[0,0,1],[0,0,1]);
+6767: roughness:.25,metalness:1,opacity:1,emissive:[0,0,0],emissiveIntensity:0
+6769: const mb=PhysicalBSDF.evaluate(metallic,[0,0,1],[0,0,1],[0,0,1]);
+6781: if(typeof RenderSurfaceMaterial!=='function')errors.push('RenderSurfaceMaterial missing');
+6782: if(typeof PhysicalBSDF.evaluate!=='function')errors.push('PhysicalBSDF missing');
+6783: if(typeof BasicDirectRenderer.render!=='function')errors.push('BasicDirectRenderer missing');
+6784: if(typeof SurfaceInterpolator.normal!=='function')errors.push('SurfaceInterpolator missing');
+6792: PhysicalBSDF,SurfaceInterpolator,BasicDirectRenderer,RenderGroup5Contract
+6796: 3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 6
+6969: const DirectLightSampler=Object.freeze({
+7124: const ps=DirectLightSampler.sample(point,[0,0,0]);
+7132: const ss=DirectLightSampler.sample(sun,[0,0,0]);
+7140: const sp=DirectLightSampler.sample(spot,[0,0,0]);
+7149: if(typeof EditorLightSystem.create!=='function')errors.push('EditorLightSystem missing');
+7150: if(typeof SceneLightCompiler.compile!=='function')errors.push('SceneLightCompiler missing');
+7151: if(typeof DirectLightSampler.sample!=='function')errors.push('DirectLightSampler missing');
+7158: RenderSceneLight,SceneLightCompiler,DirectLightSampler,RenderGroup6Contract
+7162: 3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 7
+7234: visible(acceleration,origin,direction,maxDistance){
+7235: try{LiteTraceExecutionContext.performance?.addRay?.(RenderRayType.SHADOW);}catch(_){}
+7241: return !acceleration.occluded(ray);
+7262: // True emissive mesh-triangle sampling remains Group 10.
+7266: return DirectLightSampler.sample(light,point);
+7305: var DirectLightingIntegrator=Object.freeze({
+7317: evaluate(job,acceleration,compiled,ray,hit,pixelSeed=1,options={}){
+7319: const n=SurfaceInterpolator.normal(acceleration,hit);
+7321: const includeEmission=options.includeEmission!==false;
+7323: let color=includeEmission?RenderColor.mul(material.emissive,material.emissiveIntensity):[0,0,0];
+7326: return includeEmission?RenderColor.add(material.baseColor,color):[0,0,0];
+7329: const emissiveSet=compiled.emissiveTriangles||job.emissiveTriangles||null;
+7330: if(emissiveSet?.triangles?.length){
+7331: const es=EmissiveTriangleSet.sample(emissiveSet,pixelSeed,0,hit.position);
+7332: if(es&&ShadowVisibility.visible(acceleration,hit.position,es.direction,es.distance)){
+7333: const brdf=PhysicalBSDF.evaluate(material,n,v,es.direction);
+7335: const w=RenderMIS.power(es.pdf,bsdfPdf);
+7359: : DirectLightSampler.sample(light,hit.position);
+7365: const visible=ShadowVisibility.visible(acceleration,hit.position,sample.direction,sample.distance);
+7369: const brdf=PhysicalBSDF.evaluate(material,n,v,sample.direction);
+7383: 3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — CORE D
+7390: evaluateSurfaceDirect(job,acceleration,compiled,ray,hit,pixelSeed,options={}){
+7391: return DirectLightingIntegrator.evaluate(
+7392: job,acceleration,compiled,ray,hit,pixelSeed,options
+7402: tracePath(job,acceleration,compiled,ray,pixelSeed,initialHit=null){
+7403: return PathIntegrator.trace(
+7404: job,acceleration,compiled,ray,pixelSeed,initialHit
+7408: visible(acceleration,origin,direction,maxDistance){
+7409: return ShadowVisibility.visible(acceleration,origin,direction,maxDistance);
+7416: if(typeof this.evaluateSurfaceDirect!=='function')errors.push('Core D direct evaluator missing');
+7417: if(typeof this.tracePath!=='function')errors.push('Core D path tracer missing');
+7418: if(typeof this.evaluateEnvironment!=='function')errors.push('Core D environment evaluator missing');
+7433: 'Core B acceleration trace',
+7435: 'Group 5 PhysicalBSDF'
+7439: 'MIS',
+7461: const acceleration=new RenderAccelerationSet(store,new RenderBVH(store,1));
+7462: if(ShadowVisibility.visible(acceleration,[0,0,-1],[0,0,1],10)!==false){
+7465: if(ShadowVisibility.visible(acceleration,[3,3,-1],[0,0,1],10)!==true){
+7469: if(acceleration.occluded(occRay)!==true)errors.push('BVH any-hit test failed');
+7495: if(typeof ShadowVisibility.visible!=='function')errors.push('ShadowVisibility missing');
+7496: if(typeof AreaLightSampler.sample!=='function')errors.push('AreaLightSampler missing');
+7497: if(typeof DirectLightingIntegrator.evaluate!=='function')errors.push('DirectLightingIntegrator missing');
+7498: if(typeof EnvironmentSampler.background!=='function')errors.push('EnvironmentSampler missing');
+7505: AreaLightSampler,DirectLightingIntegrator,RenderGroup7Contract
+7509: 3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 8
+7520: cosineHemisphere(n,seed,bounce){
+7537: var RenderMIS=Object.freeze({
+7546: sampleHalfVector(n,roughness,u1,u2){
+7547: const a=Math.max(.045,roughness);
+7561: distribution(nDotH,roughness){
+7562: const a=Math.max(.045,roughness),a2=a*a;
+7598: const specProb=Math.max(.08,Math.min(.92,.25+.65*material.metalness+.2*(1-material.roughness)));
+7603: const D=GGXImportanceSampler.distribution(nDotH,material.roughness);
+7610: const transmission=Math.max(0,Math.min(1,material.transmission||0));
+7613: if(transmission>0&&chooseT<transmission){
+7634: lobe='transmission';
+7638: return {direction:RayMath.normalize(direction),pdf:1,weight,lobe,transmission:true};
+7641: const specProb=Math.max(.08,Math.min(.92,.25+.65*material.metalness+.2*(1-material.roughness)));
+7647: const h=GGXImportanceSampler.sampleHalfVector(n,material.roughness,u1,u2);
+7651: if(RayMath.dot(n,direction)<=0)direction=PathSampler.cosineHemisphere(n,seed^(0xA511E9B3>>>0),bounce);
+7653: direction=PathSampler.cosineHemisphere(n,seed,bounce);
+7658: const value=PhysicalBSDF.evaluate(material,n,v,direction);
+7664: var EmissiveTriangleSet=Object.freeze({
+7665: compile(job,acceleration,compiled){
+7666: const store=acceleration?.store;
+7674: const power=(mat?.emissiveIntensity||0)*Math.max(...(mat?.emissive||[0,0,0]));
+7705: const radiance=RenderColor.mul(tri.material.emissive,tri.material.emissiveIntensity);
+7816: cellSize(job,acceleration){
+7817: const scale=LightCachePolicy.sceneScale(acceleration);
+7826: constructor(job,acceleration){
+7827: this.cellSize=PathGuidePolicy.cellSize(job,acceleration);
+7893: if(!bs||bs.transmission)return bs;
+7899: const value=PhysicalBSDF.evaluate(material,n,v,direction);
+7905: const Group9DirectMIS=Object.freeze({
+7918: evaluate(job,acceleration,compiled,ray,hit,pixelSeed=1){
+7920: const n=SurfaceInterpolator.normal(acceleration,hit);
+7922: let color=RenderColor.mul(material.emissive,material.emissiveIntensity);
+7938: const count=DirectLightingIntegrator.samplesFor(light,job.settings);
+7945: : DirectLightSampler.sample(light,hit.position);
+7948: if(light.castShadows!==false&&!ShadowVisibility.visible(acceleration,hit.position,sample.direction,sample.distance))continue;
+7951: const brdf=PhysicalBSDF.evaluate(material,n,v,sample.direction);
+7955: const weight=Number.isFinite(lightPdf)?RenderMIS.power(lightPdf,bsdfPdf):1;
+7967: sceneScale(acceleration){
+7968: const root=acceleration?.bvh?.root;
+7969: const node=(root!=null&&root>=0)?acceleration.bvh.nodes[root]:null;
+7974: radius(job,acceleration){
+7977: return Math.max(RenderRayPolicy.epsilonForPoint([0,0,0])*32,this.sceneScale(acceleration)/divisor);
+7995: constructor(job,acceleration){
+7996: this.radius=LightCachePolicy.radius(job,acceleration);
+8001: this.hits=0;this.misses=0;this.inserts=0;this.rejected=0;this.retraces=0;this.refreshes=0;
+8028: this.misses++;return null;
+8051: stats(){return Object.freeze({records:this.records.length,hits:this.hits,misses:this.misses,inserts:this.inserts,rejected:this.rejected,retraces:this.retraces,refreshes:this.refreshes,radius:this.radius});}
+8056: cacheable(material){return material&&material.shading!=='unlit'&&(material.transmission||0)<.05&&(material.metalness||0)<.95;},
+8058: probe(job,acceleration,compiled,hit,n,material,seed,bounce){
+8062: const d=PathSampler.cosineHemisphere(n,seed^Math.imul(i+1,0x85EBCA77),bounce+17);
+8066: try{LiteTraceExecutionContext.performance?.addProbe?.();}catch(_){}
+8067: const ph=acceleration.trace(probeRay);
+8072: li=PathIntegrator.safeColor(Group9DirectMIS.evaluate(job,acceleration,compiled,probeRay,ph,seed^Math.imul(i+3,0x9E3779B9)));
+8081: estimate(job,acceleration,compiled,hit,n,material,seed,bounce){
+8088: const fresh=this.probe(job,acceleration,compiled,hit,n,material,seed^0xB5297A4D,bounce);
+8095: const outgoing=this.probe(job,acceleration,compiled,hit,n,material,seed,bounce);
+8120: trace(job,acceleration,compiled,primaryRay,pixelSeed,initialHit=null){
+8128: const hit=(bounce===0&&initialHit)?initialHit:acceleration.trace(ray);
+8141: const n=SurfaceInterpolator.normal(acceleration,hit);
+8145: // environment energy is accounted for by path miss evaluation.
+8146: const direct=Group9DirectMIS.evaluate(
+8147: job,acceleration,compiled,ray,hit,pixelSeed^(bounce*0x9E3779B9)
+8160: const cachedTail=LightCacheEstimator.estimate(job,acceleration,compiled,hit,n,material,pixelSeed,bounce);
+8185: if(sample.transmission&&material.thickness>0){
+8192: previousGuide=(!sample.transmission&&job.pathGuide&&RayMath.dot(n,sample.direction)>0)
+8198: const rayType=sample.transmission?RenderRayType.TRANSMISSION:(sample.lobe==='ggx'?RenderRayType.GLOSSY:RenderRayType.DIFFUSE);
+8206: tracePixel(job,acceleration,compiled,primaryRay,pixelSeed){
+8207: const primaryHitRecord=acceleration.trace(primaryRay);
+8213: radiance:this.trace(job,acceleration,compiled,primaryRay,pixelSeed,primaryHitRecord),
+8299: async render(job,acceleration,onProgress=()=>{}){
+8304: job.lightCache=LightCacheEstimator.enabled(job)?new RenderLightCache(job,acceleration):null;
+8306: job.pathGuide=RenderCoreH.createPathGuide(job,acceleration);
+8309: const aovs=new RenderAOVSet(width,height);
+8314: LiteTraceExecutionContext.activeJob=job;LiteTraceExecutionContext.performance=perf16;
+8322: while(job.paused&&!job.cancelled)await new Promise(r=>setTimeout(r,20));
+8344: const sample=RenderPart5Core.trace(job,acceleration,compiled,ray,seed);
+8350: if(ph?.hit)RenderAOVUtil.writePrimary(aovs,i,RenderAOVUtil.primary(job,acceleration,compiled,ray,ph,seed));
+8351: else RenderAOVUtil.writePrimary(aovs,i,null);
+8356: await new Promise(r=>setTimeout(r,0));
+8386: aovs.set3('Beauty',i,beauty);
+8387: aovs.set1('Noise',i,Number.isFinite(accumulator.noise(i))?accumulator.noise(i):0);
+8388: const d=aovs.get('Direct Lighting'),e=aovs.get('Emission');
+8390: const emission=e?[e[o],e[o+1],e[o+2]]:[0,0,0];
+8391: aovs.set3('Global Illumination',i,[
+8392: Math.max(0,beauty[0]-direct[0]-emission[0]),
+8393: Math.max(0,beauty[1]-direct[1]-emission[1]),
+8394: Math.max(0,beauty[2]-direct[2]-emission[2])
+8398: if(LiteTraceExecutionContext.performance===perf16){LiteTraceExecutionContext.activeJob=null;LiteTraceExecutionContext.performance=null;}
+8399: job.renderChannels=aovs;
+8402: channels:aovs,
+8408: estimator:'Path GI + direct NEE + power-heuristic MIS',
+8409: mis:true,
+8415: transmission:true,
+8418: emissiveTriangleLights:compiled.emissiveTriangles?.triangles?.length||0,
+8419: diagnostics:RenderPart5Core.diagnostics(job,compiled,acceleration),
+8431: 'cosine hemisphere BSDF sampling baseline',
+8432: 'environment contribution on path miss',
+8436: 'Core B ray/BVH tracing',
+8443: 'MIS',
+8455: const d=PathSampler.cosineHemisphere(n,123,0);
+8457: errors.push('Cosine hemisphere sample failed');
+8464: roughness:.6,metalness:0,opacity:1,emissive:[0,0,0],emissiveIntensity:0
+8483: if(typeof PathSampler.cosineHemisphere!=='function')errors.push('PathSampler missing');
+8484: if(typeof PathBSDFSampler.sample!=='function')errors.push('PathBSDFSampler missing');
+8485: if(typeof PathIntegrator.trace!=='function')errors.push('PathIntegrator missing');
+8486: if(typeof PathGIRenderer.render!=='function')errors.push('PathGIRenderer missing');
+8497: 3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 9 GEN3
+8498: PROGRESSIVE + MIS + ADAPTIVE + RR + GGX IMPORTANCE
+8505: 'MIS weighting for direct NEE vs BSDF sampling',
+8513: 'Core B acceleration',
+8517: 'transmission/refraction',
+8518: 'true emissive triangle-light sampling',
+8521: 'AOV architecture',
+8532: const w=RenderMIS.power(.5,.5);
+8533: expect(Math.abs(w-.5)<1e-9,'MIS equal-PDF power heuristic failed');
+8534: expect(RenderMIS.power(1,0)===1,'MIS zero competitor failed');
+8535: }catch(e){errors.push('MIS test: '+String(e?.message||e));}
+8548: roughness:.2,metalness:.8,opacity:1,emissive:[0,0,0],emissiveIntensity:0
+8575: const pdf=Group9DirectMIS.lightPdf(fake,{area:4,distance:2,emitterCos:1});
+8577: }catch(e){errors.push('Direct MIS PDF test: '+String(e?.message||e));}
+8584: if(typeof RenderMIS?.power!=='function')errors.push('MIS helper missing');
+8585: if(typeof GGXImportanceSampler?.sampleHalfVector!=='function')errors.push('GGX importance sampler missing');
+8586: if(typeof PathBSDFSampler?.pdf!=='function')errors.push('BSDF PDF missing');
+8587: if(typeof Group9DirectMIS?.evaluate!=='function')errors.push('Direct MIS evaluator missing');
+8588: if(typeof ProgressiveAccumulator!=='function')errors.push('Progressive accumulator missing');
+8589: if(typeof PathGIRenderer?.render!=='function')errors.push('Progressive Path renderer missing');
+8597: mis:RenderMIS,
+8599: directMIS:Group9DirectMIS
+8602: RenderMIS,GGXImportanceSampler,Group9DirectMIS,ProgressiveAccumulator,
+8608: 3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 10 GEN3
+8609: TRANSMISSION + REFRACTION + EMISSIVE GI
+8614: 'refraction and total-internal-reflection handling',
+8615: 'transmission ray classification',
+8617: 'emissive triangle extraction',
+8618: 'emissive triangle next-event sampling'
+8621: 'Group 9 path sampling, MIS and progressive accumulation',
+8622: 'Core B triangle store and acceleration',
+8650: expect(r&&r.every(Number.isFinite)&&r[2]<-.99,'Normal-incidence refraction failed');
+8653: }catch(e){errors.push('Refraction test: '+String(e?.message||e));}
+8664: roughness:.1,metalness:0,opacity:1,transparent:true,
+8665: transmission:1,ior:1.5,thickness:2,attenuationColor:[.8,.9,1],attenuationDistance:5,
+8666: emissive:[0,0,0],emissiveIntensity:0
+8668: expect(m.transmission===1&&Math.abs(m.ior-1.5)<1e-9&&m.thickness===2,'Transmission material fields failed');
+8670: expect(s&&s.transmission===true&&s.direction.every(Number.isFinite),'Transmission BSDF sample failed');
+8671: }catch(e){errors.push('Transmission material test: '+String(e?.message||e));}
+8675: id:'emit',name:'Emit',shading:'physical',baseColor:[.5,.5,.5],roughness:.5,metalness:0,
+8676: opacity:1,transmission:0,ior:1.5,thickness:0,attenuationColor:[1,1,1],
+8677: emissive:[1,.5,.25],emissiveIntensity:10
+8688: const set=EmissiveTriangleSet.compile({renderScene:scene},acc,{materials:lib});
+8689: expect(set.triangles.length===1&&set.totalArea>0,'Emissive triangle extraction failed');
+8690: const sample=EmissiveTriangleSet.sample(set,7,0,[0,0,2]);
+8691: expect(sample&&sample.pdf>0&&sample.radiance.some(v=>v>0),'Emissive triangle sampling failed');
+8692: }catch(e){errors.push('Emissive GI test: '+String(e?.message||e));}
+8699: if(typeof DielectricTransport?.refract!=='function')errors.push('Dielectric refraction missing');
+8700: if(typeof DielectricTransport?.fresnelDielectric!=='function')errors.push('Dielectric Fresnel missing');
+8701: if(typeof EmissiveTriangleSet?.compile!=='function')errors.push('Emissive triangle compiler missing');
+8702: if(typeof EmissiveTriangleSet?.sample!=='function')errors.push('Emissive triangle sampler missing');
+8703: if(typeof PathBSDFSampler?.sample!=='function')errors.push('Path BSDF sampler missing');
+8712: emissiveTriangles:EmissiveTriangleSet
+8715: DielectricTransport,EmissiveTriangleSet,
+8721: 3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — CORE E GEN1
+8729: 'MIS coordination',
+8732: 'dielectric transmission/refraction transport',
+8733: 'emissive triangle GI preparation'
+8736: 'Core B acceleration',
+8744: 'AOV architecture',
+8762: expect(s.minSamples===4&&s.maxSamples===32,'Core E sample range mismatch');
+8763: expect(s.maxBounces===6,'Core E bounce policy mismatch');
+8769: roughness:.15,metalness:0,opacity:1,transparent:true,transmission:1,ior:1.5,
+8771: emissive:[0,0,0],emissiveIntensity:0
+8774: expect(sample&&sample.direction.every(Number.isFinite),'Core E transmissive BSDF failed');
+8796: prepareShading(job,acceleration,baseShading){
+8798: if(!acceleration?.store)throw new RenderExecutionError('Core E requires acceleration geometry');
+8800: const emissiveTriangles=EmissiveTriangleSet.compile(job,acceleration,baseShading);
+8801: return Object.freeze({...baseShading,emissiveTriangles});
+8816: emissiveTriangles:shading?.emissiveTriangles?.triangles?.length||0,
+8817: transmission:true,
+8818: mis:true,
+8829: if(typeof this.prepareShading!=='function')errors.push('Core E shading preparation missing');
+8830: if(typeof this.rendererFor!=='function')errors.push('Core E renderer selection missing');
+8831: if(typeof this.diagnostics!=='function')errors.push('Core E diagnostics missing');
+8839: 3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 11 GEN3
+8854: 'Group 9 MIS/direct-light evaluation',
+8855: 'Core B acceleration',
+8862: 'AOV architecture',
+8892: const miss=cache.query([cache.radius*3,0,0],[0,0,1]);
+8893: expect(miss===null,'Light Cache distant lookup leaked');
+8894: const normalMiss=cache.query([0,0,0],[0,0,-1]);
+8895: expect(normalMiss===null,'Light Cache normal rejection failed');
+8929: if(typeof RenderLightCache!=='function')errors.push('RenderLightCache missing');
+8930: if(typeof LightCachePolicy?.radius!=='function')errors.push('LightCachePolicy missing');
+8931: if(typeof LightCacheEstimator?.estimate!=='function')errors.push('LightCacheEstimator missing');
+8932: if(typeof LightCacheEstimator?.probe!=='function')errors.push('Light Cache probe estimator missing');
+8942: create(job,acceleration){return new RenderLightCache(job,acceleration);}
+8952: 3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 12 GEN3
+8953: RENDER CHANNELS / AOV ARCHITECTURE
+8957: 'renderer-owned AOV buffers',
+8958: 'AOV channel naming and storage',
+8960: 'beauty/direct/GI/reflection/refraction/specular/emission decomposition',
+8985: const set=new RenderAOVSet(2,1);
+8990: expect(set.has('Beauty')&&set.get('Beauty').length===6,'AOV Beauty allocation failed');
+8991: expect(set.toFrame('Beauty')?.rgba?.length===8,'AOV Beauty presentation failed');
+8992: expect(set.toFrame('Normal')?.rgba?.length===8,'AOV Normal presentation failed');
+8993: expect(set.toFrame('Depth',{depthMax:10})?.rgba?.length===8,'AOV Depth presentation failed');
+8994: }catch(e){errors.push('AOV storage test: '+String(e?.message||e));}
+8997: const c1=RenderAOVUtil.idColor(1),c2=RenderAOVUtil.idColor(2);
+9000: }catch(e){errors.push('AOV ID test: '+String(e?.message||e));}
+9003: expect(RenderAOVNames.includes('Beauty')&&RenderAOVNames.includes('Normal')&&RenderAOVNames.includes('Noise'),
+9004: 'Required AOV names missing');
+9005: expect(typeof RenderFramework.showChannel==='function','Framebuffer AOV switching API missing');
+9006: }catch(e){errors.push('AOV UI contract test: '+String(e?.message||e));}
+9013: if(typeof RenderAOVSet!=='function')errors.push('RenderAOVSet missing');
+9014: if(typeof RenderAOVUtil?.primary!=='function')errors.push('RenderAOV primary extraction missing');
+9015: if(typeof RenderFramework?.showChannel!=='function')errors.push('Render AOV UI switching missing');
+9023: names:RenderAOVNames,
+9024: create(width,height){return new RenderAOVSet(width,height);}
+9027: RenderAOVNames,RenderAOVSet,RenderAOVUtil,
+9035: Fresh implementation built directly on Group 12 AOVs.
+9048: 'render geometry','BVH','materials','lights','path transport'
+9168: const a=new RenderAOVSet(2,1);
+9184: if(typeof RenderToneMapper13?.rgb!=='function')errors.push('Tone mapper missing');
+9185: if(typeof RenderDenoiser13?.process!=='function')errors.push('Denoiser missing');
+9186: if(typeof RenderPresenter13?.frame!=='function')errors.push('Presenter missing');
+9207: 3DLite / LiteTrace — GROUP 14 GEN3 REWRITE
+9224: 'Group 12 AOV buffers',
+9231: 'scene evaluation','BVH','materials','lights','path transport'
+9310: if(typeof RenderRegion14?.sanitize!=='function')errors.push('RenderRegion14 sanitize missing');
+9311: if(typeof RenderRegion14?.resolve!=='function')errors.push('RenderRegion14 resolve missing');
+9312: if(typeof RenderRegion14?.mapNested!=='function')errors.push('RenderRegion14 nested mapping missing');
+9332: names(){return Object.freeze([...(window.RenderAOVNames||[])]);},
+9438: aovCount:ThreeDLiteRenderChannelService.names().length,
+9559: for(const name of required)if(!window[name])errors.push(`${name} missing`);
+9586: const ThreeDLiteStartupPreflightService=Object.freeze({owner:'boot3DLite',run(){const dependencies=Object.freeze({THREE:!!window.THREE,OrbitControls:!!window.THREE?.OrbitControls,TransformControls:!!window.THREE?.TransformControls});const missing=Object.entries(dependencies).filter(([,ok])=>!ok).map(([n])=>n);const serviceDependencies=window.validate3DLiteServiceDependencies?.()||{ok:true,missing:[]};return Object.freeze({ok:missing.length===0&&serviceDependencies.ok!==false,dependencies,missing
+9596: function validate3DLiteBatch10(){const errors=[];const required=['ThreeDLiteStartupContractService','ThreeDLiteStartupPreflightService','ThreeDLiteBootstrapGuardService','ThreeDLiteStartupMarkerService','ThreeDLiteLoopOwnershipService','ThreeDLiteDOMAuditService','ThreeDLiteRuntimeOrderAuditService','ThreeDLiteReleaseManifestService','ThreeDLiteStartupReleaseGateService','ThreeDLiteReleaseCandidateService'];for(const name of required)if(!window[name])errors.push(`${name} missing`);const dom=Thre
+9611: function validate3DLiteBatch11(){const errors=[];const required=['ThreeDLiteEventBusService', 'ThreeDLiteCommandQueueService', 'ThreeDLiteDisposableRegistryService', 'ThreeDLiteResourceRegistryService', 'ThreeDLiteMutationGuardService', 'ThreeDLiteFrameSchedulerService', 'ThreeDLiteLifecycleSnapshotService', 'ThreeDLiteLifecycleAuditService', 'ThreeDLiteOwnershipAuditService', 'ThreeDLiteLifecycleFacade'];for(const name of required)if(!window[name])errors.push(`${name} missing`);const audit=Thre
+9626: function validate3DLiteBatch12(){const errors=[];for(const n of ['ThreeDLiteStateStoreService','ThreeDLiteSelectionStateService','ThreeDLiteToolStateService','ThreeDLiteViewportStateService','ThreeDLiteDirtyFlagService','ThreeDLiteTransactionService','ThreeDLiteHistoryBridgeService','ThreeDLiteEditorStateSnapshotService','ThreeDLiteEditorStateAuditService','ThreeDLiteEditorStateFacade'])if(!window[n])errors.push(n+' missing');const audit=ThreeDLiteEditorStateAuditService.run();if(!audit.ok)error
+9630: 3DLite / LiteTrace — GROUP 15 GEN3 REWRITE
+9643: 'Core E path/MIS transport',
+9644: 'Core F Light Cache/AOV infrastructure',
+9647: 'Group 9 BSDF PDFs and direct-light MIS'
+9651: 'emissive-triangle Light Tree leaves',
+9712: roughness:.5,metalness:0,opacity:1,transmission:0,
+9713: emissive:[0,0,0],emissiveIntensity:0
+9728: if(typeof RenderLightTree!=='function')errors.push('RenderLightTree missing');
+9729: if(typeof LightTreePolicy?.enabled!=='function')errors.push('LightTreePolicy missing');
+9730: if(typeof RenderPathGuideField!=='function')errors.push('RenderPathGuideField missing');
+9731: if(typeof GuidedBSDFSampler?.sample!=='function')errors.push('GuidedBSDFSampler missing');
+9732: if(!document.getElementById('rsLightTree'))errors.push('Light Tree setting control missing');
+9733: if(!document.getElementById('rsPathGuiding'))errors.push('Path Guiding setting control missing');
+9744: createPathGuide(job,acceleration){
+9745: return PathGuidePolicy.enabled(job)?new RenderPathGuideField(job,acceleration):null;
+9759: 3DLite / LiteTrace — CORE H GEN3
+9764: const LiteTracePerformanceService=Object.freeze({
+9771: window.LiteTracePerformanceService=LiteTracePerformanceService;
+9774: version:LiteTraceVersion.version+'-performance',
+9776: acceleration:RenderAccelerationHierarchy16,
+9786: acceleration:RenderAccelerationCache16.stats(),
+9794: window.getLiteTracePerformance=()=>RenderPerformanceArchitectureFinal.diagnostics();
+9810: 'Group 9 MIS and BSDF PDFs',
+9826: 'BVH traversal rewrite',
+9841: createPathGuide(job,acceleration){
+9843: ? new RenderPathGuideField(job,acceleration)
+9876: if(typeof this.createLightTree!=='function')errors.push('Core H Light Tree API missing');
+9877: if(typeof this.createPathGuide!=='function')errors.push('Core H Path Guide API missing');
+9878: if(typeof this.attachPerformance!=='function')errors.push('Core H performance API missing');
+9879: if(typeof this.yieldRows!=='function')errors.push('Core H yield policy missing');
+9959: 3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — RENDERER CONSOLIDATION + STABILITY
+9967: class BVHError extends RendererError{constructor(m,c=null){super('bvh',m,c);this.name='BVHError';}}
+9974: rendererReady:false,snapshotReady:false,workerReady:false,accelerationReady:false,framebufferReady:false,
+9978: this.accelerationReady=false;this.framebufferReady=false;this.degraded=false;this.errors.length=0;
+9993: snapshot(){return Object.freeze({rendererReady:this.rendererReady,snapshotReady:this.snapshotReady,workerReady:this.workerReady,accelerationReady:this.accelerationReady,framebufferReady:this.framebufferReady,degraded:this.degraded,errorCount:this.errors.length});}
+9996: const LiteTraceDiagnostics=Object.freeze({
+10002: renderer:LiteTraceVersion.version,
+10010: window.LiteTraceDiagnostics=LiteTraceDiagnostics;
+10071: Object.assign(window,{RendererError,SnapshotError,GeometryCompileError,WorkerError,BVHError,MaterialError,LightError,RenderExecutionError,RendererRuntimeState,RendererBootstrap});
+10097: this.cpuThreads='Auto';this.tileSize='Auto';this.acceleration='BVH';
+10108: this.elapsedMs=0;this.raysPerSecond=null;this.bvhBuildMs=null;
+10167: if(frame.rgba.length!==expected)throw new RenderExecutionError(`Framebuffer byte length mismatch: ${frame.rgba.length} != ${expected}`);
+10230: buildAcceleration(scene){
+10232: return new RenderAccelerationSet(store,new RenderBVH(store,4));
+10235: diagnostics(acceleration=null){return Object.freeze({geometry:RenderGeometryCompiler.lastStats,acceleration:acceleration?.stats||null});},
+10257: if(!job?.renderScene)throw new SnapshotError('Missing immutable RenderSceneSnapshot');
+10265: buildAcceleration(execution){
+10266: try{execution.acceleration=RenderCoreB.buildAccelerationFromPackets(execution.geometry.accelerationPackets);RendererRuntimeState.accelerationReady=true;return execution;}
+10267: catch(err){RendererRuntimeState.accelerationReady=false;throw new BVHError(String(err?.message||err),err);}
+10274: evaluateDirect(job,acceleration,compiled,ray,hit,pixelSeed=1,options={}){return RenderCoreD.evaluateSurfaceDirect(job,acceleration,compiled,ray,hit,pixelSeed,options);},
+10276: tracePath(job,acceleration,compiled,ray,pixelSeed,initialHit=null){return RenderCoreD.tracePath(job,acceleration,compiled,ray,pixelSeed,initialHit);},
+10297: try{window.ThreeDLiteRenderWindow3979?.stage?.(job,'BVH',0);}catch(_){}
+10299: e=RenderCore1.buildAcceleration(e);
+10300: RenderPerformanceRuntime16.markStage(job,'bvh',t);
+10301: try{window.ThreeDLiteRenderWindow3979?.stage?.(job,'BVH',1);}catch(_){}
+10306: e.shading=RenderCoreE.prepareShading(job,e.acceleration,baseShading);
+10319: if(typeof RenderCore1.createRequest!=='function')errors.push('Core 1 request API missing');
+10320: if(typeof RenderCore1.createExecution!=='function')errors.push('Core 1 execution API missing');
+10321: if(typeof RenderCore2.compileShading!=='function')errors.push('Core 2 shading API missing');
+10322: if(typeof RenderCoreE.prepareShading!=='function'||typeof RenderCoreE.rendererFor!=='function')errors.push('Core E API missing');
+10323: if(typeof this.prepare!=='function'||typeof this.rendererFor!=='function')errors.push('Master Core orchestration API missing');
+10345: bvhBuildMs:job.progress.bvhBuildMs
+10387: if(!job.renderScene)throw new Error('Render job missing RenderSceneSnapshot');
+10399: job.executionGeometry=prepared.geometry;job.preparedGeometry=prepared.prepared;job.acceleration=prepared.acceleration;job.shadingContext=prepared.shading;job.emissiveTriangles=prepared.shading?.emissiveTriangles||null;
+10410: const diagnostic=await activeRenderer.render(job,job.acceleration,ratio=>{
+10440: const a=job.acceleration;
+10442: notice.innerHTML=`Render complete.<br>${a.triangleCount} triangles • ${a.nodeCount} BVH nodes.`;
+10564: x.acceleration=value('rsAcceleration')||'BVH';
+10750: const blob=await new Promise(r=>this.ui.frameBuffer.canvas.toBlob(r,'image/png'));
+10775: x.acceleration='BVH';
+10856: 'BVH',
+10876: for(const id of ids)if(!document.getElementById(id))errors.push('Missing '+id);
+11087: expect(typeof RenderPart2Core==='object'&&typeof RenderPart3Core==='object'&&typeof RenderPart4Core==='object'&&typeof RenderPart5Core==='object'&&typeof RenderPart6Core==='object','Part Core boundary missing');
+11089: expect(typeof syncTransformTarget==='function','authoritative transform synchronization API missing');
+11093: if(typeof RenderGroup11Core?.create!=='function')failures.push('Group 11 Light Cache factory missing');
+11095: if(!/secondaryGI/.test(PathIntegrator.trace.toString()))failures.push('Secondary GI mode boundary missing');
+11110: if(typeof RendererBootstrap.recover!=='function')failures.push('Renderer recovery API missing');
+11111: if(typeof RendererRuntimeState.snapshot!=='function')failures.push('Renderer health snapshot missing');
+11120: acceleration(acceleration){return acceleration?.stats||null}
+11133: const acc=RenderCoreB.buildAccelerationFromPackets(packets);if(acc.triangleCount!==1)errors.push('Acceleration triangle count failed');
+11135: if(inv.rebuildAcceleration||!inv.rebuildMaterials)errors.push('Revision invalidation rules failed');
+11148: test('empty scene acceleration',()=>{
+11150: const acc=new RenderAccelerationSet(store,new RenderBVH(store,4));
+11151: expect(!acc.trace(new RenderRay([0,0,0],[0,0,1])).hit,'empty acceleration should miss');
+11158: expect(store.triangleCount()===1,'legacy packet triangle missing');
+11177: const acc=new RenderAccelerationSet(store,new RenderBVH(store,1));
+11178: const hit=acc.trace(new RenderRay([0,0,0],[0,0,1],1e-5,100));
+11180: expect(acc.occluded(new RenderRay([0,0,0],[0,0,1],1e-5,3,RenderRayType.SHADOW,0)),'any-hit missed blocker');
+11203: expect(out.every((l,i)=>l.type===types[i]),'light type mismatch');
+11211: test('metal rough emissive material',()=>{
+11212: const m=new RenderSurfaceMaterial({id:'m',name:'m',shading:'physical',baseColor:[.8,.4,.2],roughness:.2,metalness:1,opacity:1,emissive:[.1,.2,.3],emissiveIntensity:4});
+11213: expect(m.metalness===1&&m.roughness>=.045&&m.emissiveIntensity===4,'material fields incorrect');
+11214: expect(finite3(PhysicalBSDF.emission(m)),'emission non-finite');
+11229: const accel={trace(){return {hit:false};}};
+11232: expect(out.primaryHit===false&&finite3(out.radiance),'path miss/environment failed');
+11236: expect(typeof RenderWorkerPool.prototype.cancelJob==='function','cancelJob missing');
+11237: expect(typeof RenderWorkerPool.prototype.pause==='function','pause missing');
+11238: expect(typeof RenderWorkerPool.prototype.resume==='function','resume missing');
+11239: expect(typeof RenderWorkerPool.prototype.reset==='function','reset missing');
+11240: expect(typeof RenderJobController.prototype.configureThreads==='function','thread config missing');
+11264: 3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — PART 3 GEN3
+11289: if(typeof RenderJobController.prototype.configureThreads!=='function')errors.push('Controller thread configuration missing');
+11290: if(typeof RenderJobController.prototype.workerStats!=='function')errors.push('Controller worker statistics missing');
+11297: if(typeof RenderWorkerPool!=='function')errors.push('RenderWorkerPool missing');
+11298: if(typeof RenderWorkerPool.prototype.setSize!=='function')errors.push('Worker resizing missing');
+11299: if(typeof RenderWorkerPool.prototype.cancelJob!=='function')errors.push('Worker cancellation missing');
+11300: if(typeof RenderWorkerPool.prototype.reset!=='function')errors.push('Worker recovery/reset missing');
+11301: if(typeof RenderWorkerPool.prototype.stats!=='function')errors.push('Worker diagnostics missing');
+11325: 3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — PART 4 GEN3
+11339: 'Core B acceleration',
+11340: 'Group 5 PhysicalBSDF',
+11345: 'Path GI sampling policy','MIS','adaptive sampling','HDRI importance sampling',
+11346: 'transmission/refraction','emissive mesh triangles'
+11351: summarize(job,compiled,acceleration){
+11359: triangles:acceleration?.store?.triangleCount?.()||0,
+11360: bvh:acceleration?.bvh?.stats||null,
+11376: const smp=DirectLightSampler.sample(p,[0,0,0]);
+11386: const outside=DirectLightSampler.sample(spot,[10,0,0]);
+11425: const acceleration=new RenderAccelerationSet(store,new RenderBVH(store,1));
+11426: if(ShadowVisibility.visible(acceleration,[0,0,0],[0,0,1],1)!==true)errors.push('Finite shadow max-distance test failed');
+11427: if(ShadowVisibility.visible(acceleration,[0,0,0],[0,0,1],4)!==false)errors.push('Shadow blocker test failed');
+11447: if(typeof RenderLightPolicy?.area!=='function')errors.push('RenderLightPolicy missing');
+11448: if(typeof SceneLightCompiler?.compile!=='function')errors.push('SceneLightCompiler missing');
+11449: if(typeof ShadowVisibility?.visible!=='function')errors.push('ShadowVisibility missing');
+11450: if(typeof AreaLightSampler?.sample!=='function')errors.push('AreaLightSampler missing');
+11451: if(typeof EnvironmentSampler?.background!=='function')errors.push('EnvironmentSampler missing');
+11452: if(typeof BasicDirectRenderer?.render!=='function')errors.push('Fast renderer missing');
+11453: if(typeof FastRenderDiagnostics?.summarize!=='function')errors.push('Fast render diagnostics missing');
+11461: evaluate(job,acceleration,compiled,ray,hit,pixelSeed=1){
+11462: return RenderCoreD.evaluateSurfaceDirect(job,acceleration,compiled,ray,hit,pixelSeed,{includeDome:true,includeEmission:true});
+11465: diagnostics(job,compiled,acceleration){return FastRenderDiagnostics.summarize(job,compiled,acceleration);},
+11472: 3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — PART 5 GEN3
+11484: 'Core B ray/BVH traversal',
+11490: 'MIS','adaptive sampling','progressive accumulation','Russian roulette',
+11491: 'GGX importance sampling','transmission/refraction','emissive mesh-triangle sampling',
+11497: summarize(job,compiled,acceleration){
+11503: triangles:acceleration?.store?.triangleCount?.()||0,
+11506: mis:false,
+11511: transmission:false
+11523: baseColor:[2,-1,NaN],roughness:-5,metalness:4,opacity:2,
+11524: emissive:[NaN,.5,2],emissiveIntensity:-5
+11526: if(!finite3(mat.baseColor)||!finite3(mat.emissive))errors.push('Material finite-color sanitization failed');
+11527: if(mat.roughness<.045||mat.roughness>1)errors.push('Roughness clamp failed');
+11528: if(mat.metalness!==1||mat.opacity!==1||mat.emissiveIntensity!==0)errors.push('Material scalar clamp failed');
+11534: roughness:.045,metalness:1,opacity:1,emissive:[0,0,0],emissiveIntensity:0
+11536: const out=PhysicalBSDF.evaluate(mat,[0,0,1],[1,0,.000001],[1,0,.000001]);
+11568: const missAccel={trace(){return {hit:false};}};
+11570: const miss=PathIntegrator.tracePixel(envJob,missAccel,envCompiled,ray,1);
+11571: if(miss.primaryHit!==false||!finite3(miss.radiance))errors.push('Path environment escape failed');
+11577: roughness:.5,metalness:0,opacity:1,emissive:[.1,0,0],emissiveIntensity:2
+11588: if(typeof RenderMaterialPolicy?.finiteColor!=='function')errors.push('RenderMaterialPolicy missing');
+11589: if(typeof PhysicalBSDF?.evaluate!=='function')errors.push('PhysicalBSDF missing');
+11590: if(typeof SurfaceInterpolator?.normal!=='function')errors.push('Surface normal interpolator missing');
+11591: if(typeof RenderCameraPolicy?.sanitize!=='function')errors.push('RenderCameraPolicy missing');
+11592: if(typeof RenderCameraRayGenerator?.ray!=='function')errors.push('Render camera ray generator missing');
+11593: if(typeof PathIntegrator?.trace!=='function')errors.push('PathIntegrator missing');
+11594: if(typeof PathGIRenderer?.render!=='function')errors.push('PathGIRenderer missing');
+11603: trace(job,acceleration,compiled,ray,pixelSeed){return PathIntegrator.tracePixel(job,acceleration,compiled,ray,pixelSeed);},
+11604: diagnostics(job,compiled,acceleration){return PathRenderDiagnostics.summarize(job,compiled,acceleration);},
+11614: 3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — PART 6 GEN3
+11633: 'progressive sample accumulation','adaptive convergence','MIS',
+11694: if(typeof RenderSettingsPolicy?.sanitize!=='function')errors.push('RenderSettingsPolicy missing');
+11695: if(typeof RenderFrameBufferView?.prototype?.present!=='function')errors.push('Framebuffer present API missing');
+11696: if(typeof RenderFramework?.pause!=='function')errors.push('Framebuffer Pause command missing');
+11697: if(typeof RenderFramework?.resume!=='function')errors.push('Framebuffer Resume command missing');
+11698: if(typeof RenderFramework?.restart!=='function')errors.push('Framebuffer Restart command missing');
+11699: if(typeof RenderFramework?.saveFrame!=='function')errors.push('Framebuffer Save command missing');
+11700: if(typeof RenderPerformanceMetrics?.finish!=='function')errors.push('Performance metrics missing');
+11701: if(!document.getElementById('rfPause'))errors.push('Pause button missing');
+11710: 3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — PART 7 GEN3
+11715: 3DLite / LiteTrace — RENDERER CONSOLIDATION / RELEASE CORE
+11724: progressiveMIS:Object.freeze({owner:'Core E',api:'RenderCoreE'}),
+11725: lightCacheAOV:Object.freeze({owner:'Groups 11+12',api:'RenderGroup11Core / RenderGroup12Core'}),
+11733: const LiteTraceServices=Object.freeze({
+11736: acceleration:()=>RenderAccelerationHierarchy16,
+11738: direct:()=>DirectLightingIntegrator,
+11743: window.LiteTraceServices=LiteTraceServices;
+11745: /* ---------- Architecture Refactor Batch 06: LiteTrace/render boundary services ---------- */
+11807: owner:'LiteTraceDiagnostics',
+11808: runtime(){return window.LiteTraceDiagnostics?.runtime?.()||window.RendererRuntimeState?.snapshot?.()||null},
+11823: get services(){return LiteTraceServices}
+11869: const ThreeDLiteAccelerationService=Object.freeze({
+11870: owner:'RenderAccelerationHierarchy16',
+11871: implementation(){return window.RenderAccelerationHierarchy16||null},
+11877: window.ThreeDLiteAccelerationService=ThreeDLiteAccelerationService;
+11905: acceleration:ThreeDLiteAccelerationService.implementation(),
+11916: get acceleration(){return ThreeDLiteAccelerationService},
+11929: accelerationAvailable:!!ThreeDLiteAccelerationService.implementation(),
+11941: const LiteTraceCompatibilityRegistry=Object.freeze({
+11943: policy:'Deprecated compatibility surface; new code should use LiteTraceServices/LiteTraceCore.'
+11945: window.LiteTraceCompatibilityRegistry=LiteTraceCompatibilityRegistry;
+11958: version:'LiteTrace-1.1-RC1',
+11981: renderer:'LiteTrace Renderer v1.0 RC2',
+11998: expect(typeof RendererMasterCore?.createRequest==='function','Master createRequest missing');
+11999: expect(typeof RendererMasterCore?.prepare==='function','Master prepare missing');
+12000: expect(typeof RendererMasterCore?.rendererFor==='function','Master rendererFor missing');
+12002: expect(typeof RenderGroup11Core?.create==='function','Group 11 Light Cache factory missing');
+12003: expect(typeof RenderGroup12Core==='object','Group 12 AOV core missing');
+12004: expect(typeof RenderGroup13Core==='object','Group 13 presentation core missing');
+12005: expect(typeof RenderGroup14Core==='object','Group 14 region core missing');
+12006: expect(typeof RenderCoreH==='object','Core H missing');
+12018: expect(!RenderCoreHContract.rejects.includes('editor startup'),'Core H startup ownership rule missing');
+12058: expect(typeof boot3DLite==='function','boot3DLite missing');
+12061: expect(typeof selected!=='undefined','authoritative selected variable missing');
+12062: expect(typeof syncTransformTarget==='function','syncTransformTarget missing');
+12063: expect(typeof OverlayManager!=='undefined','OverlayManager missing');
+12064: expect(typeof THREE!=='undefined','THREE missing');
+12065: expect(typeof THREE?.OrbitControls!=='undefined','OrbitControls missing');
+12066: expect(typeof THREE?.TransformControls!=='undefined','TransformControls missing');
+12118: availabilityRule:'Diagnostic release-check failures must not mark an otherwise functional renderer unavailable. Only missing critical runtime APIs or an actual render failure may block rendering.'
+12129: LiteTrace Renderer v1.0 RC2
+12133: var LiteTrace=Object.freeze({
+12134: name:'LiteTrace',
+12135: displayName:'LiteTrace Renderer',
+12146: var LiteTraceCore=FinalRendererCore;
+12147: var LiteTraceWorkerPool=RenderWorkerPool;
+12148: var LiteTraceBVH=RenderBVH;
+12149: var LiteTracePathIntegrator=PathIntegrator;
+12150: var LiteTracePerformance=RenderPerformanceArchitectureFinal;
+12151: var LiteTraceProfiler=RenderProfiler16;
+12152: var LiteTraceTileScheduler=RenderTileScheduler16;
+12153: var LiteTraceRayBatch=RenderRayBatch16;
+12156: LiteTrace,
+12157: LiteTraceCore,
+12158: LiteTraceWorkerPool,
+12159: LiteTraceBVH,
+12160: LiteTracePathIntegrator,
+12161: LiteTracePerformance,
+12162: LiteTraceProfiler,
+12163: LiteTraceTileScheduler,
+12164: LiteTraceRayBatch
+12173: 'Core 1 owns snapshot, geometry, worker preparation and acceleration.',
+12228: window.LiteTraceNS=Object.assign(window.LiteTraceNS||{},{
+12229: version:LiteTraceVersion,
+12230: services:LiteTraceServices,
+12231: diagnostics:LiteTraceDiagnostics,
+12232: performance:LiteTracePerformanceService,
+12233: compatibility:LiteTraceCompatibilityRegistry
+12251: const diag=LiteTraceDiagnostics.snapshot(job);
+12261: `LiteTrace ${LiteTrace?.version||'1.0 RC2'} | 3DLite v${ThreeDLiteVersion.version} | ${engine}`+
+12308: if(!serviceDeps.ok)console.warn('[3DLite] service dependency warnings:',serviceDeps.missing);
+12316: const missing=required.filter(([,v])=>!v).map(([n])=>n);
+12317: if(missing.length){
+12319: window.__3DLiteShowStartupError?.('Missing required viewport dependency: '+missing.join(', '));
+12350: // LiteTrace starts after the modeling viewport is ready; renderer failure is fail-soft.
+12359: if(!rendererRelease.ok)console.warn('[LiteTrace] Non-blocking release-gate warnings:',rendererRelease.failures);
+12368: console.error('[LiteTrace] deferred initialization failed',err);
+12518: case 'sphere': return {...common,radius:numInput('sphereRadius',50,.001),segments:clampIntInput('sphereSegments',24,4,128),hemisphere:Math.min(1,numInput('sphereHemi',0,0)),smooth:checkedInput('sphereSmooth',true)};
+12787: // capDepth cannot exceed radius (hemisphere) or half the total height.
+13274: case 'sphere':{const thetaLength=Math.PI*(1-Math.max(0,Math.min(1,params.hemisphere)));return applyPrimitiveSmoothGeometry(makeZUpGeometry(new THREE.SphereGeometry(Math.max(sizeA,.001),params.segments,Math.max(3,Math.floor(params.segments/2)),0,Math.PI*2,0,thetaLength)),params.smooth);}
+13313: n('radius',50,.001);i('segments',24,4,128);n('hemisphere',0,0,1);p.smooth=p.smooth!==false;break;
+13804: const hits=raycaster.intersectObjects(objects.filter(o=>o.visible&&!o.userData.frozen),false);
+15122: return raycaster.ray.intersectPlane(plane,hit)?hit:sourceWorld.clone();
+15183: return raycaster.ray.intersectPlane(plane,hit)?hit:sourceWorld.clone();
+15259: const hits=raycaster.intersectObject(selected,false);
+15495: const hits=raycaster.intersectObjects(objects.filter(o=>o.visible&&!o.userData.frozen),false);
+15566: const hits=raycaster.intersectObject(selected,false);
+15972: const segIntersectsRect=(a,b)=>{
+16020: const overlaps=segIntersectsRect(a,b);
+16044: if(segIntersectsRect(pts[i],pts[(i+1)%pts.length])){
+16137: const hit = raycaster.intersectObject(editMesh,false);
+16641: sphere:{radius:'sphereRadius',segments:'sphereSegments',hemisphere:'sphereHemi',smooth:'sphereSmooth'},
+16803: hemisphere:'Hemisphere',smooth:'Smooth',
+16973: input.min=(key==='radius1'||key==='radius2'||key==='hemisphere'||key==='chamfer')?'0':(ints.has(key)?'1':'0.001');
+17097: const hits=raycaster.intersectObjects(
+18119: const MATERIAL_MAP_KEYS=['map','normalMap','roughnessMap','metalnessMap','aoMap','emissiveMap','alphaMap','displacementMap'];
+18133: roughness:Number.isFinite(s.roughness)?s.roughness:.65,
+18136: emissiveStrength:Number.isFinite(s.emissiveStrength)?s.emissiveStrength:1,
+18158: return cloneMaterialState({name,shading:'lambert',color:'#8a8a8a',roughness:.65,metalness:0,normalStrength:1,emissiveStrength:1,opacity:1,alphaCutoff:0,displacementScale:.1,doubleSided:false,showTexture:true,materialOnly:false,transform:{},maps:{},previews:{}});
+18169: s.roughness=Number.isFinite(mat?.roughness)?mat.roughness:.65;
+18175: s.emissiveStrength=mat?.emissiveIntensity??1;
+18197: mat=new THREE.MeshStandardMaterial({...common,roughness:state.roughness,metalness:state.metalness});
+18214: if('emissiveIntensity' in mat)mat.emissiveIntensity=state.emissiveStrength;
+18216: if(mat.emissive?.set && state.maps.emissiveMap)mat.emissive.set(0xffffff);
+18237: if('roughness' in mat)mat.roughness=s.roughness;
+18241: if('emissiveIntensity' in mat)mat.emissiveIntensity=s.emissiveStrength;
+18252: if(mat.emissive?.set)mat.emissive.set(s.maps.emissiveMap?0xffffff:0x000000);
+18311: if('encoding' in tex && (mapKey==='map'||mapKey==='emissiveMap'))tex.encoding=THREE.sRGBEncoding;
+18485: setMaterialFieldValue('materialRoughness',s.roughness);
+18488: setMaterialFieldValue('materialEmissiveStrength',s.emissiveStrength);
+18522: if(uvInfo)uvInfo.textContent=hasUV?`UV: available${mesh.userData.generatedUVType?' • '+mesh.userData.generatedUVType:''}`:'UV: missing';
+18600: materialRoughness:['roughness',0,1],materialMetalness:['metalness',0,1],
+18601: materialNormalStrength:['normalStrength',0,5],materialEmissiveStrength:['emissiveStrength',0,10],
+18671: if(!k)issues.push('Generation knowledge manifest missing');
+18672: if(typeof boot3DLite!=='function')issues.push('boot3DLite owner missing');
+18673: if(typeof updateDisplayForMesh!=='function')issues.push('viewport display owner missing');
+18674: if(typeof syncTransformTarget!=='function')issues.push('transform target owner missing');
+18675: if(typeof MeshWireManager==='undefined')issues.push('MeshWireManager missing');
+18701: function validate3DLiteBatch13(){const required=['ThreeDLiteSceneRegistryService','ThreeDLiteObjectIdentityService','ThreeDLiteSceneMutationService','ThreeDLiteHierarchyService','ThreeDLiteObjectLifecycleService','ThreeDLiteSceneQueryService','ThreeDLiteSceneSnapshotService','ThreeDLiteSceneAuditService','ThreeDLiteSceneFacade','ThreeDLiteSceneOwnershipContract'],errors=[];for(const n of required)if(!window[n])errors.push(n+' missing');return Object.freeze({ok:errors.length===0,errors:Object.fre
+18720: const ThreeDLiteViewportAuditService=Object.freeze({owner:'ArchitectureCore',run(){const errors=[];if(!window.renderer)errors.push('renderer-missing');if(!window.scene)errors.push('scene-missing');if(!window.camera)errors.push('camera-missing');if(window.renderer&&!window.renderer.domElement)errors.push('renderer-dom-missing');const ctx=window.renderer?.getContext?.();if(ctx?.isContextLost?.())errors.push('webgl-context-lost');return Object.freeze({ok:errors.length===0,errors:Object.freeze(error
+18724: function validate3DLiteBatch14(){const required=['ThreeDLiteViewportRegistryService','ThreeDLiteRenderOwnershipService','ThreeDLiteViewportRuntimeStateService','ThreeDLiteRenderInvalidationService','ThreeDLiteCameraStateService','ThreeDLiteRendererStateService','ThreeDLiteViewportSnapshotService','ThreeDLiteViewportAuditService','ThreeDLiteViewportFacade','ThreeDLiteViewportOwnershipContract'],errors=[];for(const n of required)if(!window[n])errors.push(n+' missing');return Object.freeze({ok:erro
+18759: function validate3DLiteBatch15(){const required=['ThreeDLiteInputStateService','ThreeDLitePointerStateService','ThreeDLiteKeyboardStateService','ThreeDLitePointerCaptureService','ThreeDLiteShortcutRouterService','ThreeDLiteToolActivationService','ThreeDLiteInteractionTransactionService','ThreeDLiteInteractionCancellationService','ThreeDLiteInteractionSnapshotService','ThreeDLiteInteractionFacade','ThreeDLiteInteractionOwnershipContract'],errors=[];for(const n of required)if(!window[n])errors.pus
+18782: const ThreeDLiteMeshValidationService=Object.freeze({owner:'MeshManager',validate(mesh){const errors=[],warnings=[];const g=mesh?.geometry;if(!mesh)errors.push('mesh-missing');if(mesh&&!g)errors.push('geometry-missing');const pos=g?.attributes?.position;if(g&&!pos)errors.push('position-attribute-missing');if(pos&&pos.itemSize!==3)errors.push('position-itemsize-not-3');if(pos&&pos.count===0)warnings.push('geometry-empty');const idx=g?.index;if(idx&&idx.count%3!==0)errors.push('index-count-not-tri
+18796: function validate3DLiteBatch16(){const required=['ThreeDLiteMeshRegistryService','ThreeDLiteGeometryRevisionService','ThreeDLiteTopologyMutationService','ThreeDLiteGeometryResourceService','ThreeDLiteMeshEditTransactionService','ThreeDLiteDerivedGeometryInvalidationService','ThreeDLiteMeshValidationService','ThreeDLiteMeshSnapshotService','ThreeDLiteMeshAuditService','ThreeDLiteMeshFacade','ThreeDLiteMeshOwnershipContract'],errors=[];for(const n of required)if(!window[n])errors.push(n+' missing'
+18806: const ThreeDLiteMeshOperationPreconditionService=Object.freeze({owner:'MeshOperationManager',check(operation,context){const errors=[];if(!operation)errors.push('operation-missing');if(!context?.mesh)errors.push('mesh-missing');if(context?.mesh&&!context.mesh.geometry)errors.push('geometry-missing');if(operation?.canExecute){try{const r=operation.canExecute(context);if(r===false)errors.push('operation-precondition-failed');else if(typeof r==='string'&&r)errors.push(r);}catch(e){errors.push('preco
+18831: function validate3DLiteBatch17(){const required=['ThreeDLiteMeshOperationRegistryService','ThreeDLiteMeshOperationContextService','ThreeDLiteMeshOperationPreconditionService','ThreeDLiteMeshOperationResultService','ThreeDLiteMeshOperationExecutorService','ThreeDLiteMeshOperationFailureService','ThreeDLiteMeshOperationHistoryBridge','ThreeDLiteMeshOperationSnapshotService','ThreeDLiteMeshOperationAuditService','ThreeDLiteMeshOperationFacade','ThreeDLiteMeshOperationOwnershipContract'],errors=[];f
+18862: const ThreeDLiteHistoryAuditService=Object.freeze({owner:'HistoryManager',audit(){const errors=[],warnings=[];const s=ThreeDLiteHistorySnapshotService.capture();if(s.counts.undo>s.counts.limit||s.counts.redo>s.counts.limit)errors.push('history limit violated');for(const e of [...s.undo,...s.redo]){if(!e.id)errors.push('history entry missing id');if(!e.label)warnings.push('history entry missing label');}return Object.freeze({ok:errors.length===0,errors:Object.freeze(errors),warnings:Object.freeze
+18867: function validate3DLiteBatch18(){const required=['ThreeDLiteHistoryEntryService','ThreeDLiteHistoryStackService','ThreeDLiteHistoryTransactionService','ThreeDLiteHistoryUndoService','ThreeDLiteHistoryRedoService','ThreeDLiteHistoryCoalescingService','ThreeDLiteHistorySnapshotService','ThreeDLiteHistoryMutationBridge','ThreeDLiteHistoryAuditService','ThreeDLiteHistoryFacade','ThreeDLiteHistoryOwnershipContract'],errors=[];for(const n of required)if(!window[n])errors.push(n+' missing');return Obje
+18885: const ThreeDLiteProjectValidationService=Object.freeze({owner:'ProjectManager',validate(value){const errors=[],warnings=[];if(!value||typeof value!=='object')errors.push('project-not-object');if(value?.document?.schema!=='3dlite-project')errors.push('invalid-project-schema');if(Number(value?.document?.schemaVersion)!==1)warnings.push('noncurrent-schema-version');if(!value?.capturedAt)warnings.push('missing-capture-time');return Object.freeze({ok:errors.length===0,errors:Object.freeze(errors),war
+18887: const ThreeDLiteProjectMigrationService=(()=>{const migrations=new Map();return Object.freeze({owner:'ProjectManager',register(fromVersion,fn){const key=Number(fromVersion);if(!Number.isInteger(key)||typeof fn!=='function')return false;migrations.set(key,fn);return true;},migrate(value,targetVersion=1){let current=value,version=Number(value?.document?.schemaVersion||0),guard=0;while(version<targetVersion&&guard++<32){const fn=migrations.get(version);if(!fn)return Object.freeze({ok:false,error:'m
+18897: const ThreeDLiteProjectPersistenceAuditService=Object.freeze({owner:'ProjectManager',audit(){const errors=[],warnings=[];const required=['ThreeDLiteProjectDocumentService','ThreeDLiteProjectSnapshotService','ThreeDLiteProjectSerializationService','ThreeDLiteProjectDirtyStateService','ThreeDLiteProjectValidationService','ThreeDLiteProjectMigrationService','ThreeDLiteProjectImportService','ThreeDLiteProjectSaveService'];for(const n of required)if(!window[n])errors.push(n+' missing');const probe=Th
+18902: function validate3DLiteBatch19(){const required=['ThreeDLiteProjectDocumentService','ThreeDLiteProjectSnapshotService','ThreeDLiteProjectSerializationService','ThreeDLiteProjectDirtyStateService','ThreeDLiteProjectValidationService','ThreeDLiteProjectMigrationService','ThreeDLiteProjectImportService','ThreeDLiteProjectSaveService','ThreeDLiteProjectPersistenceAuditService','ThreeDLiteProjectPersistenceFacade','ThreeDLiteProjectPersistenceOwnershipContract'],errors=[];for(const n of required)if(!
+18993: issues.push(`${name}: missing capability ${dependency}`);
+19937: causes.push('initialization-order','missing-dependency','parse-time-failure');
+19939: if(signals.has('undo-mismatch'))causes.push('transaction-boundary','state-ownership');
+20314: return Object.freeze({ok:false,error:'knowledge-checksum-mismatch'});
+20406: ["Runtime instrumentation", "Central runtime error recorder", "Dependency graph", "Subsystem health system", "Behavioral regression suite", "Visual regression testing", "Tool-state machine", "Command system", "Scene transaction system", "Mesh validation layer", "Mesh repair layer", "Half-edge/equivalent topology core readiness", "Selection architecture", "Selection acceleration", "Scene graph cleanup", "Stable object identifiers", "Project schema versioning", "Autosave", "Recovery mode", "Offlin
+20563: const missing=this.required.filter(name=>results[name]===undefined);
+20566: complete:missing.length===0,
+20567: passed:missing.length===0&&failed.length===0,
+20568: missing:Object.freeze(missing),
+20829: if(!fn)return {name,passed:false,reason:'missing-test'};
+20896: if(!geometry)return {valid:false,issues:['missing-geometry']};
+20898: if(!pos)issues.push('missing-position-attribute');
+20907: if(!geometry)return {changed:false,reason:'missing-geometry'};
+20929: /* 13+14 Selection architecture/acceleration diagnostics */
+21554: await new Promise(resolve=>requestAnimationFrame(()=>resolve()));
+21570: if(!test)return {name,status:'SKIP',passed:null,reason:'missing-test'};
+22149: const StartupGuard=Object.freeze({claim(owner='unknown'){startupState.bootClaims++;if(startupState.bootClaims>1)startupState.issues.push('multiple-bootstrap-claims:'+owner);return startupState.bootClaims===1;},dependency(name,value){const ok=!!value;if(!ok)startupState.issues.push('missing-dependency:'+name);return ok;},finalize(){startupState.finalized=true;return this.inspect();},inspect(){return Object.freeze({bootClaims:startupState.bootClaims,finalized:startupState.finalized,issues:Object.f
+22156: const MeshValidation=Object.freeze({validateGeometry(geometry){const issues=[];if(!geometry||!geometry.attributes||!geometry.attributes.position)return Object.freeze({valid:false,issues:Object.freeze(['missing-position-attribute'])});const pos=geometry.attributes.position;const count=Number(pos.count)||0;for(let i=0;i<count;i++){if(!finite(pos.getX(i))||!finite(pos.getY(i))||!finite(pos.getZ(i))){issues.push('non-finite-position:'+i);break;}}const idx=geometry.index?.array;if(idx){for(let i=0;i<
+22199: L.regression=()=>{const audit=L.audit(),failures=[];if(!window.THREE)failures.push('THREE-missing');if(!document.getElementById('viewport'))failures.push('viewport-missing');if(audit.renderer?.contextLost)failures.push('renderer-context-lost');return Object.freeze({version:L.version,passed:failures.length===0,failures:Object.freeze(failures),audit});};
+22229: rendering:['stuck-render','progress','ray-count','reflection','refraction','gi-noise','shadow-noise','passes','texture-render','renderer-crash'],
+22230: materials:['texture','uv-scale','reflection','refraction','roughness','metalness','shader','invalid-values','material-index-out-of-range'],
+22231: rays:['direction','recursion','loop','miss','self-intersection','bvh','secondary-rays','importance-sampling'],
+22233: ui:['button','numeric-field','state','missing-panel','hotkey','undo-ui','context-menu'],
+22236: runtime:['tdz','reference','dependency','duplicate-init','animation-loop','bootstrap-order','boot-timeout','exception','promise'],
+22252: if(/ray|bvh|intersection|bounce/.test(t))return ['rays',/bvh/.test(t)?'bvh':'direction'];
+22253: if(/render|denoise|reflection|refraction|gi\b|pass/.test(t))return ['rendering',/reflection/.test(t)?'reflection':/refraction/.test(t)?'refraction':'renderer-crash'];
+22254: if(/material|texture|roughness|metalness|shader|\buv\b/.test(t))return ['materials',/texture/.test(t)?'texture':'shader'];
+22313: window.addEventListener('unhandledrejection',e=>register({source:'unhandledrejection',message:String(e.reason?.message||e.reason||'unhandled promise rejection'),severity:'high',subtype:'promise'}));
+22372: 'RND-0202':Object.freeze({name:'Ray self-intersection',severity:'medium',category:'rays'}),
+22373: 'RND-0203':Object.freeze({name:'BVH/intersection failure',severity:'high',category:'rays'}),
+22375: 'RND-0302':Object.freeze({name:'Refraction recursion limit',severity:'high',category:'rendering'}),
+22380: 'RND-0502':Object.freeze({name:'Missing material',severity:'high',category:'materials'}),
+22381: 'RND-0601':Object.freeze({name:'Texture missing in render',severity:'medium',category:'materials'}),
+22382: 'RND-0701':Object.freeze({name:'Missing light contribution',severity:'medium',category:'lighting'}),
+22393: 'RND-1201':Object.freeze({name:'Viewport/render mismatch',severity:'medium',category:'viewport'}),
+22408: if(/missing material/.test(msg))return 'RND-0502';
+22409: if(/texture/.test(msg)&&/missing|not found|unavailable|failed/.test(msg))return 'RND-0601';
+22413: if(/refraction|transmission/.test(msg)&&/recurs|bounce|depth|limit/.test(msg))return 'RND-0302';
+22415: if(/self[- ]?intersect/.test(msg))return 'RND-0202';
+22416: if(/bvh|intersection/.test(msg))return 'RND-0203';
+22443: bvhBuildMs:num(p.bvhBuildMs??ps.bvhBuildMs),
+22446: reflectionRays:num(ps.reflectionRays),refractionRays:num(ps.refractionRays),
+22447: intersections:num(ps.intersections),misses:num(ps.misses),bvhTests:num(ps.bvhTests),
+22532: 'Shadow rays: '+String(ev.shadowRays??'—'),'Reflection rays: '+String(ev.reflectionRays??'—'),'Refraction rays: '+String(ev.refractionRays??'—'),
+22533: 'Intersections: '+String(ev.intersections??'—'),'Misses: '+String(ev.misses??'—'),'Invalid rays: '+String(ev.invalidRays??'—'),
+22573: 'RND-0903':Object.freeze({name:'Missing render pass',severity:'high',category:'rendering'}),
+22574: 'RND-0904':Object.freeze({name:'Render pass size mismatch',severity:'high',category:'rendering'}),
+22580: 'RND-1202':Object.freeze({name:'Render camera mismatch',severity:'medium',category:'viewport'}),
+22582: 'RND-1401':Object.freeze({name:'Viewport/material render mismatch',severity:'medium',category:'materials'}),
+22606: reflectionRays:finite(ps.reflectionRays??core.reflectionRays),refractionRays:finite(ps.refractionRays??core.refractionRays),
+22607: intersections:finite(ps.intersections??core.intersections),misses:finite(ps.misses??core.misses),bvhTests:finite(ps.bvhTests??core.bvhTests),
+22640: if(/material/.test(m)&&/nan|infinity|invalid value|roughness|metalness/.test(m))return 'RND-0503';
+22647: if(/camera/.test(m)&&/mismatch|different|stale/.test(m))return 'RND-1202';
+22713: if(!/render|ray|bvh|material|shader|texture|light|framebuffer|denois|snapshot|worker/i.test(text))return;
+22787: const keys=['renderId','status','percent','progressPercent','currentSamples','maximumSamples','elapsedMs','resolution','raysPerSecond','totalRays','raysCast','primaryRays','secondaryRays','shadowRays','reflectionRays','refractionRays','intersections','misses','bvhTests','invalidRays','bounceDepth','noise','engine','error','errorStage'];

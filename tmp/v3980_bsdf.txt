@@ -1,0 +1,3385 @@
+===== PhysicalBSDF @ 286744 =====
+nearToSrgb1(x){
+    x=Math.max(0,x);return x<=.0031308?12.92*x:1.055*Math.pow(x,1/2.4)-.055;
+  },
+  srgbToLinear(c){return [this.srgbToLinear1(c[0]),this.srgbToLinear1(c[1]),this.srgbToLinear1(c[2])]},
+  linearToSrgb(c){return [this.linearToSrgb1(c[0]),this.linearToSrgb1(c[1]),this.linearToSrgb1(c[2])]},
+  hexToLinear(hex){
+    const h=String(hex||'#202020').replace('#','');
+    const n=parseInt(h.length===3?h.split('').map(x=>x+x).join(''):h,16);
+    if(!Number.isFinite(n))return [0.0144,0.0144,0.0144];
+    return this.srgbToLinear([((n>>16)&255)/255,((n>>8)&255)/255,(n&255)/255]);
+  },
+  aces(c){
+    const f=x=>{
+      const a=2.51,b=.03,d=2.43,e=.59,g=.14;
+      return this.clamp01((x*(a*x+b))/(x*(d*x+e)+g));
+    };
+    return [f(c[0]),f(c[1]),f(c[2])];
+  }
+});
+
+const RenderMaterialPolicy=Object.freeze({
+  finiteColor(c,fallback=[.54,.54,.54]){
+    if(!Array.isArray(c)||c.length<3)return fallback.slice();
+    return c.slice(0,3).map((v,i)=>{
+      v=Number(v);
+      return Number.isFinite(v)?Math.max(0,Math.min(1,v)):fallback[i];
+    });
+  },
+  scalar(v,fallback,min,max){
+    v=Number(v);
+    if(!Number.isFinite(v))v=fallback;
+    return Math.max(min,Math.min(max,v));
+  },
+  shading(v){
+    return ['physical','lambert','unlit'].includes(v)?v:'physical';
+  }
+});
+
+class RenderSurfaceMaterial{
+  constructor(snapshot){
+    snapshot=snapshot||{};
+    this.id=String(snapshot.id||'__material__');
+    this.name=String(snapshot.name||'Material');
+    this.shading=RenderMaterialPolicy.shading(snapshot.shading);
+    const srgb=RenderMaterialPolicy.finiteColor(snapshot.baseColor,[.54,.54,.54]);
+    this.baseColor=Object.freeze(RenderColor.srgbToLinear(srgb));
+    this.roughness=RenderMaterialPolicy.scalar(snapshot.roughness,.65,.045,1);
+    this.metalness=RenderMaterialPolicy.scalar(snapshot.metalness,0,0,1);
+    this.opacity=RenderMaterialPolicy.scalar(snapshot.opacity,1,0,1);
+    this.transparent=!!snapshot.transparent;
+    this.transmission=RenderMaterialPolicy.scalar(snapshot.transmission,0,0,1);
+    this.ior=RenderMaterialPolicy.scalar(snapshot.ior,1.5,1.0001,3);
+    this.thickness=RenderMaterialPolicy.scalar(snapshot.thickness,0,0,1e9);
+    const attenSrgb=RenderMaterialPolicy.finiteColor(snapshot.attenuationColor,[1,1,1]);
+    this.attenuationColor=Object.freeze(RenderColor.srgbToLinear(attenSrgb));
+    this.attenuationDistance=(Number.isFinite(Number(snapshot.attenuationDistance))&&Number(snapshot.attenuationDistance)>0)?Number(snapshot.attenuationDistance):Infinity;
+    const emissiveSrgb=RenderMaterialPolicy.finiteColor(snapshot.emissive,[0,0,0]);
+    this.emissive=Object.freeze(RenderColor.srgbToLinear(emissiveSrgb));
+    this.emissiveIntensity=RenderMaterialPolicy.scalar(snapshot.emissiveIntensity,0,0,1e8);
+    Object.freeze(this);
+  }
+}
+
+const RenderMaterialLibrary=Object.freeze({
+  compile(renderScene){
+    const byId=new Map(),list=[];
+    for(const m of renderScene.materials){
+      const material=new RenderSurfaceMaterial(m);
+      byId.set(material.id,material);list.push(material);
+    }
+    const fallback=new RenderSurfaceMaterial({
+      id:'__fallback__',name:'Fallback',baseColor:[.54,.54,.54],
+      roughness:.65,metalness:0,opacity:1,emissive:[0,0,0],emissiveIntensity:0
+    });
+    return Object.freeze({
+      list:Object.freeze(list),
+      fallback,
+      get(id){return byId.get(id)||fallback}
+    });
+  },
+  resolveHit(renderScene,library,hit){
+    const ro=renderScene.objects[hit.objectIndex];
+    if(!ro)return library.fallback;
+    const id=ro.materialIds[hit.materialIndex]??ro.materialIds[0];
+    return library.get(id);
+  }
+});
+
+class RenderDirectionalLight{
+  constructor(direction,color=[1,1,1],intensity=1,name='Directional'){
+    this.type='directional';
+    this.name=name;
+    this.direction=Object.freeze(RayMath.normalize(direction));
+    this.color=Object.freeze(color.slice(0,3));
+    this.intensity=Math.max(0,intensity);
+    Object.freeze(this);
+  }
+}
+
+class RenderAmbientLight{
+  constructor(color=[1,1,1],intensity=.05,name='Environment Fill'){
+    this.type='ambient';
+    this.name=name;
+    this.color=Object.freeze(color.slice(0,3));
+    this.intensity=Math.max(0,intensity);
+    Object.freeze(this);
+  }
+}
+
+const BasicRenderLighting=Object.freeze({
+  create(renderScene,settings){
+    const sceneLights=SceneLightCompiler.compile(renderScene);
+    if(sceneLights.length)return sceneLights;
+
+    const q=renderScene.camera.quaternion;
+    const keyDir=RenderCameraRayGenerator.rotateByQuaternion(
+      RayMath.normalize([-.45,.65,.8]),q
+    );
+    const environment=RenderColor.hexToLinear(settings.background||'#202020');
+    return Object.freeze([
+      Object.freeze({type:'sun',name:'Default Key',direction:RayMath.mul(keyDir,-1),color:[1.0,.93,.82],intensity:2.4,enabled:true,castShadows:false}),
+      Object.freeze({type:'dome',name:'Environment Fill',color:environment,intensity:Math.max(.025,.14*(settings.environmentStrength??1)),enabled:true,castShadows:false})
+    ]);
+  }
+});
+
+const PhysicalBSDF=Object.freeze({
+  fresnelSchlick(cosTheta,f0){
+    const m=Math.pow(1-Math.max(0,Math.min(1,cosTheta)),5);
+    return [
+      f0[0]+(1-f0[0])*m,
+      f0[1]+(1-f0[1])*m,
+      f0[2]+(1-f0[2])*m
+    ];
+  },
+  distributionGGX(nDotH,roughness){
+    const a=roughness*roughness,a2=a*a;
+    const d=nDotH*nDotH*(a2-1)+1;
+    return a2/Math.max(Math.PI*d*d,1e-7);
+  },
+  geometrySchlickGGX(nDotV,roughness){
+    const r=roughness+1,k=(r*r)/8;
+    return nDotV/Math.max(nDotV*(1-k)+k,1e-7);
+  },
+  geometrySmith(nDotV,nDotL,roughness){
+    return this.geometrySchlickGGX(nDotV,roughness)*this.geometrySchlickGGX(nDotL,roughness);
+  },
+  evaluate(material,n,v,l){
+    if(material.shading==='unlit')return material.baseColor;
+    if(!material||![...n,...v,...l].every(Number.isFinite))return [0,0,0];
+
+    const h=RayMath.normalize(RayMath.add(v,l));
+    if(!h.every(Number.isFinite))return [0,0,0];
+    const nDotL=Math.max(0,RayMath.dot(n,l));
+    const nDotV=Math.max(0,RayMath.dot(n,v));
+    const nDotH=Math.max(0,RayMath.dot(n,h));
+    const vDotH=Math.max(0,RayMath.dot(v,h));
+    if(nDotL<=0||nDotV<=0)return [0,0,0];
+
+    const dielectricF0=[.04,.04,.04];
+    const f0=RenderColor.mix(dielectricF0,material.baseColor,material.metalness);
+    const F=this.fresnelSchlick(vDotH,f0);
+    const D=this.distributionGGX(nDotH,material.roughness);
+    const G=this.geometrySmith(nDotV,nDotL,material.roughness);
+
+    const specScale=D*G/Math.max(4*nDotV*nDotL,1e-6);
+    const spec=RenderColor.mul(F,specScale);
+
+    const kD=[
+      (1-F[0])*(1-material.metalness),
+      (1-F[1])*(1-material.metalness),
+      (1-F[2])*(1-material.metalness)
+    ];
+    const diffuse=[
+      kD[0]*material.baseColor[0]/Math.PI,
+      kD[1]*material.baseColor[1]/Math.PI,
+      kD[2]*material.baseColor[2]/Math.PI
+    ];
+    const out=RenderColor.mul(RenderColor.add(diffuse,spec),nDotL);
+    return out.map(x=>Number.isFinite(x)&&x>=0?x:0);
+  }
+});
+
+const SurfaceInterpolator=Object.freeze({
+  normal(acceleration,hit){
+    const s=acceleration.store,t=hit.triangleIndex,k=t*3;
+    if(!s.normals||s.normals.length!==s.positions.length)return hit.geometricNormal;
+    const ia=s.triangles[k],ib=s.triangles[k+1],ic=s.triangles[k+2];
+    const w=1-hit.u-hit.v;
+    const read=i=>[s.normals[i*3],s.normals[i*3+1],s.normals[i*3+2]];
+    const a=read(ia),b=read(ib),c=read(ic);
+    let n=RayMath.normalize([
+      a[0]*w+b[0]*hit.u+c[0]*hit.v,
+      a[1]*w+b[1]*hit.u+c[1]*hit.v,
+      a[2]*w+b[2]*hit.u+c[2]*hit.v
+    ]);
+    if(!n.every(Number.isFinite)||RayMath.length(n)<1e-10)n=hit.geometricNormal;
+    if(RayMath.dot(n,hit.geometricNormal)<0)n=RayMath.mul(n,-1);
+    return n;
+  },
+  uv(acceleration,hit){
+    const s=acceleration.store,t=hit.triangleIndex,k=t*3;
+    if(!s.uvs||s.uvs.length!==(s.positions.length/3)*2)return [0,0];
+    const ia=s.triangles[k],ib=s.triangles[k+1],ic=s.triangles[k+2],w=1-hit.u-hit.v;
+    return [
+      s.uvs[ia*2]*w+s.uvs[ib*2]*hit.u+s.uvs[ic*2]*hit.v,
+      s.uvs[ia*2+1]*w+s.uvs[ib*2+1]*hit.u+s.uvs[ic*2+1]*hit.v
+    ];
+  }
+});
+
+const RenderAOVNames=Object.freeze([
+  'Beauty','Alpha','Diffuse','Direct Lighting','Global Illumination',
+  'Reflection','Refraction','Specular','Emission','Shadow',
+  'Normal','Depth','Albedo','Object ID','Material ID','Noise'
+]);
+
+class RenderAOVSet{
+  constructor(width,height){
+    this.width=width;this.height=height;
+    this.channels=new Map();
+    this.meta=new Map();
+  }
+  ensure(name,components=3){
+    if(!this.channels.has(name)){
+      this.channels.set(name,new Float32Array(this.width*this.height*components));
+      this.meta.set(name,{components});
+    }
+    return this.channels.get(name);
+  }
+  set3(name,index,v){
+    const a=this.ensure(name,3),o=index*3;
+    a[o]=Number.isFinite(v?.[0])?v[0]:0;
+    a[o+1]=Number.isFinite(v?.[1])?v[1]:0;
+    a[o+2]=Number.isFinite(v?.[2])?v[2]:0;
+  }
+  set1(name,index,v){
+    const a=this.ensure(name,1);a[index]=Number.isFinite(v)?v:0;
+  }
+  get(name){return this.channels.get(name)||null}
+  has(name){return this.channels.has(name)}
+  names(){return [...this.channels.keys()]}
+  toFrame(name,{depthMax=100,noiseMax=.1}={}){
+    const data=this.channels.get(name);if(!data)return null;
+    const comp=this.meta.get(name)?.components||3;
+    const rgba=new Uint8ClampedArray(this.width*this.height*4);
+    for(let i=0;i<this.width*this.height;i++){
+      let c=[0,0,0],a=255;
+      if(comp===1){
+        let v=data[i];
+        if(name==='Alpha'){v=RenderColor.clamp01(v);c=[v,v,v];a=Math.round(v*255);}
+        else if(name==='Depth'){v=1-Math.min(1,Math.max(0,v/Math.max(1e-6,depthMax)));c=[v,v,v];}
+        else if(name==='Noise'){v=Math.min(1,Math.max(0,v/Math.max(1e-6,noiseMax)));c=[v,v,v];}
+        else {v=RenderColor.clamp01(v);c=[v,v,v];}
+      }else{
+        const o=i*3;c=[data[o],data[o+1],data[o+2]];
+        if(name==='Normal')c=[c[0]*.5+.5,c[1]*.5+.5,c[2]*.5+.5];
+        else if(['Object ID','Material ID'].includes(name))c=c.map(RenderColor.clamp01);
+        else c=RenderColor.linearToSrgb(RenderColor.aces(c));
+      }
+      rgba[i*4]=Math.round(RenderColor.clamp01(c[0])*255);
+      rgba[i*4+1]=Math.round(RenderColor.clamp01(c[1])*255);
+      rgba[i*4+2]=Math.round(RenderColor.clamp01(c[2])*255);
+      rgba[i*4+3]=a;
+    }
+    return {width:this.width,height:this.height,rgba,metadata:Object.freeze({channel:name})};
+  }
+}
+
+const RenderAOVUtil=Object.freeze({
+  idColor(id){
+    const h=(RenderSampling.hash32((Number(id)||0)+1)*4294967296)>>>0;
+    return [((h>>>16)&255)/255,((h>>>8)&255)/255,(h&255)/255];
+  },
+  primary(job,acceleration,compiled,ray,hit,pixelSeed){
+    if(!hit?.hit)return null;
+    const material=RenderMaterialLibrary.resolveHit(job.renderScene,compiled.materials,hit);
+    const n=SurfaceInterpolator.normal(acceleration,hit);
+    const emission=RenderColor.mul(material.emissive,material.emissiveIntensity);
+    const direct=Group9DirectMIS.evaluate(job,acceleration,compiled,ray,hit,pixelSeed);
+    const objId=hit.objectIndex??0,matId=hit.materialIndex??0;
+    return {
+      alpha:1,
+      albedo:material.baseColor,
+      diffuse:RenderColor.mul(material.baseColor,Math.max(0,1-material.metalness)),
+      emission,
+      normal:n,
+      depth:Math.max(0,hit.t||0),
+      objectId:this.idColor(objId),
+      materialId:this.idColor((objId+1)*4099+matId),
+      direct,
+      specular:RenderColor.mul(direct,Math.max(.04,material.metalness+(1-material.roughness)*.25)),
+      reflection:RenderColor.mul(direct,Math.max(0,material.metalness)),
+      refraction:RenderColor.mul(direct,Math.max(0,material.transmission||0)),
+      shadow:[0,0,0]
+    };
+  },
+  writePrimary(set,i,a){
+    if(!a){set.set1('Alpha',i,0);return;}
+    set.set1('Alpha',i,a.alpha);
+    set.set3('Albedo',i,a.albedo);set.set3('Diffuse',i,a.diffuse);set.set3('Emission',i,a.emission);
+    set.set3('Normal',i,a.normal);set.set1('Depth',i,a.depth);
+    set.set3('Object ID',i,a.objectId);set.set3('Material ID',i,a.materialId);
+    set.set3('Direct Lighting',i,a.direct);set.set3('Specular',i,a.specular);
+    set.set3('Reflection',i,a.reflection);set.set3('Refraction',i,a.refraction);set.set3('Shadow',i,a.shadow);
+  }
+});
+
+
+
+
+
+/* ============================================================
+   3DLite / LiteTrace — GROUP 16 GEN3 SAFE REWRITE
+   RENDERER PERFORMANCE ARCHITECTURE
+   Preserves existing Fast/Path traversal and startup behavior.
+   ============================================================ */
+
+const RenderPerformancePolicy16=Object.freeze({
+  tileSize(job){
+    const raw=String(job?.settings?.tileSize||'Auto');
+    if(raw==='Auto'){
+      const q=String(job?.settings?.quality||'Preview');
+      const w=Math.max(1,job?.progress?.resolution?.[0]||640);
+      const h=Math.max(1,job?.progress?.resolution?.[1]||360);
+      const pixels=w*h;
+      const threads=Math.max(1,Number(job?.progress?.threads)||Math.max(1,(navigator.hardwareConcurrency||2)-1));
+      let size=q==='Draft'?32:q==='Ultra'?8:16;
+      if(pixels>1920*1080&&threads>=8)size=Math.max(size,32);
+      if(pixels<640*480)size=Math.min(size,16);
+      if(threads<=2)size=Math.max(size,32);
+      return size;
+    }
+    const n=Number(raw);
+    return [8,16,32,64].includes(n)?n:16;
+  },
+  yieldRows(job){
+    // Tile Size controls cooperative row batches only.
+    // This deliberately does not replace the proven scanline traversal.
+    return Math.max(1,Math.min(16,Math.round(this.tileSize(job)/4)));
+  }
+});
+
+
+
+const LiteTraceScratch=Object.freeze({
+  v3a:new Float64Array(3),v3b:new Float64Array(3),v3c:new Float64Array(3),rgb:new Float64Array(3)
+});
+window.LiteTraceScratch=LiteTraceScratch;
+
+var RenderProfiler16=Object.freeze({
+  now(){return performance.now();},
+  begin(){return performance.now();},
+  elapsed(start){return Math.max(0,performance.now()-start);},
+  mark(counter,name,start){
+    const ms=this.elapsed(start);
+    if(counter?.stageMs&&name in counter.stageMs)counter.stageMs[name]+=ms;
+    return ms;
+  }
+});
+window.RenderProfiler16=RenderProfiler16;
+
+var RenderControlToken16 = class RenderControlToken16{
+  constructor(){
+    this.shared=typeof SharedArrayBuffer!=='undefined'&&typeof Atomics!=='undefined';
+    this.buffer=this.shared?new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT*3):new ArrayBuffer(Int32Array.BYTES_PER_ELEMENT*3);
+    this.flags=new Int32Array(this.buffer); // [cancel,pause,generation]
+    this.flags[2]=1;
+  }
+  cancel(){this.shared?Atomics.store(this.flags,0,1):(this.flags[0]=1);}
+  reset(){this.shared?(Atomics.store(this.flags,0,0),Atomics.store(this.flags,1,0),Atomics.add(this.flags,2,1)):(this.flags[0]=0,this.flags[1]=0,this.flags[2]++);}
+  pause(){this.shared?Atomics.store(this.flags,1,1):(this.flags[1]=1);}
+  resume(){this.shared?Atomics.store(this.flags,1,0):(this.flags[1]=0);}
+  cancelled(){return (this.shared?Atomics.load(this.flags,0):this.flags[0])!==0;}
+  paused(){return (this.shared?Atomics.load(this.flags,1):this.flags[1])!==0;}
+  generation(){return this.shared?Atomics.load(this.flags,2):this.flags[2];}
+}
+window.RenderControlToken16=RenderControlToken16;
+
+var RenderPerformanceCounters16 = class RenderPerformanceCounters16{
+  constructor(){
+    this.cameraRays=0;
+    this.pathRays=0;
+    this.shadowRays=0;
+    this.probeRays=0;
+    this.samples=0;
+    this.yields=0;
+    this.stageMs={snapshot:0,geometry:0,worker:0,bvh:0,shading:0,lightCache:0,render:0,denoise:0,toneMap:0,post:0};
+    this.startedAt=RenderProfiler16.now();
+  }
+  addRay(type){
+    if(type===RenderRayType.CAMERA)this.cameraRays++;
+    else if(type===RenderRayType.SHADOW)this.shadowRays++;
+    else this.pathRays++;
+  }
+  addProbe(){this.probeRays++;}
+  markStage(name,start){
+    return RenderProfiler16.mark(this,name,start);
+  }
+  snapshot(){
+    const elapsed=Math.max(.001,performance.now()-this.startedAt);
+    const totalRays=this.cameraRays+this.pathRays;
+    return Object.freeze({
+      cameraRays:this.cameraRays,
+      pathRays:this.pathRays,
+      shadowRays:this.shadowRays,
+      probeRays:this.probeRays,
+      totalRays:totalRays+this.shadowRays+this.probeRays,
+      samples:this.samples,
+      yields:this.yields,
+      raysPerSecond:Math.round(totalRays/(elapsed/1000)),
+      stageMs:Object.freeze({...this.stageMs})
+    });
+  }
+}
+
+const RenderPerformanceRuntime16=Object.freeze({
+  attach(job){
+    if(!job.performanceState)job.performanceState=new RenderPerformanceCounters16();
+    return job.performanceState;
+  },
+  markStage(job,name,start){
+    this.attach(job).markStage(name,start);
+  },
+  snapshot(job){
+    return job?.performanceState?.snapshot?.()||null;
+  }
+});
+
+const RenderGroup16Contract=Object.freeze({
+  owns:Object.freeze([
+    'tile-size cooperative row-batch policy',
+    'camera/path ray counters',
+    'sample counter',
+    'cooperative yield counter',
+    'render-stage timing',
+    'rays-per-second diagnostics'
+  ]),
+  preserves:Object.freeze([
+    'existing Fast scanline traversal',
+    'existing Path progressive traversal',
+    'Group 15 Light Tree and Path Guiding',
+    'Group 14 region rendering',
+    'editor startup order',
+    'viewport ownership'
+  ]),
+  doesNotOwn:Object.freeze([
+    'editor startup','viewport','selection','modeling',
+    'BVH layout replacement','worker scheduler replacement',
+    'shared tile traversal','SIMD/WASM kernel'
+  ])
+});
+
+function runRenderGroup16SelfTests(){
+  const errors=[],expect=(c,m)=>{if(!c)errors.push(m);};
+  try{
+    expect(RenderPerformancePolicy16.tileSize({settings:{tileSize:'8'}})===8,'Tile size 8 failed');
+    expect(RenderPerformancePolicy16.tileSize({settings:{tileSize:'64'}})===64,'Tile size 64 failed');
+    expect(RenderPerformancePolicy16.tileSize({settings:{tileSize:'Auto',quality:'Draft'}})===32,'Auto Draft tile failed');
+    expect(RenderPerformancePolicy16.yieldRows({settings:{tileSize:'16'}})===4,'Yield-row policy failed');
+  }catch(e){errors.push('Performance policy: '+String(e?.message||e));}
+  try{
+    const c=new RenderPerformanceCounters16();
+    c.addRay(RenderRayType.CAMERA);
+    c.addRay(RenderRayType.DIFFUSE);
+    c.samples=2;
+    const snap=c.snapshot();
+    expect(snap.totalRays===2&&snap.cameraRays===1&&snap.pathRays===1,'Ray counters failed');
+    expect(snap.samples===2&&Number.isFinite(snap.raysPerSecond),'Sample/RPS counters failed');
+  }catch(e){errors.push('Performance counters: '+String(e?.message||e));}
+  return {ok:errors.length===0,errors};
+}
+
+function validateRenderGroup16(){
+  const errors=[];
+  if(typeof RenderPerformancePolicy16?.tileSize!=='function')errors.push('Performance policy missing');
+  if(typeof RenderPerformanceCounters16!=='function')errors.push('Performance counters missing');
+  if(typeof RenderPerformanceRuntime16?.attach!=='function')errors.push('Performance runtime missing');
+  const t=runRenderGroup16SelfTests();
+  if(!t.ok)errors.push(...t.errors);
+  return {ok:errors.length===0,errors};
+}
+
+const RenderGroup16Core=Object.freeze({
+  version:'3.79.31-group16-safe-rewrite-gen3',
+  validate:validateRenderGroup16,
+  policy:RenderP
+
+===== PhysicalBSDF @ 305897 =====
+manceRuntime16,
+  RenderGroup16Contract,runRenderGroup16SelfTests,validateRenderGroup16,RenderGroup16Core
+});
+
+
+var RenderRayBatch16 = class RenderRayBatch16{
+  constructor(capacity=128){
+    this.capacity=Math.max(1,capacity|0);
+    this.origins=new Float64Array(this.capacity*3);
+    this.directions=new Float64Array(this.capacity*3);
+    this.pixelIndices=new Uint32Array(this.capacity);
+    this.seeds=new Uint32Array(this.capacity);
+    this.count=0;
+  }
+  clear(){this.count=0;return this;}
+  push(ray,pixelIndex,seed){
+    if(this.count>=this.capacity)return false;
+    const i=this.count++,o=i*3;
+    this.origins[o]=ray.origin[0];this.origins[o+1]=ray.origin[1];this.origins[o+2]=ray.origin[2];
+    this.directions[o]=ray.direction[0];this.directions[o+1]=ray.direction[1];this.directions[o+2]=ray.direction[2];
+    this.pixelIndices[i]=pixelIndex>>>0;this.seeds[i]=seed>>>0;
+    return true;
+  }
+  ray(i,type=RenderRayType.CAMERA){
+    const o=i*3;
+    return new RenderRay(
+      [this.origins[o],this.origins[o+1],this.origins[o+2]],
+      [this.directions[o],this.directions[o+1],this.directions[o+2]],
+      1e-6,Infinity,type,0
+    );
+  }
+  trace(acceleration,type=RenderRayType.CAMERA){
+    const hits=new Array(this.count);
+    for(let i=0;i<this.count;i++)hits[i]=acceleration.trace(this.ray(i,type));
+    return hits;
+  }
+}
+window.RenderRayBatch16=RenderRayBatch16;
+
+var RenderWorkQueue16 = class RenderWorkQueue16{
+  constructor(chunks){
+    this.queue=chunks.slice();
+    this.completed=0;
+    this.claimed=0;
+    this.steals=0;
+  }
+  static fromIndices(indices,batchSize=128){
+    const chunks=[];
+    const n=indices.length;
+    const adaptive=Math.max(16,Math.min(512,Math.round(batchSize*(n>250000?.5:n<10000?2:1))));
+    for(let i=0;i<n;i+=adaptive){
+      chunks.push(typeof indices.subarray==='function'?indices.subarray(i,Math.min(n,i+adaptive)):indices.slice(i,i+adaptive));
+    }
+    return new RenderWorkQueue16(chunks);
+  }
+  splitHeavy(maxChunk=128){
+    const next=[];
+    for(const chunk of this.queue){
+      if(chunk.length>maxChunk){
+        const mid=Math.ceil(chunk.length/2);
+        next.push(chunk.slice(0,mid),chunk.slice(mid));
+      }else next.push(chunk);
+    }
+    this.queue=next;
+    return this;
+  }
+  claim(){
+    const work=this.queue.shift()||null;
+    if(work){if(this.claimed>0)this.steals++;this.claimed++;}
+    return work;
+  }
+  async run(workerFn,concurrency=1){
+    const runners=[];
+    const n=Math.max(1,Math.min(8,Number(concurrency)||1));
+    for(let w=0;w<n;w++)runners.push((async()=>{
+      for(;;){
+        const batch=this.claim();
+        if(!batch)break;
+        await workerFn(batch,w);
+        this.completed++;
+      }
+    })());
+    await Promise.all(runners);
+    return this.completed;
+  }
+}
+window.RenderWorkQueue16=RenderWorkQueue16;
+
+var RenderTileScheduler16=Object.freeze({
+  makeTiles(width,height,tileSize){
+    const size=Math.max(4,Math.min(128,Number(tileSize)||16));
+    const tiles=[];
+    let id=0;
+    for(let y=0;y<height;y+=size){
+      for(let x=0;x<width;x+=size){
+        tiles.push(Object.freeze({
+          id:id++,x,y,
+          width:Math.min(size,width-x),
+          height:Math.min(size,height-y)
+        }));
+      }
+    }
+    return tiles;
+  },
+  async runLocal(job,tiles,runTile,onProgress=()=>{}){
+    const total=Math.max(1,tiles.length);
+    for(let i=0;i<tiles.length;i++){
+      if(job.cancelled)throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
+      while(job.paused&&!job.cancelled)await new Promise(r=>setTimeout(r,20));
+      await runTile(tiles[i],i);
+      onProgress((i+1)/total);
+      if((i&1)===1)await new Promise(r=>setTimeout(r,0));
+    }
+  }
+});
+window.RenderTileScheduler16=RenderTileScheduler16;
+
+/* 3DLite v3.97.9 — LiteTrace execution-context dependency repair */
+var LiteTraceExecutionContext=(function(){
+  const existing=window.LiteTraceExecutionContext;
+  if(existing&&typeof existing==='object')return existing;
+  const ctx={activeJob:null,performance:null};
+  window.LiteTraceExecutionContext=ctx;
+  return ctx;
+})();
+window.__3DLiteLiteTraceExecutionContext3978=true;
+
+var BasicDirectRenderer=Object.freeze({
+  shade(job,acceleration,materials,lights,ray,hit){
+    const material=RenderMaterialLibrary.resolveHit(job.renderScene,materials,hit);
+    if(material.shading==='unlit'){
+      return RenderColor.add(material.baseColor,RenderColor.mul(material.emissive,material.emissiveIntensity));
+    }
+
+    const n=SurfaceInterpolator.normal(acceleration,hit);
+    const v=RayMath.mul(ray.direction,-1);
+    let color=RenderColor.mul(material.emissive,material.emissiveIntensity);
+
+    for(const light of lights){
+      const sample=DirectLightSampler.sample(light,hit.position);
+      if(sample.kind==='ambient'){
+        const diffuse=RenderColor.mul(material.baseColor,(1-material.metalness)/Math.PI);
+        color=RenderColor.add(color,RenderColor.mul(RenderColor.mul(diffuse,sample.radiance),Math.PI));
+      }else{
+        const brdf=PhysicalBSDF.evaluate(material,n,v,sample.direction);
+        color=RenderColor.add(color,RenderColor.mul(brdf,sample.radiance));
+      }
+    }
+    return color;
+  },
+
+  async render(job,acceleration,onProgress=()=>{}){
+    const rr=RenderRegion14.resolve(job,640,360);
+    const width=rr.width,height=rr.height;
+
+    const rgba=new Uint8ClampedArray(width*height*4);
+    const aovs=new RenderAOVSet(width,height);
+    const compiled=RenderPart4Core.compile(job);
+    const backgroundFallback=RenderColor.hexToLinear(job.settings.background||'#202020');
+    const perf16=RenderCoreH.attachPerformance(job);
+    const primaryBatch16=new RenderRayBatch16(Math.max(32,RenderCoreH.tileSize(job)*RenderCoreH.tileSize(job)));
+    const rowChunk=RenderCoreH.yieldRows(job);
+    const renderStart16=RenderProfiler16.begin();
+    LiteTraceExecutionContext.activeJob=job;LiteTraceExecutionContext.performance=perf16;
+
+    const tiles16=RenderTileScheduler16.makeTiles(width,height,RenderCoreH.tileSize(job));
+    await RenderTileScheduler16.runLocal(job,tiles16,async tile=>{
+      for(let y=tile.y;y<tile.y+tile.height;y++){
+        for(let x=tile.x;x<tile.x+tile.width;x++){
+          const ray=RenderCameraRayGenerator.ray(
+            job.renderScene.camera,
+            rr.x0+x,rr.y0+y,
+            rr.fullW,rr.fullH
+          );
+          const hit=acceleration.trace(ray);
+          const o=(y*width+x)*4;
+  
+          if(hit.hit){
+            const pixelSeed=((y*width+x+1)>>>0);
+            const linear=RenderPart4Core.evaluate(job,acceleration,compiled,ray,hit,pixelSeed);
+            RenderAOVUtil.writePrimary(aovs,y*width+x,RenderAOVUtil.primary(job,acceleration,compiled,ray,hit,pixelSeed));
+            aovs.set3('Beauty',y*width+x,linear);
+            aovs.set3('Global Illumination',y*width+x,[0,0,0]);
+            aovs.set1('Noise',y*width+x,0);
+            const mapped=RenderColor.linearToSrgb(RenderColor.aces(linear));
+            rgba[o]=Math.round(RenderColor.clamp01(mapped[0])*255);
+            rgba[o+1]=Math.round(RenderColor.clamp01(mapped[1])*255);
+            rgba[o+2]=Math.round(RenderColor.clamp01(mapped[2])*255);
+            rgba[o+3]=255;
+          }else{
+            const env=RenderPart4Core.environment(job,compiled,ray.direction)||backgroundFallback;
+            RenderAOVUtil.writePrimary(aovs,y*width+x,null);
+            aovs.set3('Beauty',y*width+x,env);
+            aovs.set3('Global Illumination',y*width+x,env);
+            aovs.set1('Noise',y*width+x,0);
+            const mapped=RenderColor.linearToSrgb(RenderColor.aces(env));
+            rgba[o]=Math.round(RenderColor.clamp01(mapped[0])*255);
+            rgba[o+1]=Math.round(RenderColor.clamp01(mapped[1])*255);
+            rgba[o+2]=Math.round(RenderColor.clamp01(mapped[2])*255);
+            rgba[o+3]=job.settings.transparent?0:255;
+          }
+        }
+      }
+      try{window.ThreeDLiteRenderWindow3979?.tile?.(job,width,height,rgba,tile,{total:tiles16.length});}catch(_){}
+      perf16.yields++;
+    },onProgress);
+    RenderCoreH.markStage(job,'render',renderStart16);
+    if(LiteTraceExecutionContext.performance===perf16){LiteTraceExecutionContext.activeJob=null;LiteTraceExecutionContext.performance=null;}
+    job.renderChannels=aovs;
+    return {
+      width,height,rgba,
+      channels:aovs,
+      metadata:Object.freeze({
+        renderer:'Part 4 Fast Direct',
+        materialCount:compiled.materials.list.length,
+        lightCount:compiled.lights.length,
+        toneMapping:'ACES',
+        colorSpace:'sRGB output / linear shading',
+        diagnostics:RenderPart4Core.diagnostics(job,compiled,acceleration),
+        performance:RenderCoreH.performance(job)
+      })
+    };
+  }
+});
+
+
+/* ============================================================
+   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — CORE C
+   CLEAN GROUP 5 + GROUP 6 CONSOLIDATION
+   ============================================================ */
+var RenderCoreC=Object.freeze({
+  version:'3.79.09-core-c',
+
+  compileScene(renderScene,settings){
+    const materials=RenderMaterialLibrary.compile(renderScene);
+    const lights=BasicRenderLighting.create(renderScene,settings);
+    return Object.freeze({materials,lights});
+  },
+
+  evaluateDirect(job,acceleration,compiled,ray,hit,pixelSeed=1,options={}){
+    return DirectLightingIntegrator.evaluate(job,acceleration,compiled,ray,hit,pixelSeed,options);
+  },
+
+  validate(){
+    const errors=[];
+    const g5=validateRenderGroup5();if(!g5.ok)errors.push(...g5.errors);
+    const g6=validateRenderGroup6();if(!g6.ok)errors.push(...g6.errors);
+    if(typeof this.compileScene!=='function')errors.push('Core C scene compiler missing');
+    if(typeof this.evaluateDirect!=='function')errors.push('Core C direct evaluator missing');
+    return {ok:errors.length===0,errors};
+  }
+});
+window.RenderCoreC=RenderCoreC;
+
+const RenderGroup5Contract=Object.freeze({
+  owns:Object.freeze([
+    'render material compilation',
+    'linear color conversion',
+    'GGX physical BRDF',
+    'basic direct directional lighting',
+    'basic environment fill',
+    'tone mapping and display conversion',
+    'barycentric shading-normal interpolation'
+  ]),
+  consumes:Object.freeze([
+    'Core A material snapshots',
+    'Core B ray/BVH hit data',
+    'Core A render settings'
+  ]),
+  doesNotOwn:Object.freeze([
+    'editor viewport materials',
+    'full scene light object system',
+    'shadow visibility',
+    'area-light sampling',
+    'path GI',
+    'light cache',
+    'denoising'
+  ])
+});
+
+function runRenderGroup5SelfTests(){
+  const errors=[];
+  const approx=(a,b,e=1e-4)=>Math.abs(a-b)<=e;
+
+  const white=RenderColor.srgbToLinear([1,1,1]);
+  if(!approx(white[0],1)||!approx(white[1],1)||!approx(white[2],1))errors.push('sRGB white conversion failed');
+
+  const mat=new RenderSurfaceMaterial({
+    id:'t',name:'t',shading:'physical',baseColor:[.8,.3,.2],
+    roughness:.5,metalness:0,opacity:1,emissive:[0,0,0],emissiveIntensity:0
+  });
+  const brdf=PhysicalBSDF.evaluate(mat,[0,0,1],[0,0,1],[0,0,1]);
+  if(brdf.some(x=>!Number.isFinite(x)||x<0))errors.push('Physical BRDF finite/positive test failed');
+
+  const metallic=new RenderSurfaceMaterial({
+    id:'m',name:'m',shading:'physical',baseColor:[.9,.7,.2],
+    roughness:.25,metalness:1,opacity:1,emissive:[0,0,0],emissiveIntensity:0
+  });
+  const mb=PhysicalBSDF.evaluate(metallic,[0,0,1],[0,0,1],[0,0,1]);
+  if(mb.some(x=>!Number.isFinite(x)||x<0))errors.push('Metallic BRDF test failed');
+
+  const tm=RenderColor.aces([10,3,1]);
+  if(tm.some(x=>x<0||x>1||!Number.isFinite(x)))errors.push('Tone mapping range test failed');
+
+  return {ok:errors.length===0,errors};
+}
+window.runRenderGroup5SelfTests=runRenderGroup5SelfTests;
+
+function validateRenderGroup5(){
+  const errors=[];
+  if(typeof RenderSurfaceMaterial!=='function')errors.push('RenderSurfaceMaterial missing');
+  if(typeof PhysicalBSDF.evaluate!=='function')errors.push('PhysicalBSDF missing');
+  if(typeof BasicDirectRenderer.render!=='function')errors.push('BasicDirectRenderer missing');
+  if(typeof SurfaceInterpolator.normal!=='function')errors.push('SurfaceInterpolator missing');
+  const tests=runRenderGroup5SelfTests();if(!tests.ok)errors.push(...tests.errors);
+  return {ok:errors.length===0,errors};
+}
+
+Object.assign(window,{
+  RenderColor,RenderSurfaceMaterial,RenderMaterialLibrary,
+  RenderDirectionalLight,RenderAmbientLight,BasicRenderLighting,
+  PhysicalBSDF,SurfaceInterpolator,BasicDirectRenderer,RenderGroup5Contract
+});
+
+/* ============================================================
+   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 6
+   Full 3DLite Light System
+   ============================================================ */
+const LightTypes=Object.freeze(['point','spot','rectangle','disc','sphere','sun','dome','mesh']);
+
+const LightDefaults=Object.freeze({
+  point:Object.freeze({intensity:10,size:2,range:0,coneAngle:45,penumbra:.15}),
+  spot:Object.freeze({intensity:25,size:2,range:0,coneAngle:45,penumbra:.15}),
+  rectangle:Object.freeze({intensity:15,size:25,width:50,height:50,range:0,coneAngle:90,penumbra:0}),
+  disc:Object.freeze({intensity:15,size:25,range:0,coneAngle:90,penumbra:0}),
+  sphere:Object.freeze({intensity:15,size:25,range:0,coneAngle:180,penumbra:0}),
+  sun:Object.freeze({intensity:3,size:.5,range:0,coneAngle:.53,penumbra:0}),
+  dome:Object.freeze({intensity:1,size:100,range:0,coneAngle:180,penumbra:0}),
+  mesh:Object.freeze({intensity:10,size:25,range:0,coneAngle:180,penumbra:0})
+});
+
+var EditorLightSystem={
+  nextId:1,
+  isLightObject(obj){return !!obj?.userData?.renderLight},
+
+  iconGeometry(type,size){
+    const s=Math.max(2,Math.min(30,Number(size)||10));
+    if(type==='rectangle')return new THREE.BoxGeometry(s*1.4,s*.08,s);
+    if(type==='disc')return new THREE.CylinderGeometry(s*.55,s*.55,s*.08,16);
+    if(type==='sphere'||type==='dome')return new THREE.SphereGeometry(s*.45,10,6);
+    if(type==='spot')return new THREE.ConeGeometry(s*.35,s*.8,12);
+    if(type==='sun')return new THREE.CylinderGeometry(s*.45,s*.45,s*.08,16);
+    if(type==='mesh')return new THREE.BoxGeometry(s*.8,s*.8,s*.08);
+    return new THREE.OctahedronGeometry(s*.4,0);
+  },
+
+  create(type,opts={}){
+    type=LightTypes.includes(type)?type:'point';
+    const d=LightDefaults[type]||LightDefaults.point;
+    const size=Math.max(.01,Number(opts.size??d.size??25));
+    const geometry=this.iconGeometry(type,size);
+    const color=new THREE.Color(opts.color||'#fff2c8');
+    const material=new THREE.MeshBasicMaterial({
+      color,wireframe:true,transparent:true,opacity:.9,
+      depthTest:true,depthWrite:false,toneMapped:false
+    });
+    const obj=new THREE.Mesh(geometry,material);
+    obj.name=(type[0].toUpperCase()+type.slice(1))+' Light '+this.nextId++;
+    obj.userData.renderLight={
+      id:'light-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7),
+      type,
+      enabled:opts.enabled!==false,
+      color:'#'+color.getHexString(),
+      intensity:Math.max(0,Number(opts.intensity??d.intensity??10)),
+      range:Math.max(0,Number(opts.range??d.range??0)),
+      size,
+      width:Math.max(.01,Number(opts.width??d.width??size*2)),
+      height:Math.max(.01,Number(opts.height??d.height??size*2)),
+      coneAngle:Math.max(1,Math.min(179,Number(opts.coneAngle??d.coneAngle??45))),
+      penumbra:Math.max(0,Math.min(1,Number(opts.penumbra??d.penumbra??.15))),
+      castShadows:opts.castShadows!==false,
+      renderOnly:true
+    };
+    obj.userData.isRenderLight=true;
+    obj.position.set(0,0,Math.max(20,size));
+    if(type==='sun'||type==='spot'||type==='rectangle'||type==='disc'||type==='mesh'){
+      obj.rotation.x=-Math.PI*.25;
+    }
+    scene.add(obj);objects.push(obj);
+    window.__3DLiteLightRevision=(window.__3DLiteLightRevision||0)+1;
+    selectOnly(obj);
+    refreshModifyPanel();
+    requestRender();
+    return obj;
+  },
+
+  updateIcon(obj){
+    if(!this.isLightObject(obj))return;
+    const l=obj.userData.renderLight;
+    const old=obj.geometry;
+    obj.geometry=this.iconGeometry(l.type,l.size);
+    old?.dispose?.();
+    if(obj.material?.color)obj.material.color.set(l.color||'#ffffff');
+    requestRender();
+  },
+
+  serialize(obj){
+    if(!this.isLightObject(obj))return null;
+    obj.updateMatrixWorld(true);
+    const l=obj.userData.renderLight;
+    const q=obj.getWorldQuaternion(new THREE.Quaternion());
+    const p=obj.getWorldPosition(new THREE.Vector3());
+    const dir=new THREE.Vector3(0,0,-1).applyQuaternion(q).normalize();
+    return {
+      id:l.id||obj.uuid,
+      name:obj.name||'Light',
+      type:l.type,
+      enabled:l.enabled!==false&&obj.visible!==false,
+      color:l.color||'#ffffff',
+      intensity:Math.max(0,Number(l.intensity)||0),
+      range:Math.max(0,Number(l.range)||0),
+      size:Math.max(.01,Number(l.size)||.01),
+      width:Math.max(.01,Number(l.width)||.01),
+      height:Math.max(.01,Number(l.height)||.01),
+      coneAngle:Math.max(1,Math.min(179,Number(l.coneAngle)||45)),
+      penumbra:Math.max(0,Math.min(1,Number(l.penumbra)||0)),
+      castShadows:l.castShadows!==false,
+      position:p.toArray(),
+      quaternion:q.toArray(),
+      direction:dir.toArray()
+    };
+  }
+};
+
+var LightSnapshotTools=Object.freeze({
+  fromEditorObject(obj){
+    const d=EditorLightSystem.serialize(obj);
+    return d?new RenderLightSnapshot(d):null;
+  }
+});
+
+const RenderLightPolicy=Object.freeze({
+  supported:Object.freeze(['point','spot','rectangle','disc','sphere','sun','dome','mesh']),
+  minLinearSize:0.01,
+  minArea:1e-4,
+  finite3(a,fallback=[0,0,0]){
+    if(!Array.isArray(a)||a.length<3||a.slice(0,3).some(v=>!Number.isFinite(Number(v))))return fallback.slice();
+    return a.slice(0,3).map(Number);
+  },
+  type(t){return this.supported.includes(t)?t:'point';},
+  scalar(v,fallback=0,min=-Infinity,max=Infinity){
+    v=Number(v);if(!Number.isFinite(v))v=fallback;
+    return Math.max(min,Math.min(max,v));
+  },
+  area(light){
+    if(light.type==='rectangle'||light.type==='mesh')return Math.max(this.minArea,light.width*light.height);
+    if(light.type==='disc')return Math.max(this.minArea,Math.PI*Math.pow(light.size*.5,2));
+    if(light.type==='sphere')return Math.max(this.minArea,4*Math.PI*Math.pow(light.size*.5,2));
+    return 1;
+  }
+});
+
+class RenderSceneLight{
+  constructor(snapshot){
+    this.id=String(snapshot.id||'light');
+    this.name=String(snapshot.name||'Light');
+    this.type=RenderLightPolicy.type(snapshot.type);
+    this.enabled=snapshot.enabled!==false;
+    this.color=Object.freeze(RenderColor.hexToLinear(snapshot.color||'#ffffff'));
+    this.intensity=RenderLightPolicy.scalar(snapshot.intensity,0,0,1e12);
+    this.range=RenderLightPolicy.scalar(snapshot.range,0,0,1e12);
+    this.size=RenderLightPolicy.scalar(snapshot.size,1,RenderLightPolicy.minLinearSize,1e9);
+    this.width=RenderLightPolicy.scalar(snapshot.width,1,RenderLightPolicy.minLinearSize,1e9);
+    this.height=RenderLightPolicy.scalar(snapshot.height,1,RenderLightPolicy.minLinearSize,1e9);
+    this.coneAngle=Re
+
+===== PhysicalBSDF @ 311870 =====
+nderCoreH.tileSize(job));
+    await RenderTileScheduler16.runLocal(job,tiles16,async tile=>{
+      for(let y=tile.y;y<tile.y+tile.height;y++){
+        for(let x=tile.x;x<tile.x+tile.width;x++){
+          const ray=RenderCameraRayGenerator.ray(
+            job.renderScene.camera,
+            rr.x0+x,rr.y0+y,
+            rr.fullW,rr.fullH
+          );
+          const hit=acceleration.trace(ray);
+          const o=(y*width+x)*4;
+  
+          if(hit.hit){
+            const pixelSeed=((y*width+x+1)>>>0);
+            const linear=RenderPart4Core.evaluate(job,acceleration,compiled,ray,hit,pixelSeed);
+            RenderAOVUtil.writePrimary(aovs,y*width+x,RenderAOVUtil.primary(job,acceleration,compiled,ray,hit,pixelSeed));
+            aovs.set3('Beauty',y*width+x,linear);
+            aovs.set3('Global Illumination',y*width+x,[0,0,0]);
+            aovs.set1('Noise',y*width+x,0);
+            const mapped=RenderColor.linearToSrgb(RenderColor.aces(linear));
+            rgba[o]=Math.round(RenderColor.clamp01(mapped[0])*255);
+            rgba[o+1]=Math.round(RenderColor.clamp01(mapped[1])*255);
+            rgba[o+2]=Math.round(RenderColor.clamp01(mapped[2])*255);
+            rgba[o+3]=255;
+          }else{
+            const env=RenderPart4Core.environment(job,compiled,ray.direction)||backgroundFallback;
+            RenderAOVUtil.writePrimary(aovs,y*width+x,null);
+            aovs.set3('Beauty',y*width+x,env);
+            aovs.set3('Global Illumination',y*width+x,env);
+            aovs.set1('Noise',y*width+x,0);
+            const mapped=RenderColor.linearToSrgb(RenderColor.aces(env));
+            rgba[o]=Math.round(RenderColor.clamp01(mapped[0])*255);
+            rgba[o+1]=Math.round(RenderColor.clamp01(mapped[1])*255);
+            rgba[o+2]=Math.round(RenderColor.clamp01(mapped[2])*255);
+            rgba[o+3]=job.settings.transparent?0:255;
+          }
+        }
+      }
+      try{window.ThreeDLiteRenderWindow3979?.tile?.(job,width,height,rgba,tile,{total:tiles16.length});}catch(_){}
+      perf16.yields++;
+    },onProgress);
+    RenderCoreH.markStage(job,'render',renderStart16);
+    if(LiteTraceExecutionContext.performance===perf16){LiteTraceExecutionContext.activeJob=null;LiteTraceExecutionContext.performance=null;}
+    job.renderChannels=aovs;
+    return {
+      width,height,rgba,
+      channels:aovs,
+      metadata:Object.freeze({
+        renderer:'Part 4 Fast Direct',
+        materialCount:compiled.materials.list.length,
+        lightCount:compiled.lights.length,
+        toneMapping:'ACES',
+        colorSpace:'sRGB output / linear shading',
+        diagnostics:RenderPart4Core.diagnostics(job,compiled,acceleration),
+        performance:RenderCoreH.performance(job)
+      })
+    };
+  }
+});
+
+
+/* ============================================================
+   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — CORE C
+   CLEAN GROUP 5 + GROUP 6 CONSOLIDATION
+   ============================================================ */
+var RenderCoreC=Object.freeze({
+  version:'3.79.09-core-c',
+
+  compileScene(renderScene,settings){
+    const materials=RenderMaterialLibrary.compile(renderScene);
+    const lights=BasicRenderLighting.create(renderScene,settings);
+    return Object.freeze({materials,lights});
+  },
+
+  evaluateDirect(job,acceleration,compiled,ray,hit,pixelSeed=1,options={}){
+    return DirectLightingIntegrator.evaluate(job,acceleration,compiled,ray,hit,pixelSeed,options);
+  },
+
+  validate(){
+    const errors=[];
+    const g5=validateRenderGroup5();if(!g5.ok)errors.push(...g5.errors);
+    const g6=validateRenderGroup6();if(!g6.ok)errors.push(...g6.errors);
+    if(typeof this.compileScene!=='function')errors.push('Core C scene compiler missing');
+    if(typeof this.evaluateDirect!=='function')errors.push('Core C direct evaluator missing');
+    return {ok:errors.length===0,errors};
+  }
+});
+window.RenderCoreC=RenderCoreC;
+
+const RenderGroup5Contract=Object.freeze({
+  owns:Object.freeze([
+    'render material compilation',
+    'linear color conversion',
+    'GGX physical BRDF',
+    'basic direct directional lighting',
+    'basic environment fill',
+    'tone mapping and display conversion',
+    'barycentric shading-normal interpolation'
+  ]),
+  consumes:Object.freeze([
+    'Core A material snapshots',
+    'Core B ray/BVH hit data',
+    'Core A render settings'
+  ]),
+  doesNotOwn:Object.freeze([
+    'editor viewport materials',
+    'full scene light object system',
+    'shadow visibility',
+    'area-light sampling',
+    'path GI',
+    'light cache',
+    'denoising'
+  ])
+});
+
+function runRenderGroup5SelfTests(){
+  const errors=[];
+  const approx=(a,b,e=1e-4)=>Math.abs(a-b)<=e;
+
+  const white=RenderColor.srgbToLinear([1,1,1]);
+  if(!approx(white[0],1)||!approx(white[1],1)||!approx(white[2],1))errors.push('sRGB white conversion failed');
+
+  const mat=new RenderSurfaceMaterial({
+    id:'t',name:'t',shading:'physical',baseColor:[.8,.3,.2],
+    roughness:.5,metalness:0,opacity:1,emissive:[0,0,0],emissiveIntensity:0
+  });
+  const brdf=PhysicalBSDF.evaluate(mat,[0,0,1],[0,0,1],[0,0,1]);
+  if(brdf.some(x=>!Number.isFinite(x)||x<0))errors.push('Physical BRDF finite/positive test failed');
+
+  const metallic=new RenderSurfaceMaterial({
+    id:'m',name:'m',shading:'physical',baseColor:[.9,.7,.2],
+    roughness:.25,metalness:1,opacity:1,emissive:[0,0,0],emissiveIntensity:0
+  });
+  const mb=PhysicalBSDF.evaluate(metallic,[0,0,1],[0,0,1],[0,0,1]);
+  if(mb.some(x=>!Number.isFinite(x)||x<0))errors.push('Metallic BRDF test failed');
+
+  const tm=RenderColor.aces([10,3,1]);
+  if(tm.some(x=>x<0||x>1||!Number.isFinite(x)))errors.push('Tone mapping range test failed');
+
+  return {ok:errors.length===0,errors};
+}
+window.runRenderGroup5SelfTests=runRenderGroup5SelfTests;
+
+function validateRenderGroup5(){
+  const errors=[];
+  if(typeof RenderSurfaceMaterial!=='function')errors.push('RenderSurfaceMaterial missing');
+  if(typeof PhysicalBSDF.evaluate!=='function')errors.push('PhysicalBSDF missing');
+  if(typeof BasicDirectRenderer.render!=='function')errors.push('BasicDirectRenderer missing');
+  if(typeof SurfaceInterpolator.normal!=='function')errors.push('SurfaceInterpolator missing');
+  const tests=runRenderGroup5SelfTests();if(!tests.ok)errors.push(...tests.errors);
+  return {ok:errors.length===0,errors};
+}
+
+Object.assign(window,{
+  RenderColor,RenderSurfaceMaterial,RenderMaterialLibrary,
+  RenderDirectionalLight,RenderAmbientLight,BasicRenderLighting,
+  PhysicalBSDF,SurfaceInterpolator,BasicDirectRenderer,RenderGroup5Contract
+});
+
+/* ============================================================
+   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 6
+   Full 3DLite Light System
+   ============================================================ */
+const LightTypes=Object.freeze(['point','spot','rectangle','disc','sphere','sun','dome','mesh']);
+
+const LightDefaults=Object.freeze({
+  point:Object.freeze({intensity:10,size:2,range:0,coneAngle:45,penumbra:.15}),
+  spot:Object.freeze({intensity:25,size:2,range:0,coneAngle:45,penumbra:.15}),
+  rectangle:Object.freeze({intensity:15,size:25,width:50,height:50,range:0,coneAngle:90,penumbra:0}),
+  disc:Object.freeze({intensity:15,size:25,range:0,coneAngle:90,penumbra:0}),
+  sphere:Object.freeze({intensity:15,size:25,range:0,coneAngle:180,penumbra:0}),
+  sun:Object.freeze({intensity:3,size:.5,range:0,coneAngle:.53,penumbra:0}),
+  dome:Object.freeze({intensity:1,size:100,range:0,coneAngle:180,penumbra:0}),
+  mesh:Object.freeze({intensity:10,size:25,range:0,coneAngle:180,penumbra:0})
+});
+
+var EditorLightSystem={
+  nextId:1,
+  isLightObject(obj){return !!obj?.userData?.renderLight},
+
+  iconGeometry(type,size){
+    const s=Math.max(2,Math.min(30,Number(size)||10));
+    if(type==='rectangle')return new THREE.BoxGeometry(s*1.4,s*.08,s);
+    if(type==='disc')return new THREE.CylinderGeometry(s*.55,s*.55,s*.08,16);
+    if(type==='sphere'||type==='dome')return new THREE.SphereGeometry(s*.45,10,6);
+    if(type==='spot')return new THREE.ConeGeometry(s*.35,s*.8,12);
+    if(type==='sun')return new THREE.CylinderGeometry(s*.45,s*.45,s*.08,16);
+    if(type==='mesh')return new THREE.BoxGeometry(s*.8,s*.8,s*.08);
+    return new THREE.OctahedronGeometry(s*.4,0);
+  },
+
+  create(type,opts={}){
+    type=LightTypes.includes(type)?type:'point';
+    const d=LightDefaults[type]||LightDefaults.point;
+    const size=Math.max(.01,Number(opts.size??d.size??25));
+    const geometry=this.iconGeometry(type,size);
+    const color=new THREE.Color(opts.color||'#fff2c8');
+    const material=new THREE.MeshBasicMaterial({
+      color,wireframe:true,transparent:true,opacity:.9,
+      depthTest:true,depthWrite:false,toneMapped:false
+    });
+    const obj=new THREE.Mesh(geometry,material);
+    obj.name=(type[0].toUpperCase()+type.slice(1))+' Light '+this.nextId++;
+    obj.userData.renderLight={
+      id:'light-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7),
+      type,
+      enabled:opts.enabled!==false,
+      color:'#'+color.getHexString(),
+      intensity:Math.max(0,Number(opts.intensity??d.intensity??10)),
+      range:Math.max(0,Number(opts.range??d.range??0)),
+      size,
+      width:Math.max(.01,Number(opts.width??d.width??size*2)),
+      height:Math.max(.01,Number(opts.height??d.height??size*2)),
+      coneAngle:Math.max(1,Math.min(179,Number(opts.coneAngle??d.coneAngle??45))),
+      penumbra:Math.max(0,Math.min(1,Number(opts.penumbra??d.penumbra??.15))),
+      castShadows:opts.castShadows!==false,
+      renderOnly:true
+    };
+    obj.userData.isRenderLight=true;
+    obj.position.set(0,0,Math.max(20,size));
+    if(type==='sun'||type==='spot'||type==='rectangle'||type==='disc'||type==='mesh'){
+      obj.rotation.x=-Math.PI*.25;
+    }
+    scene.add(obj);objects.push(obj);
+    window.__3DLiteLightRevision=(window.__3DLiteLightRevision||0)+1;
+    selectOnly(obj);
+    refreshModifyPanel();
+    requestRender();
+    return obj;
+  },
+
+  updateIcon(obj){
+    if(!this.isLightObject(obj))return;
+    const l=obj.userData.renderLight;
+    const old=obj.geometry;
+    obj.geometry=this.iconGeometry(l.type,l.size);
+    old?.dispose?.();
+    if(obj.material?.color)obj.material.color.set(l.color||'#ffffff');
+    requestRender();
+  },
+
+  serialize(obj){
+    if(!this.isLightObject(obj))return null;
+    obj.updateMatrixWorld(true);
+    const l=obj.userData.renderLight;
+    const q=obj.getWorldQuaternion(new THREE.Quaternion());
+    const p=obj.getWorldPosition(new THREE.Vector3());
+    const dir=new THREE.Vector3(0,0,-1).applyQuaternion(q).normalize();
+    return {
+      id:l.id||obj.uuid,
+      name:obj.name||'Light',
+      type:l.type,
+      enabled:l.enabled!==false&&obj.visible!==false,
+      color:l.color||'#ffffff',
+      intensity:Math.max(0,Number(l.intensity)||0),
+      range:Math.max(0,Number(l.range)||0),
+      size:Math.max(.01,Number(l.size)||.01),
+      width:Math.max(.01,Number(l.width)||.01),
+      height:Math.max(.01,Number(l.height)||.01),
+      coneAngle:Math.max(1,Math.min(179,Number(l.coneAngle)||45)),
+      penumbra:Math.max(0,Math.min(1,Number(l.penumbra)||0)),
+      castShadows:l.castShadows!==false,
+      position:p.toArray(),
+      quaternion:q.toArray(),
+      direction:dir.toArray()
+    };
+  }
+};
+
+var LightSnapshotTools=Object.freeze({
+  fromEditorObject(obj){
+    const d=EditorLightSystem.serialize(obj);
+    return d?new RenderLightSnapshot(d):null;
+  }
+});
+
+const RenderLightPolicy=Object.freeze({
+  supported:Object.freeze(['point','spot','rectangle','disc','sphere','sun','dome','mesh']),
+  minLinearSize:0.01,
+  minArea:1e-4,
+  finite3(a,fallback=[0,0,0]){
+    if(!Array.isArray(a)||a.length<3||a.slice(0,3).some(v=>!Number.isFinite(Number(v))))return fallback.slice();
+    return a.slice(0,3).map(Number);
+  },
+  type(t){return this.supported.includes(t)?t:'point';},
+  scalar(v,fallback=0,min=-Infinity,max=Infinity){
+    v=Number(v);if(!Number.isFinite(v))v=fallback;
+    return Math.max(min,Math.min(max,v));
+  },
+  area(light){
+    if(light.type==='rectangle'||light.type==='mesh')return Math.max(this.minArea,light.width*light.height);
+    if(light.type==='disc')return Math.max(this.minArea,Math.PI*Math.pow(light.size*.5,2));
+    if(light.type==='sphere')return Math.max(this.minArea,4*Math.PI*Math.pow(light.size*.5,2));
+    return 1;
+  }
+});
+
+class RenderSceneLight{
+  constructor(snapshot){
+    this.id=String(snapshot.id||'light');
+    this.name=String(snapshot.name||'Light');
+    this.type=RenderLightPolicy.type(snapshot.type);
+    this.enabled=snapshot.enabled!==false;
+    this.color=Object.freeze(RenderColor.hexToLinear(snapshot.color||'#ffffff'));
+    this.intensity=RenderLightPolicy.scalar(snapshot.intensity,0,0,1e12);
+    this.range=RenderLightPolicy.scalar(snapshot.range,0,0,1e12);
+    this.size=RenderLightPolicy.scalar(snapshot.size,1,RenderLightPolicy.minLinearSize,1e9);
+    this.width=RenderLightPolicy.scalar(snapshot.width,1,RenderLightPolicy.minLinearSize,1e9);
+    this.height=RenderLightPolicy.scalar(snapshot.height,1,RenderLightPolicy.minLinearSize,1e9);
+    this.coneAngle=RenderLightPolicy.scalar(snapshot.coneAngle,45,1,179)*Math.PI/180;
+    this.penumbra=RenderLightPolicy.scalar(snapshot.penumbra,0,0,1);
+    this.castShadows=snapshot.castShadows!==false;
+    this.position=Object.freeze(RenderLightPolicy.finite3(snapshot.position,[0,0,0]));
+    const rawDir=RenderLightPolicy.finite3(snapshot.direction,[0,0,-1]);
+    let dir=RayMath.normalize(rawDir);
+    if(!dir.every(Number.isFinite)||RayMath.length(dir)<1e-10)dir=[0,0,-1];
+    this.direction=Object.freeze(dir);
+    Object.freeze(this);
+  }
+}
+
+var SceneLightCompiler=Object.freeze({
+  compile(renderScene){
+    const compiled=[];
+    for(const snapshot of (renderScene?.lights||[])){
+      if(snapshot?.enabled===false)continue;
+      try{compiled.push(new RenderSceneLight(snapshot));}
+      catch(err){throw new LightError(`${snapshot?.name||snapshot?.id||'Light'}: ${String(err?.message||err)}`,err);}
+    }
+    return Object.freeze(compiled);
+  }
+});
+
+const DirectLightSampler=Object.freeze({
+  sample(light,point){
+    if(light.type==='dome'){
+      return {kind:'ambient',direction:null,distance:Infinity,radiance:RenderColor.mul(light.color,light.intensity)};
+    }
+    if(light.type==='sun'){
+      return {kind:'directional',direction:RayMath.mul(light.direction,-1),distance:Infinity,radiance:RenderColor.mul(light.color,light.intensity)};
+    }
+
+    const to=RayMath.sub(light.position,point);
+    const dist=Math.max(RayMath.length(to),1e-4);
+    const dir=RayMath.mul(to,1/dist);
+    let attenuation=1/(dist*dist);
+
+    if(light.range>0){
+      if(dist>=light.range)return {kind:'local',direction:dir,distance:dist,radiance:[0,0,0]};
+      const f=Math.max(0,1-dist/light.range);
+      attenuation*=f*f;
+    }
+
+    if(light.type==='spot'){
+      const fromLight=RayMath.mul(dir,-1);
+      const cosTheta=RayMath.dot(light.direction,fromLight);
+      const outer=Math.cos(light.coneAngle*.5);
+      const inner=Math.cos(light.coneAngle*.5*(1-light.penumbra));
+      const cone=inner<=outer?(cosTheta>=outer?1:0):Math.max(0,Math.min(1,(cosTheta-outer)/(inner-outer)));
+      if(cone<=0)return {kind:'local',direction:dir,distance:dist,radiance:[0,0,0]};
+      attenuation*=cone;
+    }
+
+    // Area emitters use center-point evaluation in Group 6.
+    // Group 7 replaces this with actual surface sampling + visibility.
+    const areaScale=
+      light.type==='rectangle'?Math.max(.01,light.width*light.height):
+      light.type==='disc'?Math.max(.01,Math.PI*light.size*light.size*.25):
+      light.type==='sphere'?Math.max(.01,4*Math.PI*Math.pow(light.size*.5,2)):
+      light.type==='mesh'?Math.max(.01,light.width*light.height):
+      1;
+
+    if(['rectangle','disc','sphere','mesh'].includes(light.type))attenuation*=Math.sqrt(areaScale);
+
+    return {
+      kind:'local',
+      direction:dir,
+      distance:dist,
+      radiance:RenderColor.mul(light.color,light.intensity*attenuation)
+    };
+  }
+});
+
+function updateSelectedLightPanel(){
+  const section=document.getElementById('lightModifySection');
+  if(!section)return;
+  const obj=selected;
+  const isLight=EditorLightSystem.isLightObject(obj);
+  section.style.display=isLight?'':'none';
+  if(!isLight)return;
+
+  const l=obj.userData.renderLight;
+  const set=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v};
+  set('lightTypeReadout',l.type);
+  set('lightIntensity',l.intensity);
+  set('lightColor',l.color);
+  set('lightRange',l.range);
+  set('lightSize',l.size);
+  set('lightWidth',l.width);
+  set('lightHeight',l.height);
+  set('lightConeAngle',l.coneAngle);
+  set('lightPenumbra',l.penumbra);
+  const en=document.getElementById('lightEnabled');if(en)en.checked=l.enabled!==false;
+  const sh=document.getElementById('lightCastShadows');if(sh)sh.checked=l.castShadows!==false;
+}
+
+function markRenderLightDirty(){
+  window.__3DLiteLightRevision=(window.__3DLiteLightRevision||0)+1;
+  requestRender();
+}
+
+function bindLightUI(){
+  document.querySelectorAll('[data-light-create]').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      EditorLightSystem.create(btn.dataset.lightCreate,{
+        intensity:Number(document.getElementById('newLightIntensity')?.value)||10,
+        color:document.getElementById('newLightColor')?.value||'#ffffff',
+        size:Number(document.getElementById('newLightSize')?.value)||25,
+        range:Number(document.getElementById('newLightRange')?.value)||0
+      });
+    });
+  });
+
+  const bindings=[
+    ['lightIntensity','intensity','number'],
+    ['lightColor','color','string'],
+    ['lightRange','range','number'],
+    ['lightSize','size','number'],
+    ['lightWidth','width','number'],
+    ['lightHeight','height','number'],
+    ['lightConeAngle','coneAngle','number'],
+    ['lightPenumbra','penumbra','number']
+  ];
+
+  for(const [id,key,kind] of bindings){
+    document.getElementById(id)?.addEventListener('change',e=>{
+      if(!EditorLightSystem.isLightObject(selected))return;
+      selected.userData.renderLight[key]=kind==='number'?Number(e.target.value):e.target.value;
+      if(key==='size'||key==='color')EditorLightSystem.updateIcon(selected);
+      markRenderLightDirty();
+    });
+  }
+
+  document.getElementById('lightEnabled')?.addEventListener('change',e=>{
+    if(EditorLightSystem.isLightObject(selected)){
+      selected.userData.renderLight.enabled=!!e.target.checked;
+      markRenderLightDirty();
+    }
+  });
+  document.getElementById('lightCastShadows')?.addEventListener('change',e=>{
+    if(EditorLightSystem.isLightObject(selected)){
+      selected.userData.renderLight.castShadows=!!e.target.checked;
+      markRenderLightDirty();
+    }
+  });
+}
+
+const RenderGroup6Contract=Object.freeze({
+  owns:Object.freeze([
+    'editor render-light objects',
+    'Point/Spot/Rectangle/Disc/Sphere/Sun/Dome/Mesh light data',
+    'light creation UI',
+    'light modify UI',
+    'immutable light snapshot extraction',
+    'renderer light compilation',
+    'direct light sampling interface'
+  ]),
+  consumes:Object.freeze([
+    'editor transform system'
+
+===== PhysicalBSDF @ 312225 =====
+       const hit=acceleration.trace(ray);
+          const o=(y*width+x)*4;
+  
+          if(hit.hit){
+            const pixelSeed=((y*width+x+1)>>>0);
+            const linear=RenderPart4Core.evaluate(job,acceleration,compiled,ray,hit,pixelSeed);
+            RenderAOVUtil.writePrimary(aovs,y*width+x,RenderAOVUtil.primary(job,acceleration,compiled,ray,hit,pixelSeed));
+            aovs.set3('Beauty',y*width+x,linear);
+            aovs.set3('Global Illumination',y*width+x,[0,0,0]);
+            aovs.set1('Noise',y*width+x,0);
+            const mapped=RenderColor.linearToSrgb(RenderColor.aces(linear));
+            rgba[o]=Math.round(RenderColor.clamp01(mapped[0])*255);
+            rgba[o+1]=Math.round(RenderColor.clamp01(mapped[1])*255);
+            rgba[o+2]=Math.round(RenderColor.clamp01(mapped[2])*255);
+            rgba[o+3]=255;
+          }else{
+            const env=RenderPart4Core.environment(job,compiled,ray.direction)||backgroundFallback;
+            RenderAOVUtil.writePrimary(aovs,y*width+x,null);
+            aovs.set3('Beauty',y*width+x,env);
+            aovs.set3('Global Illumination',y*width+x,env);
+            aovs.set1('Noise',y*width+x,0);
+            const mapped=RenderColor.linearToSrgb(RenderColor.aces(env));
+            rgba[o]=Math.round(RenderColor.clamp01(mapped[0])*255);
+            rgba[o+1]=Math.round(RenderColor.clamp01(mapped[1])*255);
+            rgba[o+2]=Math.round(RenderColor.clamp01(mapped[2])*255);
+            rgba[o+3]=job.settings.transparent?0:255;
+          }
+        }
+      }
+      try{window.ThreeDLiteRenderWindow3979?.tile?.(job,width,height,rgba,tile,{total:tiles16.length});}catch(_){}
+      perf16.yields++;
+    },onProgress);
+    RenderCoreH.markStage(job,'render',renderStart16);
+    if(LiteTraceExecutionContext.performance===perf16){LiteTraceExecutionContext.activeJob=null;LiteTraceExecutionContext.performance=null;}
+    job.renderChannels=aovs;
+    return {
+      width,height,rgba,
+      channels:aovs,
+      metadata:Object.freeze({
+        renderer:'Part 4 Fast Direct',
+        materialCount:compiled.materials.list.length,
+        lightCount:compiled.lights.length,
+        toneMapping:'ACES',
+        colorSpace:'sRGB output / linear shading',
+        diagnostics:RenderPart4Core.diagnostics(job,compiled,acceleration),
+        performance:RenderCoreH.performance(job)
+      })
+    };
+  }
+});
+
+
+/* ============================================================
+   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — CORE C
+   CLEAN GROUP 5 + GROUP 6 CONSOLIDATION
+   ============================================================ */
+var RenderCoreC=Object.freeze({
+  version:'3.79.09-core-c',
+
+  compileScene(renderScene,settings){
+    const materials=RenderMaterialLibrary.compile(renderScene);
+    const lights=BasicRenderLighting.create(renderScene,settings);
+    return Object.freeze({materials,lights});
+  },
+
+  evaluateDirect(job,acceleration,compiled,ray,hit,pixelSeed=1,options={}){
+    return DirectLightingIntegrator.evaluate(job,acceleration,compiled,ray,hit,pixelSeed,options);
+  },
+
+  validate(){
+    const errors=[];
+    const g5=validateRenderGroup5();if(!g5.ok)errors.push(...g5.errors);
+    const g6=validateRenderGroup6();if(!g6.ok)errors.push(...g6.errors);
+    if(typeof this.compileScene!=='function')errors.push('Core C scene compiler missing');
+    if(typeof this.evaluateDirect!=='function')errors.push('Core C direct evaluator missing');
+    return {ok:errors.length===0,errors};
+  }
+});
+window.RenderCoreC=RenderCoreC;
+
+const RenderGroup5Contract=Object.freeze({
+  owns:Object.freeze([
+    'render material compilation',
+    'linear color conversion',
+    'GGX physical BRDF',
+    'basic direct directional lighting',
+    'basic environment fill',
+    'tone mapping and display conversion',
+    'barycentric shading-normal interpolation'
+  ]),
+  consumes:Object.freeze([
+    'Core A material snapshots',
+    'Core B ray/BVH hit data',
+    'Core A render settings'
+  ]),
+  doesNotOwn:Object.freeze([
+    'editor viewport materials',
+    'full scene light object system',
+    'shadow visibility',
+    'area-light sampling',
+    'path GI',
+    'light cache',
+    'denoising'
+  ])
+});
+
+function runRenderGroup5SelfTests(){
+  const errors=[];
+  const approx=(a,b,e=1e-4)=>Math.abs(a-b)<=e;
+
+  const white=RenderColor.srgbToLinear([1,1,1]);
+  if(!approx(white[0],1)||!approx(white[1],1)||!approx(white[2],1))errors.push('sRGB white conversion failed');
+
+  const mat=new RenderSurfaceMaterial({
+    id:'t',name:'t',shading:'physical',baseColor:[.8,.3,.2],
+    roughness:.5,metalness:0,opacity:1,emissive:[0,0,0],emissiveIntensity:0
+  });
+  const brdf=PhysicalBSDF.evaluate(mat,[0,0,1],[0,0,1],[0,0,1]);
+  if(brdf.some(x=>!Number.isFinite(x)||x<0))errors.push('Physical BRDF finite/positive test failed');
+
+  const metallic=new RenderSurfaceMaterial({
+    id:'m',name:'m',shading:'physical',baseColor:[.9,.7,.2],
+    roughness:.25,metalness:1,opacity:1,emissive:[0,0,0],emissiveIntensity:0
+  });
+  const mb=PhysicalBSDF.evaluate(metallic,[0,0,1],[0,0,1],[0,0,1]);
+  if(mb.some(x=>!Number.isFinite(x)||x<0))errors.push('Metallic BRDF test failed');
+
+  const tm=RenderColor.aces([10,3,1]);
+  if(tm.some(x=>x<0||x>1||!Number.isFinite(x)))errors.push('Tone mapping range test failed');
+
+  return {ok:errors.length===0,errors};
+}
+window.runRenderGroup5SelfTests=runRenderGroup5SelfTests;
+
+function validateRenderGroup5(){
+  const errors=[];
+  if(typeof RenderSurfaceMaterial!=='function')errors.push('RenderSurfaceMaterial missing');
+  if(typeof PhysicalBSDF.evaluate!=='function')errors.push('PhysicalBSDF missing');
+  if(typeof BasicDirectRenderer.render!=='function')errors.push('BasicDirectRenderer missing');
+  if(typeof SurfaceInterpolator.normal!=='function')errors.push('SurfaceInterpolator missing');
+  const tests=runRenderGroup5SelfTests();if(!tests.ok)errors.push(...tests.errors);
+  return {ok:errors.length===0,errors};
+}
+
+Object.assign(window,{
+  RenderColor,RenderSurfaceMaterial,RenderMaterialLibrary,
+  RenderDirectionalLight,RenderAmbientLight,BasicRenderLighting,
+  PhysicalBSDF,SurfaceInterpolator,BasicDirectRenderer,RenderGroup5Contract
+});
+
+/* ============================================================
+   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 6
+   Full 3DLite Light System
+   ============================================================ */
+const LightTypes=Object.freeze(['point','spot','rectangle','disc','sphere','sun','dome','mesh']);
+
+const LightDefaults=Object.freeze({
+  point:Object.freeze({intensity:10,size:2,range:0,coneAngle:45,penumbra:.15}),
+  spot:Object.freeze({intensity:25,size:2,range:0,coneAngle:45,penumbra:.15}),
+  rectangle:Object.freeze({intensity:15,size:25,width:50,height:50,range:0,coneAngle:90,penumbra:0}),
+  disc:Object.freeze({intensity:15,size:25,range:0,coneAngle:90,penumbra:0}),
+  sphere:Object.freeze({intensity:15,size:25,range:0,coneAngle:180,penumbra:0}),
+  sun:Object.freeze({intensity:3,size:.5,range:0,coneAngle:.53,penumbra:0}),
+  dome:Object.freeze({intensity:1,size:100,range:0,coneAngle:180,penumbra:0}),
+  mesh:Object.freeze({intensity:10,size:25,range:0,coneAngle:180,penumbra:0})
+});
+
+var EditorLightSystem={
+  nextId:1,
+  isLightObject(obj){return !!obj?.userData?.renderLight},
+
+  iconGeometry(type,size){
+    const s=Math.max(2,Math.min(30,Number(size)||10));
+    if(type==='rectangle')return new THREE.BoxGeometry(s*1.4,s*.08,s);
+    if(type==='disc')return new THREE.CylinderGeometry(s*.55,s*.55,s*.08,16);
+    if(type==='sphere'||type==='dome')return new THREE.SphereGeometry(s*.45,10,6);
+    if(type==='spot')return new THREE.ConeGeometry(s*.35,s*.8,12);
+    if(type==='sun')return new THREE.CylinderGeometry(s*.45,s*.45,s*.08,16);
+    if(type==='mesh')return new THREE.BoxGeometry(s*.8,s*.8,s*.08);
+    return new THREE.OctahedronGeometry(s*.4,0);
+  },
+
+  create(type,opts={}){
+    type=LightTypes.includes(type)?type:'point';
+    const d=LightDefaults[type]||LightDefaults.point;
+    const size=Math.max(.01,Number(opts.size??d.size??25));
+    const geometry=this.iconGeometry(type,size);
+    const color=new THREE.Color(opts.color||'#fff2c8');
+    const material=new THREE.MeshBasicMaterial({
+      color,wireframe:true,transparent:true,opacity:.9,
+      depthTest:true,depthWrite:false,toneMapped:false
+    });
+    const obj=new THREE.Mesh(geometry,material);
+    obj.name=(type[0].toUpperCase()+type.slice(1))+' Light '+this.nextId++;
+    obj.userData.renderLight={
+      id:'light-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7),
+      type,
+      enabled:opts.enabled!==false,
+      color:'#'+color.getHexString(),
+      intensity:Math.max(0,Number(opts.intensity??d.intensity??10)),
+      range:Math.max(0,Number(opts.range??d.range??0)),
+      size,
+      width:Math.max(.01,Number(opts.width??d.width??size*2)),
+      height:Math.max(.01,Number(opts.height??d.height??size*2)),
+      coneAngle:Math.max(1,Math.min(179,Number(opts.coneAngle??d.coneAngle??45))),
+      penumbra:Math.max(0,Math.min(1,Number(opts.penumbra??d.penumbra??.15))),
+      castShadows:opts.castShadows!==false,
+      renderOnly:true
+    };
+    obj.userData.isRenderLight=true;
+    obj.position.set(0,0,Math.max(20,size));
+    if(type==='sun'||type==='spot'||type==='rectangle'||type==='disc'||type==='mesh'){
+      obj.rotation.x=-Math.PI*.25;
+    }
+    scene.add(obj);objects.push(obj);
+    window.__3DLiteLightRevision=(window.__3DLiteLightRevision||0)+1;
+    selectOnly(obj);
+    refreshModifyPanel();
+    requestRender();
+    return obj;
+  },
+
+  updateIcon(obj){
+    if(!this.isLightObject(obj))return;
+    const l=obj.userData.renderLight;
+    const old=obj.geometry;
+    obj.geometry=this.iconGeometry(l.type,l.size);
+    old?.dispose?.();
+    if(obj.material?.color)obj.material.color.set(l.color||'#ffffff');
+    requestRender();
+  },
+
+  serialize(obj){
+    if(!this.isLightObject(obj))return null;
+    obj.updateMatrixWorld(true);
+    const l=obj.userData.renderLight;
+    const q=obj.getWorldQuaternion(new THREE.Quaternion());
+    const p=obj.getWorldPosition(new THREE.Vector3());
+    const dir=new THREE.Vector3(0,0,-1).applyQuaternion(q).normalize();
+    return {
+      id:l.id||obj.uuid,
+      name:obj.name||'Light',
+      type:l.type,
+      enabled:l.enabled!==false&&obj.visible!==false,
+      color:l.color||'#ffffff',
+      intensity:Math.max(0,Number(l.intensity)||0),
+      range:Math.max(0,Number(l.range)||0),
+      size:Math.max(.01,Number(l.size)||.01),
+      width:Math.max(.01,Number(l.width)||.01),
+      height:Math.max(.01,Number(l.height)||.01),
+      coneAngle:Math.max(1,Math.min(179,Number(l.coneAngle)||45)),
+      penumbra:Math.max(0,Math.min(1,Number(l.penumbra)||0)),
+      castShadows:l.castShadows!==false,
+      position:p.toArray(),
+      quaternion:q.toArray(),
+      direction:dir.toArray()
+    };
+  }
+};
+
+var LightSnapshotTools=Object.freeze({
+  fromEditorObject(obj){
+    const d=EditorLightSystem.serialize(obj);
+    return d?new RenderLightSnapshot(d):null;
+  }
+});
+
+const RenderLightPolicy=Object.freeze({
+  supported:Object.freeze(['point','spot','rectangle','disc','sphere','sun','dome','mesh']),
+  minLinearSize:0.01,
+  minArea:1e-4,
+  finite3(a,fallback=[0,0,0]){
+    if(!Array.isArray(a)||a.length<3||a.slice(0,3).some(v=>!Number.isFinite(Number(v))))return fallback.slice();
+    return a.slice(0,3).map(Number);
+  },
+  type(t){return this.supported.includes(t)?t:'point';},
+  scalar(v,fallback=0,min=-Infinity,max=Infinity){
+    v=Number(v);if(!Number.isFinite(v))v=fallback;
+    return Math.max(min,Math.min(max,v));
+  },
+  area(light){
+    if(light.type==='rectangle'||light.type==='mesh')return Math.max(this.minArea,light.width*light.height);
+    if(light.type==='disc')return Math.max(this.minArea,Math.PI*Math.pow(light.size*.5,2));
+    if(light.type==='sphere')return Math.max(this.minArea,4*Math.PI*Math.pow(light.size*.5,2));
+    return 1;
+  }
+});
+
+class RenderSceneLight{
+  constructor(snapshot){
+    this.id=String(snapshot.id||'light');
+    this.name=String(snapshot.name||'Light');
+    this.type=RenderLightPolicy.type(snapshot.type);
+    this.enabled=snapshot.enabled!==false;
+    this.color=Object.freeze(RenderColor.hexToLinear(snapshot.color||'#ffffff'));
+    this.intensity=RenderLightPolicy.scalar(snapshot.intensity,0,0,1e12);
+    this.range=RenderLightPolicy.scalar(snapshot.range,0,0,1e12);
+    this.size=RenderLightPolicy.scalar(snapshot.size,1,RenderLightPolicy.minLinearSize,1e9);
+    this.width=RenderLightPolicy.scalar(snapshot.width,1,RenderLightPolicy.minLinearSize,1e9);
+    this.height=RenderLightPolicy.scalar(snapshot.height,1,RenderLightPolicy.minLinearSize,1e9);
+    this.coneAngle=RenderLightPolicy.scalar(snapshot.coneAngle,45,1,179)*Math.PI/180;
+    this.penumbra=RenderLightPolicy.scalar(snapshot.penumbra,0,0,1);
+    this.castShadows=snapshot.castShadows!==false;
+    this.position=Object.freeze(RenderLightPolicy.finite3(snapshot.position,[0,0,0]));
+    const rawDir=RenderLightPolicy.finite3(snapshot.direction,[0,0,-1]);
+    let dir=RayMath.normalize(rawDir);
+    if(!dir.every(Number.isFinite)||RayMath.length(dir)<1e-10)dir=[0,0,-1];
+    this.direction=Object.freeze(dir);
+    Object.freeze(this);
+  }
+}
+
+var SceneLightCompiler=Object.freeze({
+  compile(renderScene){
+    const compiled=[];
+    for(const snapshot of (renderScene?.lights||[])){
+      if(snapshot?.enabled===false)continue;
+      try{compiled.push(new RenderSceneLight(snapshot));}
+      catch(err){throw new LightError(`${snapshot?.name||snapshot?.id||'Light'}: ${String(err?.message||err)}`,err);}
+    }
+    return Object.freeze(compiled);
+  }
+});
+
+const DirectLightSampler=Object.freeze({
+  sample(light,point){
+    if(light.type==='dome'){
+      return {kind:'ambient',direction:null,distance:Infinity,radiance:RenderColor.mul(light.color,light.intensity)};
+    }
+    if(light.type==='sun'){
+      return {kind:'directional',direction:RayMath.mul(light.direction,-1),distance:Infinity,radiance:RenderColor.mul(light.color,light.intensity)};
+    }
+
+    const to=RayMath.sub(light.position,point);
+    const dist=Math.max(RayMath.length(to),1e-4);
+    const dir=RayMath.mul(to,1/dist);
+    let attenuation=1/(dist*dist);
+
+    if(light.range>0){
+      if(dist>=light.range)return {kind:'local',direction:dir,distance:dist,radiance:[0,0,0]};
+      const f=Math.max(0,1-dist/light.range);
+      attenuation*=f*f;
+    }
+
+    if(light.type==='spot'){
+      const fromLight=RayMath.mul(dir,-1);
+      const cosTheta=RayMath.dot(light.direction,fromLight);
+      const outer=Math.cos(light.coneAngle*.5);
+      const inner=Math.cos(light.coneAngle*.5*(1-light.penumbra));
+      const cone=inner<=outer?(cosTheta>=outer?1:0):Math.max(0,Math.min(1,(cosTheta-outer)/(inner-outer)));
+      if(cone<=0)return {kind:'local',direction:dir,distance:dist,radiance:[0,0,0]};
+      attenuation*=cone;
+    }
+
+    // Area emitters use center-point evaluation in Group 6.
+    // Group 7 replaces this with actual surface sampling + visibility.
+    const areaScale=
+      light.type==='rectangle'?Math.max(.01,light.width*light.height):
+      light.type==='disc'?Math.max(.01,Math.PI*light.size*light.size*.25):
+      light.type==='sphere'?Math.max(.01,4*Math.PI*Math.pow(light.size*.5,2)):
+      light.type==='mesh'?Math.max(.01,light.width*light.height):
+      1;
+
+    if(['rectangle','disc','sphere','mesh'].includes(light.type))attenuation*=Math.sqrt(areaScale);
+
+    return {
+      kind:'local',
+      direction:dir,
+      distance:dist,
+      radiance:RenderColor.mul(light.color,light.intensity*attenuation)
+    };
+  }
+});
+
+function updateSelectedLightPanel(){
+  const section=document.getElementById('lightModifySection');
+  if(!section)return;
+  const obj=selected;
+  const isLight=EditorLightSystem.isLightObject(obj);
+  section.style.display=isLight?'':'none';
+  if(!isLight)return;
+
+  const l=obj.userData.renderLight;
+  const set=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v};
+  set('lightTypeReadout',l.type);
+  set('lightIntensity',l.intensity);
+  set('lightColor',l.color);
+  set('lightRange',l.range);
+  set('lightSize',l.size);
+  set('lightWidth',l.width);
+  set('lightHeight',l.height);
+  set('lightConeAngle',l.coneAngle);
+  set('lightPenumbra',l.penumbra);
+  const en=document.getElementById('lightEnabled');if(en)en.checked=l.enabled!==false;
+  const sh=document.getElementById('lightCastShadows');if(sh)sh.checked=l.castShadows!==false;
+}
+
+function markRenderLightDirty(){
+  window.__3DLiteLightRevision=(window.__3DLiteLightRevision||0)+1;
+  requestRender();
+}
+
+function bindLightUI(){
+  document.querySelectorAll('[data-light-create]').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      EditorLightSystem.create(btn.dataset.lightCreate,{
+        intensity:Number(document.getElementById('newLightIntensity')?.value)||10,
+        color:document.getElementById('newLightColor')?.value||'#ffffff',
+        size:Number(document.getElementById('newLightSize')?.value)||25,
+        range:Number(document.getElementById('newLightRange')?.value)||0
+      });
+    });
+  });
+
+  const bindings=[
+    ['lightIntensity','intensity','number'],
+    ['lightColor','color','string'],
+    ['lightRange','range','number'],
+    ['lightSize','size','number'],
+    ['lightWidth','width','number'],
+    ['lightHeight','height','number'],
+    ['lightConeAngle','coneAngle','number'],
+    ['lightPenumbra','penumbra','number']
+  ];
+
+  for(const [id,key,kind] of bindings){
+    document.getElementById(id)?.addEventListener('change',e=>{
+      if(!EditorLightSystem.isLightObject(selected))return;
+      selected.userData.renderLight[key]=kind==='number'?Number(e.target.value):e.target.value;
+      if(key==='size'||key==='color')EditorLightSystem.updateIcon(selected);
+      markRenderLightDirty();
+    });
+  }
+
+  document.getElementById('lightEnabled')?.addEventListener('change',e=>{
+    if(EditorLightSystem.isLightObject(selected)){
+      selected.userData.renderLight.enabled=!!e.target.checked;
+      markRenderLightDirty();
+    }
+  });
+  document.getElementById('lightCastShadows')?.addEventListener('change',e=>{
+    if(EditorLightSystem.isLightObject(selected)){
+      selected.userData.renderLight.castShadows=!!e.target.checked;
+      markRenderLightDirty();
+    }
+  });
+}
+
+const RenderGroup6Contract=Object.freeze({
+  owns:Object.freeze([
+    'editor render-light objects',
+    'Point/Spot/Rectangle/Disc/Sphere/Sun/Dome/Mesh light data',
+    'light creation UI',
+    'light modify UI',
+    'immutable light snapshot extraction',
+    'renderer light compilation',
+    'direct light sampling interface'
+  ]),
+  consumes:Object.freeze([
+    'editor transform system',
+    'Core A RenderScene snapshots',
+    'Group 5 direct BRDF'
+  ]),
+  doesNotOwn:Object.freeze([
+    'shadow-ray visibility',
+    'area-light stochastic sampling',
+    'path GI',
+    'light cache',
+    'path guiding'
+  ])
+});
+
+function runRenderGroup6SelfTests(){
+  const errors=[];
+  const point=new RenderSceneLight({
+    id:'p',name:'p',type:'point',===== DirectLightingIntegrator @ 310202 =====
+;
+    if(material.shading==='unlit'){
+      return RenderColor.add(material.baseColor,RenderColor.mul(material.emissive,material.emissiveIntensity));
+    }
+
+    const n=SurfaceInterpolator.normal(acceleration,hit);
+    const v=RayMath.mul(ray.direction,-1);
+    let color=RenderColor.mul(material.emissive,material.emissiveIntensity);
+
+    for(const light of lights){
+      const sample=DirectLightSampler.sample(light,hit.position);
+      if(sample.kind==='ambient'){
+        const diffuse=RenderColor.mul(material.baseColor,(1-material.metalness)/Math.PI);
+        color=RenderColor.add(color,RenderColor.mul(RenderColor.mul(diffuse,sample.radiance),Math.PI));
+      }else{
+        const brdf=PhysicalBSDF.evaluate(material,n,v,sample.direction);
+        color=RenderColor.add(color,RenderColor.mul(brdf,sample.radiance));
+      }
+    }
+    return color;
+  },
+
+  async render(job,acceleration,onProgress=()=>{}){
+    const rr=RenderRegion14.resolve(job,640,360);
+    const width=rr.width,height=rr.height;
+
+    const rgba=new Uint8ClampedArray(width*height*4);
+    const aovs=new RenderAOVSet(width,height);
+    const compiled=RenderPart4Core.compile(job);
+    const backgroundFallback=RenderColor.hexToLinear(job.settings.background||'#202020');
+    const perf16=RenderCoreH.attachPerformance(job);
+    const primaryBatch16=new RenderRayBatch16(Math.max(32,RenderCoreH.tileSize(job)*RenderCoreH.tileSize(job)));
+    const rowChunk=RenderCoreH.yieldRows(job);
+    const renderStart16=RenderProfiler16.begin();
+    LiteTraceExecutionContext.activeJob=job;LiteTraceExecutionContext.performance=perf16;
+
+    const tiles16=RenderTileScheduler16.makeTiles(width,height,RenderCoreH.tileSize(job));
+    await RenderTileScheduler16.runLocal(job,tiles16,async tile=>{
+      for(let y=tile.y;y<tile.y+tile.height;y++){
+        for(let x=tile.x;x<tile.x+tile.width;x++){
+          const ray=RenderCameraRayGenerator.ray(
+            job.renderScene.camera,
+            rr.x0+x,rr.y0+y,
+            rr.fullW,rr.fullH
+          );
+          const hit=acceleration.trace(ray);
+          const o=(y*width+x)*4;
+  
+          if(hit.hit){
+            const pixelSeed=((y*width+x+1)>>>0);
+            const linear=RenderPart4Core.evaluate(job,acceleration,compiled,ray,hit,pixelSeed);
+            RenderAOVUtil.writePrimary(aovs,y*width+x,RenderAOVUtil.primary(job,acceleration,compiled,ray,hit,pixelSeed));
+            aovs.set3('Beauty',y*width+x,linear);
+            aovs.set3('Global Illumination',y*width+x,[0,0,0]);
+            aovs.set1('Noise',y*width+x,0);
+            const mapped=RenderColor.linearToSrgb(RenderColor.aces(linear));
+            rgba[o]=Math.round(RenderColor.clamp01(mapped[0])*255);
+            rgba[o+1]=Math.round(RenderColor.clamp01(mapped[1])*255);
+            rgba[o+2]=Math.round(RenderColor.clamp01(mapped[2])*255);
+            rgba[o+3]=255;
+          }else{
+            const env=RenderPart4Core.environment(job,compiled,ray.direction)||backgroundFallback;
+            RenderAOVUtil.writePrimary(aovs,y*width+x,null);
+            aovs.set3('Beauty',y*width+x,env);
+            aovs.set3('Global Illumination',y*width+x,env);
+            aovs.set1('Noise',y*width+x,0);
+            const mapped=RenderColor.linearToSrgb(RenderColor.aces(env));
+            rgba[o]=Math.round(RenderColor.clamp01(mapped[0])*255);
+            rgba[o+1]=Math.round(RenderColor.clamp01(mapped[1])*255);
+            rgba[o+2]=Math.round(RenderColor.clamp01(mapped[2])*255);
+            rgba[o+3]=job.settings.transparent?0:255;
+          }
+        }
+      }
+      try{window.ThreeDLiteRenderWindow3979?.tile?.(job,width,height,rgba,tile,{total:tiles16.length});}catch(_){}
+      perf16.yields++;
+    },onProgress);
+    RenderCoreH.markStage(job,'render',renderStart16);
+    if(LiteTraceExecutionContext.performance===perf16){LiteTraceExecutionContext.activeJob=null;LiteTraceExecutionContext.performance=null;}
+    job.renderChannels=aovs;
+    return {
+      width,height,rgba,
+      channels:aovs,
+      metadata:Object.freeze({
+        renderer:'Part 4 Fast Direct',
+        materialCount:compiled.materials.list.length,
+        lightCount:compiled.lights.length,
+        toneMapping:'ACES',
+        colorSpace:'sRGB output / linear shading',
+        diagnostics:RenderPart4Core.diagnostics(job,compiled,acceleration),
+        performance:RenderCoreH.performance(job)
+      })
+    };
+  }
+});
+
+
+/* ============================================================
+   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — CORE C
+   CLEAN GROUP 5 + GROUP 6 CONSOLIDATION
+   ============================================================ */
+var RenderCoreC=Object.freeze({
+  version:'3.79.09-core-c',
+
+  compileScene(renderScene,settings){
+    const materials=RenderMaterialLibrary.compile(renderScene);
+    const lights=BasicRenderLighting.create(renderScene,settings);
+    return Object.freeze({materials,lights});
+  },
+
+  evaluateDirect(job,acceleration,compiled,ray,hit,pixelSeed=1,options={}){
+    return DirectLightingIntegrator.evaluate(job,acceleration,compiled,ray,hit,pixelSeed,options);
+  },
+
+  validate(){
+    const errors=[];
+    const g5=validateRenderGroup5();if(!g5.ok)errors.push(...g5.errors);
+    const g6=validateRenderGroup6();if(!g6.ok)errors.push(...g6.errors);
+    if(typeof this.compileScene!=='function')errors.push('Core C scene compiler missing');
+    if(typeof this.evaluateDirect!=='function')errors.push('Core C direct evaluator missing');
+    return {ok:errors.length===0,errors};
+  }
+});
+window.RenderCoreC=RenderCoreC;
+
+const RenderGroup5Contract=Object.freeze({
+  owns:Object.freeze([
+    'render material compilation',
+    'linear color conversion',
+    'GGX physical BRDF',
+    'basic direct directional lighting',
+    'basic environment fill',
+    'tone mapping and display conversion',
+    'barycentric shading-normal interpolation'
+  ]),
+  consumes:Object.freeze([
+    'Core A material snapshots',
+    'Core B ray/BVH hit data',
+    'Core A render settings'
+  ]),
+  doesNotOwn:Object.freeze([
+    'editor viewport materials',
+    'full scene light object system',
+    'shadow visibility',
+    'area-light sampling',
+    'path GI',
+    'light cache',
+    'denoising'
+  ])
+});
+
+function runRenderGroup5SelfTests(){
+  const errors=[];
+  const approx=(a,b,e=1e-4)=>Math.abs(a-b)<=e;
+
+  const white=RenderColor.srgbToLinear([1,1,1]);
+  if(!approx(white[0],1)||!approx(white[1],1)||!approx(white[2],1))errors.push('sRGB white conversion failed');
+
+  const mat=new RenderSurfaceMaterial({
+    id:'t',name:'t',shading:'physical',baseColor:[.8,.3,.2],
+    roughness:.5,metalness:0,opacity:1,emissive:[0,0,0],emissiveIntensity:0
+  });
+  const brdf=PhysicalBSDF.evaluate(mat,[0,0,1],[0,0,1],[0,0,1]);
+  if(brdf.some(x=>!Number.isFinite(x)||x<0))errors.push('Physical BRDF finite/positive test failed');
+
+  const metallic=new RenderSurfaceMaterial({
+    id:'m',name:'m',shading:'physical',baseColor:[.9,.7,.2],
+    roughness:.25,metalness:1,opacity:1,emissive:[0,0,0],emissiveIntensity:0
+  });
+  const mb=PhysicalBSDF.evaluate(metallic,[0,0,1],[0,0,1],[0,0,1]);
+  if(mb.some(x=>!Number.isFinite(x)||x<0))errors.push('Metallic BRDF test failed');
+
+  const tm=RenderColor.aces([10,3,1]);
+  if(tm.some(x=>x<0||x>1||!Number.isFinite(x)))errors.push('Tone mapping range test failed');
+
+  return {ok:errors.length===0,errors};
+}
+window.runRenderGroup5SelfTests=runRenderGroup5SelfTests;
+
+function validateRenderGroup5(){
+  const errors=[];
+  if(typeof RenderSurfaceMaterial!=='function')errors.push('RenderSurfaceMaterial missing');
+  if(typeof PhysicalBSDF.evaluate!=='function')errors.push('PhysicalBSDF missing');
+  if(typeof BasicDirectRenderer.render!=='function')errors.push('BasicDirectRenderer missing');
+  if(typeof SurfaceInterpolator.normal!=='function')errors.push('SurfaceInterpolator missing');
+  const tests=runRenderGroup5SelfTests();if(!tests.ok)errors.push(...tests.errors);
+  return {ok:errors.length===0,errors};
+}
+
+Object.assign(window,{
+  RenderColor,RenderSurfaceMaterial,RenderMaterialLibrary,
+  RenderDirectionalLight,RenderAmbientLight,BasicRenderLighting,
+  PhysicalBSDF,SurfaceInterpolator,BasicDirectRenderer,RenderGroup5Contract
+});
+
+/* ============================================================
+   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 6
+   Full 3DLite Light System
+   ============================================================ */
+const LightTypes=Object.freeze(['point','spot','rectangle','disc','sphere','sun','dome','mesh']);
+
+const LightDefaults=Object.freeze({
+  point:Object.freeze({intensity:10,size:2,range:0,coneAngle:45,penumbra:.15}),
+  spot:Object.freeze({intensity:25,size:2,range:0,coneAngle:45,penumbra:.15}),
+  rectangle:Object.freeze({intensity:15,size:25,width:50,height:50,range:0,coneAngle:90,penumbra:0}),
+  disc:Object.freeze({intensity:15,size:25,range:0,coneAngle:90,penumbra:0}),
+  sphere:Object.freeze({intensity:15,size:25,range:0,coneAngle:180,penumbra:0}),
+  sun:Object.freeze({intensity:3,size:.5,range:0,coneAngle:.53,penumbra:0}),
+  dome:Object.freeze({intensity:1,size:100,range:0,coneAngle:180,penumbra:0}),
+  mesh:Object.freeze({intensity:10,size:25,range:0,coneAngle:180,penumbra:0})
+});
+
+var EditorLightSystem={
+  nextId:1,
+  isLightObject(obj){return !!obj?.userData?.renderLight},
+
+  iconGeometry(type,size){
+    const s=Math.max(2,Math.min(30,Number(size)||10));
+    if(type==='rectangle')return new THREE.BoxGeometry(s*1.4,s*.08,s);
+    if(type==='disc')return new THREE.CylinderGeometry(s*.55,s*.55,s*.08,16);
+    if(type==='sphere'||type==='dome')return new THREE.SphereGeometry(s*.45,10,6);
+    if(type==='spot')return new THREE.ConeGeometry(s*.35,s*.8,12);
+    if(type==='sun')return new THREE.CylinderGeometry(s*.45,s*.45,s*.08,16);
+    if(type==='mesh')return new THREE.BoxGeometry(s*.8,s*.8,s*.08);
+    return new THREE.OctahedronGeometry(s*.4,0);
+  },
+
+  create(type,opts={}){
+    type=LightTypes.includes(type)?type:'point';
+    const d=LightDefaults[type]||LightDefaults.point;
+    const size=Math.max(.01,Number(opts.size??d.size??25));
+    const geometry=this.iconGeometry(type,size);
+    const color=new THREE.Color(opts.color||'#fff2c8');
+    const material=new THREE.MeshBasicMaterial({
+      color,wireframe:true,transparent:true,opacity:.9,
+      depthTest:true,depthWrite:false,toneMapped:false
+    });
+    const obj=new THREE.Mesh(geometry,material);
+    obj.name=(type[0].toUpperCase()+type.slice(1))+' Light '+this.nextId++;
+    obj.userData.renderLight={
+      id:'light-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7),
+      type,
+      enabled:opts.enabled!==false,
+      color:'#'+color.getHexString(),
+      intensity:Math.max(0,Number(opts.intensity??d.intensity??10)),
+      range:Math.max(0,Number(opts.range??d.range??0)),
+      size,
+      width:Math.max(.01,Number(opts.width??d.width??size*2)),
+      height:Math.max(.01,Number(opts.height??d.height??size*2)),
+      coneAngle:Math.max(1,Math.min(179,Number(opts.coneAngle??d.coneAngle??45))),
+      penumbra:Math.max(0,Math.min(1,Number(opts.penumbra??d.penumbra??.15))),
+      castShadows:opts.castShadows!==false,
+      renderOnly:true
+    };
+    obj.userData.isRenderLight=true;
+    obj.position.set(0,0,Math.max(20,size));
+    if(type==='sun'||type==='spot'||type==='rectangle'||type==='disc'||type==='mesh'){
+      obj.rotation.x=-Math.PI*.25;
+    }
+    scene.add(obj);objects.push(obj);
+    window.__3DLiteLightRevision=(window.__3DLiteLightRevision||0)+1;
+    selectOnly(obj);
+    refreshModifyPanel();
+    requestRender();
+    return obj;
+  },
+
+  updateIcon(obj){
+    if(!this.isLightObject(obj))return;
+    const l=obj.userData.renderLight;
+    const old=obj.geometry;
+    obj.geometry=this.iconGeometry(l.type,l.size);
+    old?.dispose?.();
+    if(obj.material?.color)obj.material.color.set(l.color||'#ffffff');
+    requestRender();
+  },
+
+  serialize(obj){
+    if(!this.isLightObject(obj))return null;
+    obj.updateMatrixWorld(true);
+    const l=obj.userData.renderLight;
+    const q=obj.getWorldQuaternion(new THREE.Quaternion());
+    const p=obj.getWorldPosition(new THREE.Vector3());
+    const dir=new THREE.Vector3(0,0,-1).applyQuaternion(q).normalize();
+    return {
+      id:l.id||obj.uuid,
+      name:obj.name||'Light',
+      type:l.type,
+      enabled:l.enabled!==false&&obj.visible!==false,
+      color:l.color||'#ffffff',
+      intensity:Math.max(0,Number(l.intensity)||0),
+      range:Math.max(0,Number(l.range)||0),
+      size:Math.max(.01,Number(l.size)||.01),
+      width:Math.max(.01,Number(l.width)||.01),
+      height:Math.max(.01,Number(l.height)||.01),
+      coneAngle:Math.max(1,Math.min(179,Number(l.coneAngle)||45)),
+      penumbra:Math.max(0,Math.min(1,Number(l.penumbra)||0)),
+      castShadows:l.castShadows!==false,
+      position:p.toArray(),
+      quaternion:q.toArray(),
+      direction:dir.toArray()
+    };
+  }
+};
+
+var LightSnapshotTools=Object.freeze({
+  fromEditorObject(obj){
+    const d=EditorLightSystem.serialize(obj);
+    return d?new RenderLightSnapshot(d):null;
+  }
+});
+
+const RenderLightPolicy=Object.freeze({
+  supported:Object.freeze(['point','spot','rectangle','disc','sphere','sun','dome','mesh']),
+  minLinearSize:0.01,
+  minArea:1e-4,
+  finite3(a,fallback=[0,0,0]){
+    if(!Array.isArray(a)||a.length<3||a.slice(0,3).some(v=>!Number.isFinite(Number(v))))return fallback.slice();
+    return a.slice(0,3).map(Number);
+  },
+  type(t){return this.supported.includes(t)?t:'point';},
+  scalar(v,fallback=0,min=-Infinity,max=Infinity){
+    v=Number(v);if(!Number.isFinite(v))v=fallback;
+    return Math.max(min,Math.min(max,v));
+  },
+  area(light){
+    if(light.type==='rectangle'||light.type==='mesh')return Math.max(this.minArea,light.width*light.height);
+    if(light.type==='disc')return Math.max(this.minArea,Math.PI*Math.pow(light.size*.5,2));
+    if(light.type==='sphere')return Math.max(this.minArea,4*Math.PI*Math.pow(light.size*.5,2));
+    return 1;
+  }
+});
+
+class RenderSceneLight{
+  constructor(snapshot){
+    this.id=String(snapshot.id||'light');
+    this.name=String(snapshot.name||'Light');
+    this.type=RenderLightPolicy.type(snapshot.type);
+    this.enabled=snapshot.enabled!==false;
+    this.color=Object.freeze(RenderColor.hexToLinear(snapshot.color||'#ffffff'));
+    this.intensity=RenderLightPolicy.scalar(snapshot.intensity,0,0,1e12);
+    this.range=RenderLightPolicy.scalar(snapshot.range,0,0,1e12);
+    this.size=RenderLightPolicy.scalar(snapshot.size,1,RenderLightPolicy.minLinearSize,1e9);
+    this.width=RenderLightPolicy.scalar(snapshot.width,1,RenderLightPolicy.minLinearSize,1e9);
+    this.height=RenderLightPolicy.scalar(snapshot.height,1,RenderLightPolicy.minLinearSize,1e9);
+    this.coneAngle=RenderLightPolicy.scalar(snapshot.coneAngle,45,1,179)*Math.PI/180;
+    this.penumbra=RenderLightPolicy.scalar(snapshot.penumbra,0,0,1);
+    this.castShadows=snapshot.castShadows!==false;
+    this.position=Object.freeze(RenderLightPolicy.finite3(snapshot.position,[0,0,0]));
+    const rawDir=RenderLightPolicy.finite3(snapshot.direction,[0,0,-1]);
+    let dir=RayMath.normalize(rawDir);
+    if(!dir.every(Number.isFinite)||RayMath.length(dir)<1e-10)dir=[0,0,-1];
+    this.direction=Object.freeze(dir);
+    Object.freeze(this);
+  }
+}
+
+var SceneLightCompiler=Object.freeze({
+  compile(renderScene){
+    const compiled=[];
+    for(const snapshot of (renderScene?.lights||[])){
+      if(snapshot?.enabled===false)continue;
+      try{compiled.push(new RenderSceneLight(snapshot));}
+      catch(err){throw new LightError(`${snapshot?.name||snapshot?.id||'Light'}: ${String(err?.message||err)}`,err);}
+    }
+    return Object.freeze(compiled);
+  }
+});
+
+const DirectLightSampler=Object.freeze({
+  sample(light,point){
+    if(light.type==='dome'){
+      return {kind:'ambient',direction:null,distance:Infinity,radiance:RenderColor.mul(light.color,light.intensity)};
+    }
+    if(light.type==='sun'){
+      return {kind:'directional',direction:RayMath.mul(light.direction,-1),distance:Infinity,radiance:RenderColor.mul(light.color,light.intensity)};
+    }
+
+    const to=RayMath.sub(light.position,point);
+    const dist=Math.max(RayMath.length(to),1e-4);
+    const dir=RayMath.mul(to,1/dist);
+    let attenuation=1/(dist*dist);
+
+    if(light.range>0){
+      if(dist>=light.range)return {kind:'local',direction:dir,distance:dist,radiance:[0,0,0]};
+      const f=Math.max(0,1-dist/light.range);
+      attenuation*=f*f;
+    }
+
+    if(light.type==='spot'){
+      const fromLight=RayMath.mul(dir,-1);
+      const cosTheta=RayMath.dot(light.direction,fromLight);
+      const outer=Math.cos(light.coneAngle*.5);
+      const inner=Math.cos(light.coneAngle*.5*(1-light.penumbra));
+      const cone=inner<=outer?(cosTheta>=outer?1:0):Math.max(0,Math.min(1,(cosTheta-outer)/(inner-outer)));
+      if(cone<=0)return {kind:'local',direction:dir,distance:dist,radiance:[0,0,0]};
+      attenuation*=cone;
+    }
+
+    // Area emitters use center-point evaluation in Group 6.
+    // Group 7 replaces this with actual surface sampling + visibility.
+    const areaScale=
+      light.type==='rectangle'?Math.max(.01,light.width*light.height):
+      light.type==='disc'?Math.max(.01,Math.PI*light.size*light.size*.25):
+      light.type==='sphere'?Math.max(.01,4*Math.PI*Math.pow(light.size*.5,2)):
+      light.type==='mesh'?Math.max(.01,light.width*light.height):
+      1;
+
+    if(['rectangle','disc','sphere','mesh'].includes(light.type))attenuation*=Math.sqrt(areaScale);
+
+    return {
+      kind:'local',
+      direction:dir,
+      distance:dist,
+      radiance:RenderColor.mul(light.color,light.intensity*attenuation)
+    };
+  }
+});
+
+function updateSelectedLightPanel(){
+  const section=document.getElementById('lightModifySection');
+  if(!section)return;
+  const obj=selected;
+  const isLight=EditorLightSystem.isLightObject(obj);
+  section.style.display=isLight?'':'none';
+  if(!isLight)return;
+
+  const l=obj.userData.renderLight;
+  const set=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v};
+  set('lightTypeReadout',l.type);
+  set('lightIntensity',l.intensity);
+  set('lightColor',l.color);
+  set('lightRange',l.range);
+  set('lightSize',l.size);
+  set('lightWidth',l.width);
+  set('lightHeight',l.height);
+  set('lightConeAngle',l.coneAngle);
+  set('lightPenumbra',l.penumbra);
+  const en=document.getElementById('lightEnabled');if(en)en.checked=l.enabled!==false;
+  const sh=document.getElementById('lightCastShadows');if(sh)sh.checked=l.castShadows!==false;
+}
+
+function markRenderLightDirty(){
+  window.__3DLiteLightRevision=(window.__3DLiteLightRevision||0)+1;
+  requestRender();
+}
+
+function bindLightUI(){
+  document.querySelectorAll('[data-light-create]').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      EditorLightSystem.create(btn.dataset.lightCreate,{
+        intensity:Number(document.getElementById('newLightIntensity')?.value)||10,
+        color:document.getElementById('newLightColor')?.value||'#ffffff',
+        size:Number(document.getElementById('newLightSize')?.value)||25,
+        range:Nu
+
+===== DirectLightingIntegrator @ 333244 =====
+rea Sampling + Environment
+   ============================================================ */
+
+const RenderSampling=Object.freeze({
+  hash32(x){
+    x=(x|0)+0x6D2B79F5|0;
+    x=Math.imul(x^(x>>>15),x|1);
+    x^=x+Math.imul(x^(x>>>7),x|61);
+    return ((x^(x>>>14))>>>0)/4294967296;
+  },
+  sample2D(seed,index){
+    return [
+      this.hash32((seed*73856093)^(index*19349663)),
+      this.hash32((seed*83492791)^(index*2971215073))
+    ];
+  },
+  concentricDisk(u1,u2){
+    const sx=2*u1-1,sy=2*u2-1;
+    if(sx===0&&sy===0)return [0,0];
+    let r,theta;
+    if(Math.abs(sx)>Math.abs(sy)){
+      r=sx;theta=(Math.PI/4)*(sy/sx);
+    }else{
+      r=sy;theta=(Math.PI/2)-(Math.PI/4)*(sx/sy);
+    }
+    return [r*Math.cos(theta),r*Math.sin(theta)];
+  }
+});
+
+const LightBasis=Object.freeze({
+  fromDirection(direction){
+    const n=RayMath.normalize(direction);
+    const helper=Math.abs(n[2])<.999?[0,0,1]:[0,1,0];
+    const tangent=RayMath.normalize(RayMath.cross(helper,n));
+    const bitangent=RayMath.cross(n,tangent);
+    return {n,tangent,bitangent};
+  },
+  pointOnRectangle(light,u,v){
+    const b=this.fromDirection(light.direction);
+    const du=(u-.5)*light.width,dv=(v-.5)*light.height;
+    return RayMath.add(light.position,RayMath.add(RayMath.mul(b.tangent,du),RayMath.mul(b.bitangent,dv)));
+  },
+  pointOnDisc(light,u,v){
+    const b=this.fromDirection(light.direction);
+    const d=RenderSampling.concentricDisk(u,v);
+    const r=light.size*.5;
+    return RayMath.add(light.position,RayMath.add(RayMath.mul(b.tangent,d[0]*r),RayMath.mul(b.bitangent,d[1]*r)));
+  },
+  pointOnSphere(light,u,v){
+    const z=1-2*u;
+    const r=Math.sqrt(Math.max(0,1-z*z));
+    const phi=2*Math.PI*v;
+    const local=[r*Math.cos(phi),r*Math.sin(phi),z];
+    return RayMath.add(light.position,RayMath.mul(local,light.size*.5));
+  }
+});
+
+const EnvironmentSampler=Object.freeze({
+  findDome(lights){return (lights||[]).find(l=>l.enabled!==false&&l.type==='dome')||null;},
+  radiance(light,direction){
+    if(!light||light.enabled===false||light.type!=='dome')return [0,0,0];
+    return RenderColor.mul(light.color,light.intensity);
+  },
+  background(renderScene,settings,lights,rayDirection){
+    const dome=this.findDome(lights);
+    if(dome)return this.radiance(dome,rayDirection);
+    return RenderColor.hexToLinear(settings.background||'#202020');
+  }
+});
+
+const ShadowVisibility=Object.freeze({
+  visible(acceleration,origin,direction,maxDistance){
+    try{LiteTraceExecutionContext.performance?.addRay?.(RenderRayType.SHADOW);}catch(_){}
+    const eps=RenderRayPolicy.epsilonForPoint(origin);
+    if(Number.isFinite(maxDistance)&&maxDistance<=eps*2)return true;
+    const o=RayMath.add(origin,RayMath.mul(direction,eps));
+    const limit=Number.isFinite(maxDistance)?Math.max(eps,maxDistance-eps):Infinity;
+    const ray=new RenderRay(o,direction,eps,limit,RenderRayType.SHADOW,0);
+    return !acceleration.occluded(ray);
+  }
+});
+
+const AreaLightSampler=Object.freeze({
+  sample(light,point,u=.5,v=.5){
+    if(light.type==='rectangle'){
+      const lp=LightBasis.pointOnRectangle(light,u,v);
+      return this._local(light,point,lp,RenderLightPolicy.area(light),light.direction);
+    }
+    if(light.type==='disc'){
+      const lp=LightBasis.pointOnDisc(light,u,v);
+      return this._local(light,point,lp,RenderLightPolicy.area(light),light.direction);
+    }
+    if(light.type==='sphere'){
+      const lp=LightBasis.pointOnSphere(light,u,v);
+      const normal=RayMath.normalize(RayMath.sub(lp,light.position));
+      return this._local(light,point,lp,RenderLightPolicy.area(light),normal);
+    }
+    if(light.type==='mesh'){
+      // Part 4 keeps Mesh Light as a rectangular proxy.
+      // True emissive mesh-triangle sampling remains Group 10.
+      const lp=LightBasis.pointOnRectangle(light,u,v);
+      return this._local(light,point,lp,RenderLightPolicy.area(light),light.direction);
+    }
+    return DirectLightSampler.sample(light,point);
+  },
+
+  _local(light,point,lightPoint,area,emitterNormal=null){
+    const to=RayMath.sub(lightPoint,point);
+    const dist=Math.max(RayMath.length(to),1e-6);
+    const dir=RayMath.mul(to,1/dist);
+
+    if(light.range>0&&dist>=light.range){
+      return {kind:'local',direction:dir,distance:dist,radiance:[0,0,0],lightPoint,area};
+    }
+
+    let attenuation=1/(dist*dist);
+    if(light.range>0){
+      const f=Math.max(0,1-dist/light.range);
+      attenuation*=f*f;
+    }
+
+    let emitterCos=1;
+    if(emitterNormal){
+      emitterCos=Math.max(0,RayMath.dot(RayMath.normalize(emitterNormal),RayMath.mul(dir,-1)));
+      if(emitterCos<=0){
+        return {kind:'local',direction:dir,distance:dist,radiance:[0,0,0],lightPoint,area,emitterCos:0};
+      }
+    }
+
+    const safeArea=Math.max(RenderLightPolicy.minArea,area);
+    return {
+      kind:'local',
+      direction:dir,
+      distance:dist,
+      radiance:RenderColor.mul(light.color,light.intensity*attenuation*emitterCos/safeArea),
+      lightPoint,
+      area:safeArea,
+      emitterCos
+    };
+  }
+});
+
+var DirectLightingIntegrator=Object.freeze({
+  samplesFor(light,settings){
+    if(['rectangle','disc','sphere','mesh'].includes(light.type)){
+      const preset=String(settings?.quality||'Preview');
+      if(preset==='Ultra')return 16;
+      if(preset==='High')return 8;
+      if(preset==='Draft')return 1;
+      return 4;
+    }
+    return 1;
+  },
+
+  evaluate(job,acceleration,compiled,ray,hit,pixelSeed=1,options={}){
+    const material=RenderMaterialLibrary.resolveHit(job.renderScene,compiled.materials,hit);
+    const n=SurfaceInterpolator.normal(acceleration,hit);
+    const v=RayMath.mul(ray.direction,-1);
+    const includeEmission=options.includeEmission!==false;
+    const includeDome=options.includeDome!==false;
+    let color=includeEmission?RenderColor.mul(material.emissive,material.emissiveIntensity):[0,0,0];
+
+    if(material.shading==='unlit'){
+      return includeEmission?RenderColor.add(material.baseColor,color):[0,0,0];
+    }
+
+    const emissiveSet=compiled.emissiveTriangles||job.emissiveTriangles||null;
+    if(emissiveSet?.triangles?.length){
+      const es=EmissiveTriangleSet.sample(emissiveSet,pixelSeed,0,hit.position);
+      if(es&&ShadowVisibility.visible(acceleration,hit.position,es.direction,es.distance)){
+        const brdf=PhysicalBSDF.evaluate(material,n,v,es.direction);
+        const bsdfPdf=PathBSDFSampler.pdf(material,n,v,es.direction);
+        const w=RenderMIS.power(es.pdf,bsdfPdf);
+        color=RenderColor.add(color,RenderColor.mul(RenderColor.mul(brdf,es.radiance),w));
+      }
+    }
+
+    for(let li=0;li<compiled.lights.length;li++){
+      const light=compiled.lights[li];
+
+      if(light.type==='dome'){
+        if(includeDome){
+          const ambient=EnvironmentSampler.radiance(light,n);
+          const diffuse=RenderColor.mul(material.baseColor,(1-material.metalness)/Math.PI);
+          color=RenderColor.add(color,RenderColor.mul(RenderColor.mul(diffuse,ambient),Math.PI));
+        }
+        continue;
+      }
+
+      const count=this.samplesFor(light,job.settings);
+      let accum=[0,0,0];
+
+      for(let si=0;si<count;si++){
+        const uv=RenderSampling.sample2D(pixelSeed^(li*2654435761),si);
+        const sample=['rectangle','disc','sphere','mesh'].includes(light.type)
+          ? AreaLightSampler.sample(light,hit.position,uv[0],uv[1])
+          : DirectLightSampler.sample(light,hit.position);
+
+        if(!sample||!sample.direction)continue;
+        if(!sample.radiance||sample.radiance.every(v=>v<=0||!Number.isFinite(v)))continue;
+
+        if(light.castShadows!==false){
+          const visible=ShadowVisibility.visible(acceleration,hit.position,sample.direction,sample.distance);
+          if(!visible)continue;
+        }
+
+        const brdf=PhysicalBSDF.evaluate(material,n,v,sample.direction);
+        accum=RenderColor.add(accum,RenderColor.mul(brdf,sample.radiance));
+      }
+
+      if(count>1)accum=RenderColor.mul(accum,1/count);
+      color=RenderColor.add(color,accum);
+    }
+
+    return color;
+  }
+});
+
+
+/* ============================================================
+   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — CORE D
+   CLEAN GROUP 7 + GROUP 8 CONSOLIDATION
+   ============================================================ */
+
+var RenderCoreD=Object.freeze({
+  version:'3.90.0-core-d',
+
+  evaluateSurfaceDirect(job,acceleration,compiled,ray,hit,pixelSeed,options={}){
+    return DirectLightingIntegrator.evaluate(
+      job,acceleration,compiled,ray,hit,pixelSeed,options
+    );
+  },
+
+  evaluateEnvironment(job,compiled,rayDirection){
+    return EnvironmentSampler.background(
+      job.renderScene,job.settings,compiled.lights,rayDirection
+    );
+  },
+
+  tracePath(job,acceleration,compiled,ray,pixelSeed,initialHit=null){
+    return PathIntegrator.trace(
+      job,acceleration,compiled,ray,pixelSeed,initialHit
+    );
+  },
+
+  visible(acceleration,origin,direction,maxDistance){
+    return ShadowVisibility.visible(acceleration,origin,direction,maxDistance);
+  },
+
+  validate(){
+    const errors=[];
+    const g7=validateRenderGroup7();if(!g7.ok)errors.push(...g7.errors);
+    const g8=validateRenderGroup8();if(!g8.ok)errors.push(...g8.errors);
+    if(typeof this.evaluateSurfaceDirect!=='function')errors.push('Core D direct evaluator missing');
+    if(typeof this.tracePath!=='function')errors.push('Core D path tracer missing');
+    if(typeof this.evaluateEnvironment!=='function')errors.push('Core D environment evaluator missing');
+    return {ok:errors.length===0,errors};
+  }
+});
+window.RenderCoreD=RenderCoreD;
+
+const RenderGroup7Contract=Object.freeze({
+  owns:Object.freeze([
+    'shadow-ray visibility',
+    'shadow bias',
+    'stochastic area-light sampling',
+    'constant-color dome environment radiance',
+    'direct-light sample accumulation'
+  ]),
+  consumes:Object.freeze([
+    'Core B acceleration trace',
+    'Core C materials and scene lights',
+    'Group 5 PhysicalBSDF'
+  ]),
+  doesNotOwn:Object.freeze([
+    'path GI',
+    'MIS',
+    'adaptive sampling',
+    'HDRI importance sampling',
+    'light cache',
+    'path guiding'
+  ])
+});
+
+function runRenderGroup7SelfTests(){
+  const errors=[];
+
+  {
+    const store=new RenderTriangleStore();
+    store.addPacket({
+      objectId:'shadow-test',
+      positions:new Float32Array([-1,-1,0,1,-1,0,0,1,0]),
+      normals:new Float32Array([0,0,1,0,0,1,0,0,1]),
+      uvs:new Float32Array([0,0,1,0,.5,1]),
+      indices:new Uint32Array([0,1,2]),
+      materialIndices:new Uint16Array([0])
+    },0);
+    store.finalize();
+    const acceleration=new RenderAccelerationSet(store,new RenderBVH(store,1));
+    if(ShadowVisibility.visible(acceleration,[0,0,-1],[0,0,1],10)!==false){
+      errors.push('Shadow occlusion test failed');
+    }
+    if(ShadowVisibility.visible(acceleration,[3,3,-1],[0,0,1],10)!==true){
+      errors.push('Shadow clear test failed');
+    }
+    const occRay=new RenderRay([0,0,-1],[0,0,1],1e-4,10);
+    if(acceleration.occluded(occRay)!==true)errors.push('BVH any-hit test failed');
+  }
+
+  {
+    const light=new RenderSceneLight({
+      id:'r',name:'r',type:'rectangle',enabled:true,color:'#ffffff',intensity:10,
+      range:0,size:1,width:2,height:2,coneAngle:90,penumbra:0,castShadows:true,
+      position:[0,0,5],direction:[0,0,-1]
+    });
+    const s=AreaLightSampler.sample(light,[0,0,0],.5,.5);
+    if(!s||Math.abs(s.distance-5)>1e-4||s.radiance.some(x=>!Number.isFinite(x)||x<0)){
+      errors.push('Rectangle area sample failed');
+    }
+  }
+
+  {
+    const a=RenderSampling.sample2D(123,4),b=RenderSampling.sample2D(123,4);
+    if(a[0]!==b[0]||a[1]!==b[1])errors.push('Deterministic sampling test failed');
+  }
+
+  return {ok:errors.length===0,errors};
+}
+window.runRenderGroup7SelfTests=runRenderGroup7SelfTests;
+
+function validateRenderGroup7(){
+  const errors=[];
+  if(typeof ShadowVisibility.visible!=='function')errors.push('ShadowVisibility missing');
+  if(typeof AreaLightSampler.sample!=='function')errors.push('AreaLightSampler missing');
+  if(typeof DirectLightingIntegrator.evaluate!=='function')errors.push('DirectLightingIntegrator missing');
+  if(typeof EnvironmentSampler.background!=='function')errors.push('EnvironmentSampler missing');
+  const tests=runRenderGroup7SelfTests();if(!tests.ok)errors.push(...tests.errors);
+  return {ok:errors.length===0,errors};
+}
+
+Object.assign(window,{
+  RenderSampling,LightBasis,EnvironmentSampler,ShadowVisibility,
+  AreaLightSampler,DirectLightingIntegrator,RenderGroup7Contract
+});
+
+/* ============================================================
+   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 8
+   Path GI Core
+   ============================================================ */
+
+const PathSampler=Object.freeze({
+  scalar(seed,bounce,dimension){
+    return RenderSampling.hash32(
+      ((seed>>>0) ^ Math.imul((bounce+1),0x9E3779B1) ^ Math.imul((dimension+1),0x85EBCA77))>>>0
+    );
+  },
+
+  cosineHemisphere(n,seed,bounce){
+    const u1=this.scalar(seed,bounce,0);
+    const u2=this.scalar(seed,bounce,1);
+    const r=Math.sqrt(u1);
+    const phi=2*Math.PI*u2;
+    const x=r*Math.cos(phi),y=r*Math.sin(phi),z=Math.sqrt(Math.max(0,1-u1));
+
+    const basis=LightBasis.fromDirection(n);
+    return RayMath.normalize(
+      RayMath.add(
+        RayMath.add(RayMath.mul(basis.tangent,x),RayMath.mul(basis.bitangent,y)),
+        RayMath.mul(basis.n,z)
+      )
+    );
+  }
+});
+
+var RenderMIS=Object.freeze({
+  power(a,b){
+    a=Math.max(0,Number(a)||0);b=Math.max(0,Number(b)||0);
+    const aa=a*a,bb=b*b,d=aa+bb;
+    return d>0?aa/d:1;
+  }
+});
+
+const GGXImportanceSampler=Object.freeze({
+  sampleHalfVector(n,roughness,u1,u2){
+    const a=Math.max(.045,roughness);
+    const a2=a*a;
+    const phi=2*Math.PI*u1;
+    const cosTheta=Math.sqrt(Math.max(0,(1-u2)/(1+(a2-1)*u2)));
+    const sinTheta=Math.sqrt(Math.max(0,1-cosTheta*cosTheta));
+    const basis=LightBasis.fromDirection(n);
+    return RayMath.normalize(
+      RayMath.add(
+        RayMath.add(RayMath.mul(basis.tangent,sinTheta*Math.cos(phi)),RayMath.mul(basis.bitangent,sinTheta*Math.sin(phi))),
+        RayMath.mul(basis.n,cosTheta)
+      )
+    );
+  },
+  reflect(i,n){return RayMath.sub(i,RayMath.mul(n,2*RayMath.dot(i,n)));},
+  distribution(nDotH,roughness){
+    const a=Math.max(.045,roughness),a2=a*a;
+    const d=nDotH*nDotH*(a2-1)+1;
+    return a2/(Math.PI*d*d+1e-8);
+  }
+});
+
+const DielectricTransport=Object.freeze({
+  fresnelDielectric(cosI,etaI,etaT){
+    cosI=Math.max(-1,Math.min(1,cosI));
+    let entering=cosI>0;
+    if(!entering){const t=etaI;etaI=etaT;etaT=t;cosI=Math.abs(cosI);}
+    const sinI=Math.sqrt(Math.max(0,1-cosI*cosI));
+    const sinT=etaI/etaT*sinI;
+    if(sinT>=1)return 1;
+    const cosT=Math.sqrt(Math.max(0,1-sinT*sinT));
+    const rs=((etaT*cosI)-(etaI*cosT))/((etaT*cosI)+(etaI*cosT));
+    const rp=((etaI*cosI)-(etaT*cosT))/((etaI*cosI)+(etaT*cosT));
+    return Math.max(0,Math.min(1,(rs*rs+rp*rp)*.5));
+  },
+  refract(i,n,eta){
+    const cosi=Math.max(-1,Math.min(1,RayMath.dot(i,n)));
+    const k=1-eta*eta*(1-cosi*cosi);
+    if(k<0)return null;
+    return RayMath.normalize(RayMath.sub(RayMath.mul(i,eta),RayMath.mul(n,eta*cosi+Math.sqrt(k))));
+  },
+  beerLambert(color,distance,attenuationDistance){
+    if(!Number.isFinite(attenuationDistance)||attenuationDistance<=0||distance<=0)return [1,1,1];
+    return color.map(c=>Math.pow(Math.max(1e-6,c),distance/attenuationDistance));
+  }
+});
+
+var PathBSDFSampler=Object.freeze({
+  pdf(material,n,v,l){
+    const nDotL=Math.max(0,RayMath.dot(n,l));
+    if(nDotL<=0)return 0;
+    const diffusePdf=nDotL/Math.PI;
+    const specProb=Math.max(.08,Math.min(.92,.25+.65*material.metalness+.2*(1-material.roughness)));
+    const h=RayMath.normalize(RayMath.add(v,l));
+    if(!h.every(Number.isFinite))return (1-specProb)*diffusePdf;
+    const nDotH=Math.max(0,RayMath.dot(n,h));
+    const vDotH=Math.max(1e-7,RayMath.dot(v,h));
+    const D=GGXImportanceSampler.distribution(nDotH,material.roughness);
+    const specPdf=(D*nDotH)/(4*vDotH+1e-8);
+    return (1-specProb)*diffusePdf+specProb*specPdf;
+  },
+
+  sample(material,n,v,seed,bounce){
+    if(material.shading==='unlit')return null;
+    const transmission=Math.max(0,Math.min(1,material.transmission||0));
+    const chooseT=PathSampler.scalar(seed,bounce,6);
+
+    if(transmission>0&&chooseT<transmission){
+      const incident=RayMath.mul(v,-1);
+      const entering=RayMath.dot(incident,n)<0;
+      const normal=entering?n:RayMath.mul(n,-1);
+      const etaI=entering?1:material.ior,etaT=entering?material.ior:1;
+      const eta=etaI/etaT;
+      const cosI=Math.abs(RayMath.dot(incident,normal));
+      const F=DielectricTransport.fresnelDielectric(cosI,etaI,etaT);
+      const chooseF=PathSampler.scalar(seed,bounce,16);
+      let direction,lobe,weight;
+      if(chooseF<F){
+        direction=GGXImportanceSampler.reflect(incident,normal);
+        lobe='dielectric-reflect';
+        weight=[1,1,1];
+      }else{
+        direction=DielectricTransport.refract(incident,normal,eta);
+        if(!direction){
+          direction=GGXImportanceSampler.reflect(incident,normal);
+          lobe='dielectric-tir';
+          weight=[1,1,1];
+        }else{
+          lobe='transmission';
+          weight=material.attenuationColor.slice();
+        }
+      }
+      return {direction:RayMath.normalize(direction),pdf:1,weight,lobe,transmission:true};
+    }
+
+    const specProb=Math.max(.08,Math.min(.92,.25+.65*material.metalness+.2*(1-material.roughness)));
+    const choose=PathSampler.scalar(seed,bounce,7);
+    let direction,lobe='diffuse';
+
+    if(choose<specProb){
+      const u1=PathSampler.scalar(seed,bounce,8),u2=PathSampler.scalar(seed,bounce,9);
+      const h=GGXImportanceSampler.sampleHalfVector(n,material.roughness,u1,u2);
+      direction=GGXImportanceSampler.reflect(RayMath.mul(v,-1),h);
+      direction=RayMath.normalize(direction);
+      lobe='ggx';
+      if(RayMath.dot(n,direction)<=0)direction=PathSampler.cosineHemisphere(n,seed^(0xA511E9B3>>>0),bounce);
+    }else{
+      direction=PathSampler.cosineHemisphere(n,seed,bounce);
+    }
+
+    const cosTheta=Math.max(0,RayMath.dot(n,direction));
+    if(cosTheta<=0)return null;
+    const value=PhysicalBSDF.evaluate(material,n,v,direction);
+    const pdf=Math.max(this.pdf(material,n,v,direction),1e-8);
+    return {direction,pdf,weight:RenderColor.mul(value,1/pdf),lobe};
+  }
+});
+
+var EmissiveTriangleSet=Object.freeze({
+  compile(job,acceleration,compiled){
+    const store=acceleration?.store;
+    if(!store)return Object.freeze({triangles:Object.freeze([]),totalArea:0});
+    const list=[];let totalArea=0;
+    for(let t=0;t<store.triangleCount();t++){
+      const objectIndex=store.objectIndices[t];
+      const ro=job.renderScene.objects[objectIndex];if(!ro)continue;
+      const matId=ro.materialIds[store.materialIndices[t]]??ro.materialIds[0];
+      const mat=compiled.materials.get(matId);
+      const power=(mat?.emissiveIntensity||0)*Math.max(...(mat?.emissive||[0,0,0]));
+      if(!(power>0))continue;
+      const k=t*3,a=store.vertex(store.triangles[k]),b=store.vertex(store.triangles
+
+===== DirectLightingIntegrator @ 336616 =====
+phere'){
+      const lp=LightBasis.pointOnSphere(light,u,v);
+      const normal=RayMath.normalize(RayMath.sub(lp,light.position));
+      return this._local(light,point,lp,RenderLightPolicy.area(light),normal);
+    }
+    if(light.type==='mesh'){
+      // Part 4 keeps Mesh Light as a rectangular proxy.
+      // True emissive mesh-triangle sampling remains Group 10.
+      const lp=LightBasis.pointOnRectangle(light,u,v);
+      return this._local(light,point,lp,RenderLightPolicy.area(light),light.direction);
+    }
+    return DirectLightSampler.sample(light,point);
+  },
+
+  _local(light,point,lightPoint,area,emitterNormal=null){
+    const to=RayMath.sub(lightPoint,point);
+    const dist=Math.max(RayMath.length(to),1e-6);
+    const dir=RayMath.mul(to,1/dist);
+
+    if(light.range>0&&dist>=light.range){
+      return {kind:'local',direction:dir,distance:dist,radiance:[0,0,0],lightPoint,area};
+    }
+
+    let attenuation=1/(dist*dist);
+    if(light.range>0){
+      const f=Math.max(0,1-dist/light.range);
+      attenuation*=f*f;
+    }
+
+    let emitterCos=1;
+    if(emitterNormal){
+      emitterCos=Math.max(0,RayMath.dot(RayMath.normalize(emitterNormal),RayMath.mul(dir,-1)));
+      if(emitterCos<=0){
+        return {kind:'local',direction:dir,distance:dist,radiance:[0,0,0],lightPoint,area,emitterCos:0};
+      }
+    }
+
+    const safeArea=Math.max(RenderLightPolicy.minArea,area);
+    return {
+      kind:'local',
+      direction:dir,
+      distance:dist,
+      radiance:RenderColor.mul(light.color,light.intensity*attenuation*emitterCos/safeArea),
+      lightPoint,
+      area:safeArea,
+      emitterCos
+    };
+  }
+});
+
+var DirectLightingIntegrator=Object.freeze({
+  samplesFor(light,settings){
+    if(['rectangle','disc','sphere','mesh'].includes(light.type)){
+      const preset=String(settings?.quality||'Preview');
+      if(preset==='Ultra')return 16;
+      if(preset==='High')return 8;
+      if(preset==='Draft')return 1;
+      return 4;
+    }
+    return 1;
+  },
+
+  evaluate(job,acceleration,compiled,ray,hit,pixelSeed=1,options={}){
+    const material=RenderMaterialLibrary.resolveHit(job.renderScene,compiled.materials,hit);
+    const n=SurfaceInterpolator.normal(acceleration,hit);
+    const v=RayMath.mul(ray.direction,-1);
+    const includeEmission=options.includeEmission!==false;
+    const includeDome=options.includeDome!==false;
+    let color=includeEmission?RenderColor.mul(material.emissive,material.emissiveIntensity):[0,0,0];
+
+    if(material.shading==='unlit'){
+      return includeEmission?RenderColor.add(material.baseColor,color):[0,0,0];
+    }
+
+    const emissiveSet=compiled.emissiveTriangles||job.emissiveTriangles||null;
+    if(emissiveSet?.triangles?.length){
+      const es=EmissiveTriangleSet.sample(emissiveSet,pixelSeed,0,hit.position);
+      if(es&&ShadowVisibility.visible(acceleration,hit.position,es.direction,es.distance)){
+        const brdf=PhysicalBSDF.evaluate(material,n,v,es.direction);
+        const bsdfPdf=PathBSDFSampler.pdf(material,n,v,es.direction);
+        const w=RenderMIS.power(es.pdf,bsdfPdf);
+        color=RenderColor.add(color,RenderColor.mul(RenderColor.mul(brdf,es.radiance),w));
+      }
+    }
+
+    for(let li=0;li<compiled.lights.length;li++){
+      const light=compiled.lights[li];
+
+      if(light.type==='dome'){
+        if(includeDome){
+          const ambient=EnvironmentSampler.radiance(light,n);
+          const diffuse=RenderColor.mul(material.baseColor,(1-material.metalness)/Math.PI);
+          color=RenderColor.add(color,RenderColor.mul(RenderColor.mul(diffuse,ambient),Math.PI));
+        }
+        continue;
+      }
+
+      const count=this.samplesFor(light,job.settings);
+      let accum=[0,0,0];
+
+      for(let si=0;si<count;si++){
+        const uv=RenderSampling.sample2D(pixelSeed^(li*2654435761),si);
+        const sample=['rectangle','disc','sphere','mesh'].includes(light.type)
+          ? AreaLightSampler.sample(light,hit.position,uv[0],uv[1])
+          : DirectLightSampler.sample(light,hit.position);
+
+        if(!sample||!sample.direction)continue;
+        if(!sample.radiance||sample.radiance.every(v=>v<=0||!Number.isFinite(v)))continue;
+
+        if(light.castShadows!==false){
+          const visible=ShadowVisibility.visible(acceleration,hit.position,sample.direction,sample.distance);
+          if(!visible)continue;
+        }
+
+        const brdf=PhysicalBSDF.evaluate(material,n,v,sample.direction);
+        accum=RenderColor.add(accum,RenderColor.mul(brdf,sample.radiance));
+      }
+
+      if(count>1)accum=RenderColor.mul(accum,1/count);
+      color=RenderColor.add(color,accum);
+    }
+
+    return color;
+  }
+});
+
+
+/* ============================================================
+   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — CORE D
+   CLEAN GROUP 7 + GROUP 8 CONSOLIDATION
+   ============================================================ */
+
+var RenderCoreD=Object.freeze({
+  version:'3.90.0-core-d',
+
+  evaluateSurfaceDirect(job,acceleration,compiled,ray,hit,pixelSeed,options={}){
+    return DirectLightingIntegrator.evaluate(
+      job,acceleration,compiled,ray,hit,pixelSeed,options
+    );
+  },
+
+  evaluateEnvironment(job,compiled,rayDirection){
+    return EnvironmentSampler.background(
+      job.renderScene,job.settings,compiled.lights,rayDirection
+    );
+  },
+
+  tracePath(job,acceleration,compiled,ray,pixelSeed,initialHit=null){
+    return PathIntegrator.trace(
+      job,acceleration,compiled,ray,pixelSeed,initialHit
+    );
+  },
+
+  visible(acceleration,origin,direction,maxDistance){
+    return ShadowVisibility.visible(acceleration,origin,direction,maxDistance);
+  },
+
+  validate(){
+    const errors=[];
+    const g7=validateRenderGroup7();if(!g7.ok)errors.push(...g7.errors);
+    const g8=validateRenderGroup8();if(!g8.ok)errors.push(...g8.errors);
+    if(typeof this.evaluateSurfaceDirect!=='function')errors.push('Core D direct evaluator missing');
+    if(typeof this.tracePath!=='function')errors.push('Core D path tracer missing');
+    if(typeof this.evaluateEnvironment!=='function')errors.push('Core D environment evaluator missing');
+    return {ok:errors.length===0,errors};
+  }
+});
+window.RenderCoreD=RenderCoreD;
+
+const RenderGroup7Contract=Object.freeze({
+  owns:Object.freeze([
+    'shadow-ray visibility',
+    'shadow bias',
+    'stochastic area-light sampling',
+    'constant-color dome environment radiance',
+    'direct-light sample accumulation'
+  ]),
+  consumes:Object.freeze([
+    'Core B acceleration trace',
+    'Core C materials and scene lights',
+    'Group 5 PhysicalBSDF'
+  ]),
+  doesNotOwn:Object.freeze([
+    'path GI',
+    'MIS',
+    'adaptive sampling',
+    'HDRI importance sampling',
+    'light cache',
+    'path guiding'
+  ])
+});
+
+function runRenderGroup7SelfTests(){
+  const errors=[];
+
+  {
+    const store=new RenderTriangleStore();
+    store.addPacket({
+      objectId:'shadow-test',
+      positions:new Float32Array([-1,-1,0,1,-1,0,0,1,0]),
+      normals:new Float32Array([0,0,1,0,0,1,0,0,1]),
+      uvs:new Float32Array([0,0,1,0,.5,1]),
+      indices:new Uint32Array([0,1,2]),
+      materialIndices:new Uint16Array([0])
+    },0);
+    store.finalize();
+    const acceleration=new RenderAccelerationSet(store,new RenderBVH(store,1));
+    if(ShadowVisibility.visible(acceleration,[0,0,-1],[0,0,1],10)!==false){
+      errors.push('Shadow occlusion test failed');
+    }
+    if(ShadowVisibility.visible(acceleration,[3,3,-1],[0,0,1],10)!==true){
+      errors.push('Shadow clear test failed');
+    }
+    const occRay=new RenderRay([0,0,-1],[0,0,1],1e-4,10);
+    if(acceleration.occluded(occRay)!==true)errors.push('BVH any-hit test failed');
+  }
+
+  {
+    const light=new RenderSceneLight({
+      id:'r',name:'r',type:'rectangle',enabled:true,color:'#ffffff',intensity:10,
+      range:0,size:1,width:2,height:2,coneAngle:90,penumbra:0,castShadows:true,
+      position:[0,0,5],direction:[0,0,-1]
+    });
+    const s=AreaLightSampler.sample(light,[0,0,0],.5,.5);
+    if(!s||Math.abs(s.distance-5)>1e-4||s.radiance.some(x=>!Number.isFinite(x)||x<0)){
+      errors.push('Rectangle area sample failed');
+    }
+  }
+
+  {
+    const a=RenderSampling.sample2D(123,4),b=RenderSampling.sample2D(123,4);
+    if(a[0]!==b[0]||a[1]!==b[1])errors.push('Deterministic sampling test failed');
+  }
+
+  return {ok:errors.length===0,errors};
+}
+window.runRenderGroup7SelfTests=runRenderGroup7SelfTests;
+
+function validateRenderGroup7(){
+  const errors=[];
+  if(typeof ShadowVisibility.visible!=='function')errors.push('ShadowVisibility missing');
+  if(typeof AreaLightSampler.sample!=='function')errors.push('AreaLightSampler missing');
+  if(typeof DirectLightingIntegrator.evaluate!=='function')errors.push('DirectLightingIntegrator missing');
+  if(typeof EnvironmentSampler.background!=='function')errors.push('EnvironmentSampler missing');
+  const tests=runRenderGroup7SelfTests();if(!tests.ok)errors.push(...tests.errors);
+  return {ok:errors.length===0,errors};
+}
+
+Object.assign(window,{
+  RenderSampling,LightBasis,EnvironmentSampler,ShadowVisibility,
+  AreaLightSampler,DirectLightingIntegrator,RenderGroup7Contract
+});
+
+/* ============================================================
+   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 8
+   Path GI Core
+   ============================================================ */
+
+const PathSampler=Object.freeze({
+  scalar(seed,bounce,dimension){
+    return RenderSampling.hash32(
+      ((seed>>>0) ^ Math.imul((bounce+1),0x9E3779B1) ^ Math.imul((dimension+1),0x85EBCA77))>>>0
+    );
+  },
+
+  cosineHemisphere(n,seed,bounce){
+    const u1=this.scalar(seed,bounce,0);
+    const u2=this.scalar(seed,bounce,1);
+    const r=Math.sqrt(u1);
+    const phi=2*Math.PI*u2;
+    const x=r*Math.cos(phi),y=r*Math.sin(phi),z=Math.sqrt(Math.max(0,1-u1));
+
+    const basis=LightBasis.fromDirection(n);
+    return RayMath.normalize(
+      RayMath.add(
+        RayMath.add(RayMath.mul(basis.tangent,x),RayMath.mul(basis.bitangent,y)),
+        RayMath.mul(basis.n,z)
+      )
+    );
+  }
+});
+
+var RenderMIS=Object.freeze({
+  power(a,b){
+    a=Math.max(0,Number(a)||0);b=Math.max(0,Number(b)||0);
+    const aa=a*a,bb=b*b,d=aa+bb;
+    return d>0?aa/d:1;
+  }
+});
+
+const GGXImportanceSampler=Object.freeze({
+  sampleHalfVector(n,roughness,u1,u2){
+    const a=Math.max(.045,roughness);
+    const a2=a*a;
+    const phi=2*Math.PI*u1;
+    const cosTheta=Math.sqrt(Math.max(0,(1-u2)/(1+(a2-1)*u2)));
+    const sinTheta=Math.sqrt(Math.max(0,1-cosTheta*cosTheta));
+    const basis=LightBasis.fromDirection(n);
+    return RayMath.normalize(
+      RayMath.add(
+        RayMath.add(RayMath.mul(basis.tangent,sinTheta*Math.cos(phi)),RayMath.mul(basis.bitangent,sinTheta*Math.sin(phi))),
+        RayMath.mul(basis.n,cosTheta)
+      )
+    );
+  },
+  reflect(i,n){return RayMath.sub(i,RayMath.mul(n,2*RayMath.dot(i,n)));},
+  distribution(nDotH,roughness){
+    const a=Math.max(.045,roughness),a2=a*a;
+    const d=nDotH*nDotH*(a2-1)+1;
+    return a2/(Math.PI*d*d+1e-8);
+  }
+});
+
+const DielectricTransport=Object.freeze({
+  fresnelDielectric(cosI,etaI,etaT){
+    cosI=Math.max(-1,Math.min(1,cosI));
+    let entering=cosI>0;
+    if(!entering){const t=etaI;etaI=etaT;etaT=t;cosI=Math.abs(cosI);}
+    const sinI=Math.sqrt(Math.max(0,1-cosI*cosI));
+    const sinT=etaI/etaT*sinI;
+    if(sinT>=1)return 1;
+    const cosT=Math.sqrt(Math.max(0,1-sinT*sinT));
+    const rs=((etaT*cosI)-(etaI*cosT))/((etaT*cosI)+(etaI*cosT));
+    const rp=((etaI*cosI)-(etaT*cosT))/((etaI*cosI)+(etaT*cosT));
+    return Math.max(0,Math.min(1,(rs*rs+rp*rp)*.5));
+  },
+  refract(i,n,eta){
+    const cosi=Math.max(-1,Math.min(1,RayMath.dot(i,n)));
+    const k=1-eta*eta*(1-cosi*cosi);
+    if(k<0)return null;
+    return RayMath.normalize(RayMath.sub(RayMath.mul(i,eta),RayMath.mul(n,eta*cosi+Math.sqrt(k))));
+  },
+  beerLambert(color,distance,attenuationDistance){
+    if(!Number.isFinite(attenuationDistance)||attenuationDistance<=0||distance<=0)return [1,1,1];
+    return color.map(c=>Math.pow(Math.max(1e-6,c),distance/attenuationDistance));
+  }
+});
+
+var PathBSDFSampler=Object.freeze({
+  pdf(material,n,v,l){
+    const nDotL=Math.max(0,RayMath.dot(n,l));
+    if(nDotL<=0)return 0;
+    const diffusePdf=nDotL/Math.PI;
+    const specProb=Math.max(.08,Math.min(.92,.25+.65*material.metalness+.2*(1-material.roughness)));
+    const h=RayMath.normalize(RayMath.add(v,l));
+    if(!h.every(Number.isFinite))return (1-specProb)*diffusePdf;
+    const nDotH=Math.max(0,RayMath.dot(n,h));
+    const vDotH=Math.max(1e-7,RayMath.dot(v,h));
+    const D=GGXImportanceSampler.distribution(nDotH,material.roughness);
+    const specPdf=(D*nDotH)/(4*vDotH+1e-8);
+    return (1-specProb)*diffusePdf+specProb*specPdf;
+  },
+
+  sample(material,n,v,seed,bounce){
+    if(material.shading==='unlit')return null;
+    const transmission=Math.max(0,Math.min(1,material.transmission||0));
+    const chooseT=PathSampler.scalar(seed,bounce,6);
+
+    if(transmission>0&&chooseT<transmission){
+      const incident=RayMath.mul(v,-1);
+      const entering=RayMath.dot(incident,n)<0;
+      const normal=entering?n:RayMath.mul(n,-1);
+      const etaI=entering?1:material.ior,etaT=entering?material.ior:1;
+      const eta=etaI/etaT;
+      const cosI=Math.abs(RayMath.dot(incident,normal));
+      const F=DielectricTransport.fresnelDielectric(cosI,etaI,etaT);
+      const chooseF=PathSampler.scalar(seed,bounce,16);
+      let direction,lobe,weight;
+      if(chooseF<F){
+        direction=GGXImportanceSampler.reflect(incident,normal);
+        lobe='dielectric-reflect';
+        weight=[1,1,1];
+      }else{
+        direction=DielectricTransport.refract(incident,normal,eta);
+        if(!direction){
+          direction=GGXImportanceSampler.reflect(incident,normal);
+          lobe='dielectric-tir';
+          weight=[1,1,1];
+        }else{
+          lobe='transmission';
+          weight=material.attenuationColor.slice();
+        }
+      }
+      return {direction:RayMath.normalize(direction),pdf:1,weight,lobe,transmission:true};
+    }
+
+    const specProb=Math.max(.08,Math.min(.92,.25+.65*material.metalness+.2*(1-material.roughness)));
+    const choose=PathSampler.scalar(seed,bounce,7);
+    let direction,lobe='diffuse';
+
+    if(choose<specProb){
+      const u1=PathSampler.scalar(seed,bounce,8),u2=PathSampler.scalar(seed,bounce,9);
+      const h=GGXImportanceSampler.sampleHalfVector(n,material.roughness,u1,u2);
+      direction=GGXImportanceSampler.reflect(RayMath.mul(v,-1),h);
+      direction=RayMath.normalize(direction);
+      lobe='ggx';
+      if(RayMath.dot(n,direction)<=0)direction=PathSampler.cosineHemisphere(n,seed^(0xA511E9B3>>>0),bounce);
+    }else{
+      direction=PathSampler.cosineHemisphere(n,seed,bounce);
+    }
+
+    const cosTheta=Math.max(0,RayMath.dot(n,direction));
+    if(cosTheta<=0)return null;
+    const value=PhysicalBSDF.evaluate(material,n,v,direction);
+    const pdf=Math.max(this.pdf(material,n,v,direction),1e-8);
+    return {direction,pdf,weight:RenderColor.mul(value,1/pdf),lobe};
+  }
+});
+
+var EmissiveTriangleSet=Object.freeze({
+  compile(job,acceleration,compiled){
+    const store=acceleration?.store;
+    if(!store)return Object.freeze({triangles:Object.freeze([]),totalArea:0});
+    const list=[];let totalArea=0;
+    for(let t=0;t<store.triangleCount();t++){
+      const objectIndex=store.objectIndices[t];
+      const ro=job.renderScene.objects[objectIndex];if(!ro)continue;
+      const matId=ro.materialIds[store.materialIndices[t]]??ro.materialIds[0];
+      const mat=compiled.materials.get(matId);
+      const power=(mat?.emissiveIntensity||0)*Math.max(...(mat?.emissive||[0,0,0]));
+      if(!(power>0))continue;
+      const k=t*3,a=store.vertex(store.triangles[k]),b=store.vertex(store.triangles[k+1]),c=store.vertex(store.triangles[k+2]);
+      const e1=RayMath.sub(b,a),e2=RayMath.sub(c,a);
+      const cross=[e1[1]*e2[2]-e1[2]*e2[1],e1[2]*e2[0]-e1[0]*e2[2],e1[0]*e2[1]-e1[1]*e2[0]];
+      const area=.5*RayMath.length(cross);
+      if(!(area>1e-10))continue;
+      const normal=RayMath.normalize(cross);
+      totalArea+=area;
+      list.push(Object.freeze({triangleIndex:t,objectIndex,material:mat,a,b,c,normal,area,cumulative:totalArea}));
+    }
+    return Object.freeze({triangles:Object.freeze(list),totalArea});
+  },
+  sample(set,seed,bounce,point){
+    if(!set?.triangles?.length||!(set.totalArea>0))return null;
+    const u=PathSampler.scalar(seed,bounce,30)*set.totalArea;
+    let tri=set.triangles[set.triangles.length-1];
+    for(const t of set.triangles){if(u<=t.cumulative){tri=t;break;}}
+    const r1=Math.sqrt(PathSampler.scalar(seed,bounce,31));
+    const r2=PathSampler.scalar(seed,bounce,32);
+    const wa=1-r1,wb=r1*(1-r2),wc=r1*r2;
+    const lp=[
+      tri.a[0]*wa+tri.b[0]*wb+tri.c[0]*wc,
+      tri.a[1]*wa+tri.b[1]*wb+tri.c[1]*wc,
+      tri.a[2]*wa+tri.b[2]*wb+tri.c[2]*wc
+    ];
+    const to=RayMath.sub(lp,point),distance=Math.max(1e-6,RayMath.length(to)),direction=RayMath.mul(to,1/distance);
+    const cosEmitter=Math.max(0,RayMath.dot(tri.normal,RayMath.mul(direction,-1)));
+    if(cosEmitter<=0)return null;
+    const pdfArea=1/set.totalArea;
+    const pdfSolid=pdfArea*(distance*distance)/Math.max(1e-6,cosEmitter);
+    const radiance=RenderColor.mul(tri.material.emissive,tri.material.emissiveIntensity);
+    return {triangle:tri,point:lp,direction,distance,cosEmitter,pdf:pdfSolid,radiance};
+  }
+});
+
+const LightTreePolicy=Object.freeze({
+  threshold:6,
+  enabled(job,compiled){
+    return !!job?.settings?.lightTree && (compiled?.lights?.filter?.(l=>l.type!=='dome').length||0)>=this.threshold;
+  },
+  luminance(c){return .2126*c[0]+.7152*c[1]+.0722*c[2]},
+  area(light){
+    if(light.type==='rectangle'||light.type==='mesh')return Math.max(.01,light.width*light.height);
+    if(light.type==='disc')return Math.max(.01,Math.PI*Math.pow(light.size*.5,2));
+    if(light.type==='sphere')return Math.max(.01,4*Math.PI*Math.pow(light.size*.5,2));
+    return 1;
+  },
+  power(light){
+    const base=Math.max(1e-8,this.luminance(light.color||[1,1,1])*(light.intensity||0));
+    return base*Math.sqrt(this.area(light));
+  }
+});
+
+class RenderLightTree{
+  constructor(lights){
+    this.lights=(lights||[])
+      .map((light,sourceIndex)=>({light,sourceIndex}))
+      .filter(x=>x.light.type!=='dome')
+      .map((x,index)=>({...x,index}));
+    this.nodes=[];
+    this.root=this.lights.length?this.build(this.lights):-1;
+  }
+  bounds(items){
+    let mn=[Infinity,Infinity,Infinity],mx=[-Infinity,-Infinity,-Infinity],power=0,infinite=false;
+    for(const it of items){
+      const l=it.light;power+=LightTreePolicy.power(l);
+      if(l.type==='sun'){infinite=true;continue;}
+      const p=l.position||[0,0,0],r=Math.max(.001,(l.size||Math.max(l.width||0,l.height||0)||1)*.5);
+      mn=RayMath.min3(mn,[p[0]-r,p[1]-r,p[2]-r]);
+      mx=RayMath.max3(mx,[p[0]+r,p[1]+r,p[2]+r]);
+    }
+    if(!Number.isFinite(mn[0]))mn=[0,0,0],mx=[0,0,0];
+    return {min:mn,max:mx,power:Math.max(1e-8,power),infinite};
+  }
+  build(items){
+    const b=this.bounds(items),id=this.nodes.length;
+    if(items.length===1){
+      this.nodes.push(Object.freeze({...b,left
