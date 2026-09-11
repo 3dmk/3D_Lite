@@ -1,143 +1,114 @@
 
-### const WorkerFastLightingCore
+### workerBeauty
 hits 0
 
-### WorkerFastLightingCore=
+### workerPool?.isAvailable
 hits 0
 
-### class WorkerFastLightingCore
+### traceVisibility(accel
 hits 0
 
-### BVHAccelerator
+### shadeHit(state
 hits 0
 
-### class BVH
--- hit 1 line 5568 --
-.normals.push(srcNormals[i]);
-    for(let i=0;i<srcUVs.length;i++)this.uvs.push(srcUVs[i]);
-    const idx=packet.indices;
-    for(let t=0;t<idx.length;t+=3){
-      this.stats.inputTriangles++;
-      const ia=idx[t],ib=idx[t+1],ic=idx[t+2];
-      if(!Number.isInteger(ia)||!Number.isInteger(ib)||!Number.isInteger(ic)||ia<0||ib<0||ic<0||ia>=packetVertexCount||ib>=packetVertexCount||ic>=packetVertexCount){this.stats.rejectedInvalidIndex++;continue;}
-      const ax=packet.positions[ia*3],ay=packet.positions[ia*3+1],az=packet.positions[ia*3+2];
-      const bx=packet.positions[ib*3],by=packet.positions[ib*3+1],bz=packet.positions[ib*3+2];
-      const cx=packet.positions[ic*3],cy=packet.positions[ic*3+1],cz=packet.positions[ic*3+2];
-      if(!Number.isFinite(ax+ay+az+bx+by+bz+cx+cy+cz)){this.stats.rejectedNonFinite++;continue;}
-      const abx=bx-ax,aby=by-ay,abz=bz-az,acx=cx-ax,acy=cy-ay,acz=cz-az;
-      const nx=aby*acz-abz*acy,ny=abz*acx-abx*acz,nz=abx*acy-aby*acx;
-      if(nx*nx+ny*ny+nz*nz<1e-20){this.stats.rejectedDegenerate++;continue;}
-      this.triangles.push(baseVertex+ia,baseVertex+ib,baseVertex+ic);
-      this.materialIndices.push(packet.materialIndices?.[t/3]||0);
-      this.objectIndices.push(objectIndex);
-      this.stats.acceptedTriangles++;
-    }
-    this.objectIds[objectIndex]=packet.objectId;
+### static intersect(
+hits 0
+
+### TriangleIntersector
+-- hit 1 line 5457 --
+th=0){
+    this.origin=origin;this.direction=RayMath.normalize(direction);
+    this.invDirection=[
+      Math.abs(this.direction[0])<RayMath.EPSILON?Infinity:1/this.direction[0],
+      Math.abs(this.direction[1])<RayMath.EPSILON?Infinity:1/this.direction[1],
+      Math.abs(this.direction[2])<RayMath.EPSILON?Infinity:1/this.direction[2]
+    ];
+    this.tMin=tMin;this.tMax=tMax;this.type=type;this.depth=depth;
   }
-  finalize(){
-    this.positions=new Float32Array(this.positions);
-    this.normals=new Float32Array(this.normals);
-    this.uvs=new Float32Array(this.uvs);
-    this.triangles=new Uint32Array(this.triangles);
-    this.materialIndices=new Uint16Array(this.materialIndices);
-    this.objectIndices=new Uint32Array(this.objectIndices);
-    Object.freeze(this.objectIds);Object.freeze(this.stats);
-    return this;
-  }
-  triangleCount(){return this.triangles.length/3}
-  vertex(i){const p=i*3;return [this.positions[p],this.positions[p+1],this.positions[p+2]]}
-  triangleBounds(t){
-    const k=t*3,a=this.vertex(this.triangles[k]),b=this.vertex(this.triangles[k+1]),c=this.vertex(this.triangles[k+2]);
-    return {min:RayMath.min3(a,RayMath.min3(b,c)),max:RayMath.max3(a,RayMath.max3(b,c)),
-      centroid:[(a[0]+b[0]+c[0])/3,(a[1]+b[1]+c[1])/3,(a[2]+b[2]+c[2])/3]};
+  at(t){return RayMath.add(this.origin,RayMath.mul(this.direction,t))}
+}
+const RenderRayPolicy=Object.freeze({
+  epsilonForPoint(p){const scale=Math.max(1,Math.abs(p[0]),Math.abs(p[1]),Math.abs(p[2]));return Math.min(1e-2,Math.max(1e-6,scale*1e-7));}
+});
+Object.assign(window,{RenderRayType,RenderRayPolicy});
+
+class RenderHit{
+  constructor(){
+    this.hit=false;this.t=Infinity;this.u=0;this.v=0;
+    this.objectIndex=-1;this.triangleIndex=-1;
+    this.position=null;this.geometricNormal=null;this.orientedGeometricNormal=null;this.frontFace=true;this.materialIndex=0;
   }
 }
 
-class BVHNode{
-  constructor(min,max,left=-1,right=-1,start=0,count=0){
-    this.min=min;this.max=max;this.left=left;this.right=right;this.start=start;this.count=count;
+const TriangleIntersector=Object.freeze({
+  intersect(ray,p0,p1,p2,hit=new RenderHit()){
+    const e1=RayMath.sub(p1,p0),e2=RayMath.sub(p2,p0);
+    const pvec=RayMath.cross(ray.direction,e2);
+    const det=RayMath.dot(e1,pvec);
+    if(Math.abs(det)<RayMath.EPSILON)return hit;
+    const invDet=1/det;
+    const tvec=RayMath.sub(ray.origin,p0);
+    const u=RayMath.dot(tvec,pvec)*invDet;
+    if(u<0||u>1)return hit;
+    const qvec=RayMath.cross(tvec,e1);
+    const v=RayMath.dot(ray.direction,qvec)*invDet;
+    if(v<0||u+v>1)return hit;
+    const t=RayMath.dot(e2,qvec)*invDet;
+    if(t<ray.tMin||t>ray.tMax||t>=hit.t)return hit;
+    hit.hit=true;hit.t=t;hit.u=u;hit.v=v;
+    hit.position=ray.at(t);
+    hit.geometricNormal=RayMath.normalize(RayMath.cross(e1,e2));
+    hit.frontFace=RayMath.dot(ray.direction,hit.geometricNormal)<0;
+    hit.orientedGeometricNormal=hit.frontFace?hit.geometricNormal:RayMath.mul(hit.geometricNormal,-1);
+    return hit;
   }
-  get leaf(){return this.count>0}
-}
+});
 
-var RenderBVH = class RenderBVH{
-  constructor(store,maxLeafSize=4){
-    this.store=store;
-    this.maxLeafSize=Math.max(1,maxLeafSize|0);
-    this.nodes=[];
-    this.primitiveIndices=Uint32Array.from({length:store.triangleCount()},(_,i)=>i);
-    this._boundsCache=Array.from({length:store.triangleCount()},(_,i)=>store.triangleBounds(i));
-    if(store.triangleCount())this.root=this._build(0,store.triangleCount());
-    else this.root=-1;
-  }
-  _rangeBounds(start,end){
-    let mn=[Infinity,Infinity,Infinity],mx=[-Infinity,-Infinity,-Infinity],cmn=[Infinity,Infinity,Infinity],cmx=[-Infinity,-Infinity,-Infinity];
-    for(let i=start;i<end;i++){
-      const b=this._boundsCache[this.primitiveIndices[i]];
-      mn=RayMath.min3(mn,b.min);mx=RayMath.max3(mx,b.max);
-      cmn=RayMath.min3(cmn,b.centroid);cmx=RayMath.max3(cmx,b.centroid);
-    }
-    return {min:mn,max:mx,cmin:cmn,cmax:cmx};
-  }
-  _surfaceArea(min,max){
-    const x=Math.max(0,max[0]-min[0]),y=Math.max(0,max[1]-min[1]),z=Math.max(0,max[2]-min[2]);
-    return 2*(x*y+y*z+z*x);
-  }
-  _sahSplit(start,end,rb){
-    const count=end-start;
-    if(count<8)return null;
-    let best=null,bestCost=Infinity;
-    const binsN=12;
-    const parentArea=Math.max(1e-12,this._surfaceArea(rb.min,rb.max));
-    const leafCost=count;
+const AABBIntersector=Object.freeze({
+  entry(ray,min,max,tLimit=Infinity){
+    let t0=ray.tMin,t1=Math.min(ray.tMax,tLimit);
     for(let axis=0;axis<3;axis++){
-      const lo=rb.cmin[axis],hi=rb.cmax[axis],span=hi-lo;
-      if(!(span>1e-12))continue;
-      const bins=Array.from({length:binsN},()=>({count:0,min:[Infinity,Infinity,Infinity],max:[-Infinity,-Infinity,-Infinity]}));
-      for(let i=start;i<end;i++){
-        const pi=this.primitiveIndices[i],b=this._boundsCache[pi];
-        const bi=Math.min(binsN-1,Math.max(0,Math.floor(((b.centroid[axis]-lo)/span)*binsN)));
-        const bn=bins[bi];bn.count++;bn.min=RayMath.min3(bn.min,b.min);bn.max=RayMath.max3(bn.max,b.max);
+      const d=ray.direction[axis];
+      if(Math.abs(d)<RayMath.EPSILON){
+        if(ray.origin[axis]<min[axis]||ray.origin[axis]>max[axis])return Infinity;
+        continue;
       }
-      const leftC=[],rightC=[],leftB=[],rightB=[];
-      let c=0,mn=[Infinity,Infinity,Infinity],mx=[-Infinity,-Infinity,-Infinity];
-      for(let i=0;i<binsN;i++){c+=bins[i].count;if(bins[i].count){mn=RayMath.min3(mn,bins[i].min);mx=RayMath.max3(mx,bins[i].max);}leftC[i]=c;leftB[i]={min:mn.slice(),max:mx.slice()};}
-      c=0;mn=[Infinity,Infinity,Infinity];mx=[-Infinity,-Infinity,-Infinity];
-      for(let i=binsN-1;i>=0;i--){c+=bins[i].count;if(bins[i].count){mn=RayMath.min3(mn,bins[i].min);mx=RayMath.max3(mx,bins[i].max);}rightC[i]=c;rightB[i]={min:mn.slice(),max:mx.slice()};}
-      for(let i=0;i<binsN-1;i++){
-        if(!leftC[i]||!rightC[i+1])continue;
-        const splitCost=1+(
-          this._surfaceArea(leftB[i].min,leftB[i].max)*leftC[i]+
-          this._surfaceArea(rightB[i+1].min,rightB[i+1].max)*rightC[i+1]
-        )/parentArea;
-        if(splitCost<bestCost){bestCost=splitCost;best={axis,threshold:lo+span*((i+1)/binsN),cost:splitCost};}
-      }
+      let a=(min[axis]-ray.origin[axis])*ray.invDirection[axis];
+      let b=(max[axis]-ray.origin[axis])*ray.invDirection[axis];
+      if(a>b){const tmp=a;a=b;b=tmp}
+      t0=Math.max(t0,a);t1=Math.min(t1,b);
+      if(t1<t0)return Infinity;
     }
-    return best&&bestCost<leafCost?best:null;
+    return t0;
+  },
+  intersect(ray,min,max,tLimit=Infinity){return Number.isFinite(this.entry(ray,min,max,tLimit))}
+});
+
+var RenderTriangleStore = class RenderTriangleStore{
+  constructor(){
+    this.positions=[];
+    this.normals=[];
+    this.uvs=[];
+    this.triangles=[];
+    this.materialIndices=[];
+    this.objectIndices=[];
+    this.objectIds=[];
+    this.stats={inputTriangles:0,acceptedTriangles:0,rejectedInvalidIndex:0,rejectedNonFinite:0,rejectedDegenerate:0};
   }
-  _build(start,end){
-    const rb=this._rangeBounds(start,end);
-    const nodeIndex=this.nodes.length;
-    this.nodes.push(null);
-    const count=end-start;
-    if(count<=this.maxLeafSize){
-      this.nodes[nodeIndex]=new BVHNode(rb.min,rb.max,-1,-1,start,count);
-      return nodeIndex;
-    }
-    const ext=RayMath.sub(rb.cmax,rb.cmin);
-    let axis=0;if(ext[1]>ext[axis])axis=1;if(ext[2]>ext[axis])axis=2;
-    const sah=this._sahSplit(start,end,rb);
-    if(sah)axis=sah.axis;
-    const sorted=new Array(end-start);for(let si=0;si<sorted.length;si++)sorted[si]=this.primitiveIndices[start+si];
-    sorted.sort((a,b)=>this._boundsCache[a].centroid[axis]-this._boundsCache[b].centroid[axis]);
-    this.primitiveIndices.set(sorted,start);
-    let mid=start+Math.floor(count/2);
-    if(sah){
-      let split=start;
-      while(split<end&&this._boundsCache[this.primitiveIndices[split]].centroid[axis]<sah.threshold)split++;
-      if(split>start&&split<end)mid=split;
-    }
-    if(mid===start||mid===end){
+  addPacket(packet,objectIndex){
+    const baseVertex=this.positions.length/3;
+    for(let i=0;i<packet.positions.length;i++)this.positions.push(packet.positions[i]);
+
+    // Startup-safe cross-generation compatibility.
+    // Geometry packets created by earlier diagnostic/self-test paths may not
+    // contain shading normals or UVs. Missing optional attributes must not
+    // abort editor initialization.
+    const packetVertexCount=packet.positions.length/3;
+    const srcNormals=(packet.normals&&packet.normals.length===packet.positions.length)
+      ? packet.normals
+      : new Float32A
+-- hit 2 line 5674 --
+  if(mid===start||mid===end){
       this.nodes[nodeIndex]=new BVHNode(rb.min,rb.max,-1,-1,start,count);
       return nodeIndex;
     }
@@ -195,1862 +166,1017 @@ var RenderBVH = class RenderBVH{
     const stack=[this.root];
     const temp=new RenderHit();
     while(stack.length){
-      const node=this
--- hit 2 line 10071 --
-    {settings:{lightTree:true}},
-      {lights:fakeLights}
-    );
-    expect(tree instanceof RenderLightTree,'Core H Light Tree routing failed');
-  }catch(e){errors.push('Core H Light Tree routing: '+String(e?.message||e));}
-
-  return {ok:errors.length===0,errors};
+      const node=this.nodes[stack.pop()];
+      if(!AABBIntersector.intersect(ray,node.min,node.max,ray.tMax))continue;
+      if(node.leaf){
+        for(let i=node.start;i<node.start+node.count;i++){
+          const tri=this.primitiveIndices[i],k=tri*3;
+          temp.hit=false;temp.t=Infinity;
+          TriangleIntersector.intersect(
+            ray,
+            this.store.vertex(this.store.triangles[k]),
+            this.store.vertex(this.store.triangles[k+1]),
+            this.store.vertex(this.store.triangles[k+2]),
+            temp
+          );
+          if(temp.hit)return true;
+        }
+      }else{
+        const left=this.nodes[node.left],right=this.nodes[node.right];
+        const lt=AABBIntersector.entry(ray,left.min,left.max,ray.tMax);
+        const rt=AABBIntersector.entry(ray,right.min,right.max,ray.tMax);
+        const lh=Number.isFinite(lt),rh=Number.isFinite(rt);
+        if(lh&&rh){
+          if(lt<=rt)stack.push(node.right,node.left);else stack.push(node.left,node.right);
+        }else if(lh)stack.push(node.left);
+        else if(rh)stack.push(node.right);
+      }
+    }
+    return false;
+  }
 }
 
-function validateRenderCoreH(){
-  const errors=[];
-  const c=RenderCoreH.validate();
-  if(!c.ok)errors.push(...c.errors);
-  const t=runRenderCoreHSelfTests();
-  if(!t.ok)errors.push(...t.errors);
-  return {ok:errors.length===0,errors};
+const RenderCameraPolicy=Object.freeze({
+  fallback:Object.fr
+-- hit 3 line 5716 --
+de.right);
+      }
+    }
+    return best;
+  }
+  stats(){
+    let leafCount=0,maxDepth=0;
+    if(this.root>=0){
+      const stack=[[this.root,0]];
+      while(stack.length){
+        const [i,d]=stack.pop(),n=this.nodes[i];maxDepth=Math.max(maxDepth,d);
+        if(n.leaf)leafCount++;else{stack.push([n.left,d+1]);stack.push([n.right,d+1]);}
+      }
+    }
+    return Object.freeze({nodeCount:this.nodes.length,leafCount,maxDepth,triangleCount:this.store.triangleCount(),maxLeafSize:this.maxLeafSize,buildStrategy:'SAH-12bin-normalized-leafcost-nearfirst'});
+  }
+  anyHit(ray){
+    if(this.root<0)return false;
+    const stack=[this.root];
+    const temp=new RenderHit();
+    while(stack.length){
+      const node=this.nodes[stack.pop()];
+      if(!AABBIntersector.intersect(ray,node.min,node.max,ray.tMax))continue;
+      if(node.leaf){
+        for(let i=node.start;i<node.start+node.count;i++){
+          const tri=this.primitiveIndices[i],k=tri*3;
+          temp.hit=false;temp.t=Infinity;
+          TriangleIntersector.intersect(
+            ray,
+            this.store.vertex(this.store.triangles[k]),
+            this.store.vertex(this.store.triangles[k+1]),
+            this.store.vertex(this.store.triangles[k+2]),
+            temp
+          );
+          if(temp.hit)return true;
+        }
+      }else{
+        const left=this.nodes[node.left],right=this.nodes[node.right];
+        const lt=AABBIntersector.entry(ray,left.min,left.max,ray.tMax);
+        const rt=AABBIntersector.entry(ray,right.min,right.max,ray.tMax);
+        const lh=Number.isFinite(lt),rh=Number.isFinite(rt);
+        if(lh&&rh){
+          if(lt<=rt)stack.push(node.right,node.left);else stack.push(node.left,node.right);
+        }else if(lh)stack.push(node.left);
+        else if(rh)stack.push(node.right);
+      }
+    }
+    return false;
+  }
 }
 
-Object.assign(window,{
-  RenderCoreHContract,RenderCoreH,
-  runRenderCoreHSelfTests,validateRenderCoreH
+const RenderCameraPolicy=Object.freeze({
+  fallback:Object.freeze({
+    type:'Perspective',
+    position:Object.freeze([0,0,10]),
+    quaternion:Object.freeze([0,0,0,1]),
+    up:Object.freeze([0,0,1]),
+    fov:50,aspect:1,near:1e-4,far:Infinity
+  }),
+  sanitize(snapshot){
+    const s=snapshot||this.fallback;
+    const position=(Array.isArray(s.position)&&s.position.length===3&&s.position.every(Number.isFinite))?s.position.slice():[...this.fallback.position];
+    let q=(Array.isArray(s.quaternion)&&s.quaternion.length===4&&s.quaternion.every(Number.isFinite))?s.quaternion.slice():[0,0,0,1];
+    const qLen=Math.hypot(q[0],q[1],q[2],q[3]);
+    q=qLen>1e-12?q.map(v=>v/qLen):[0,0,0,1];
+    const up=(Array.isArray(s.up)&&s.up.length===3&&s.up.every(Number.isFinite))?s.up.slice():[0,0,1];
+    const fov=Math.max(1,Math.min(179,Number.isFinite(Number(s.fov))?Number(s.fov):50));
+    const aspect=Math.max(1e-6,Number.isFinite(Number(s.aspect))?Number(s.aspect):1);
+    const near=Math.max(RenderRayPolicy.epsilonForPoint(position),Number.isFinite(Number(s.near))?Number(s.near):1e-4);
+    const far=(Number.isFinite(Number(s.far))&&Number(s.far)>near)?Number(s.far):Infinity;
+    return {type:'Perspective',position,quaternion:q,up,fov,aspect,near,far};
+  },
+  outputAspect(width,height){
+    width=Math.max(1,Number(width)||1);height=Math.max(1,Number(height)||1);
+    return width/height;
+  }
 });
 
-window.get3DLiteCoreHDiagnostics=()=>{
-  const job=RenderFramework?.jobs?.activeJob||RenderFramework?.jobs?.lastJob||null;
-  return RenderCoreH.diagnostics(job);
-};
+const RenderCameraRayGenerator=Object.freeze({
+  rotateByQuaternion(v,q){
+    const x=v[0],y=v[1],z=v[2],qx=q[0],qy=q[1],qz=q[2],qw=q[3];
+    const ix=qw*x+qy*z-qz*y,iy=qw*y+qz*x-qx*z,iz=qw*z+qx*y-qy*x,iw=-qx*x-qy*y-qz*z;
+    return [
+      ix*qw+iw*-qx+iy*-qz-iz*-qy,
+      iy*qw+iw*-qy+iz*-qx-ix*-qz,
+      iz*qw+iw*-qz+ix*-qy-iy*-qx
+    ];
+  },
+  ray(cameraSnapshot,px,py,width,height){
+   
+-- hit 4 line 5913 --
+5)*255);
+          rgba[o+2]=Math.round((n[2]*.5+.5)*255);
+          rgba[o+3]=255;
+        }else{
+          rgba[o]=24;rgba[o+1]=24;rgba[o+2]=24;rgba[o+3]=255;
+        }
+      }
+      if(y%rowChunk===0)onProgress((y+1)/height);
+      if(y%rowChunk===0)await new Promise(r=>setTimeout(r,0));
+    }
+    return {width,height,rgba};
+  }
+});
 
-
-const RenderCoreHKnowledge=Object.freeze({
-  version:'3.79.32',
-  consolidated:Object.freeze([
-    'Renderers call RenderCoreH for Light Tree and Path Guide creation.',
-    'Renderers call RenderCoreH for performance policy, counters and timing.',
-    'Group 15 and Group 16 cores remain compatibility surfaces only.',
-    'Core H validation is intentionally excluded from synchronous editor startup.'
+const RenderGroup4Contract=Object.freeze({
+  owns:Object.freeze([
+    'ray representation','ray/triangle intersection','ray/AABB intersection',
+    'triangle store','binary BVH','camera ray generation','diagnostic normal render'
   ]),
-  rejected:Object.freeze([
-    'broad renderer-region transplant',
-    'shared tile scheduler',
-    'startup-blocking Group 15/16/Core H validation',
-    'duplicate performance ownership'
+  consumes:Object.freeze([
+    'Core A immutable RenderSceneSnapshot','Group 3 RenderGeometryCompiler'
+  ]),
+  doesNotOwn:Object.freeze([
+    'editor scene','MNMesh','selection','transforms','editor materials',
+    'physical BSDF','lights','GI','denoising'
   ])
 });
-window.RenderCoreHKnowledge=RenderCoreHKnowledge;
 
 
-
-/* ============================================================
-   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — RENDERER CONSOLIDATION + STABILITY
-   ============================================================ */
-class RendererError extends Error{
-  constructor(stage,message,cause=null){super(message);this.name='RendererError';this.stage=stage;this.cause=cause;}
-}
-class SnapshotError extends RendererError{constructor(m,c=null){super('snapshot',m,c);this.name='SnapshotError';}}
-var GeometryCompileError = class GeometryCompileError extends RendererError{constructor(m,c=null){super('geometry',m,c);this.name='GeometryCompileError';}}
-class WorkerError extends RendererError{constructor(m,c=null){super('worker',m,c);this.name='WorkerError';}}
-class BVHError extends RendererError{constructor(m,c=null){super('bvh',m,c);this.name='BVHError';}}
-class MaterialError extends RendererError{constructor(m,c=null){super('material',m,c);this.name='MaterialError';}}
-class LightError extends RendererError{constructor(m,c=null){super('light',m,c);this.name='LightError';}}
-class RenderExecutionError extends RendererError{constructor(m,c=null){super('render',m,c);this.name='RenderExecutionError';}}
-
-const RendererSeverity=Object.freeze({INFO:'INFO',WARNING:'WARNING',RECOVERABLE:'RECOVERABLE',FATAL:'FATAL'});
-var RendererRuntimeState={
-  rendererReady:false,snapshotReady:false,workerReady:false,accelerationReady:false,framebufferReady:false,
-  degraded:false,errors:[],
-  reset(){
-    this.rendererReady=false;this.snapshotReady=false;this.workerReady=false;
-    this.accelerationReady=false;this.framebufferReady=false;this.degraded=false;this.errors.length=0;
-  },
-  fail(stage,error){
-    this.degraded=true;
-    this.errors.push({stage,severity:error?.severity||RendererSeverity.RECOVERABLE,message:String(error?.message||error),time:Date.now()});
-    document.documentElement.dataset.rendererState='degraded';
-    document.documentElement.dataset.rendererLastError=stage;
-    console.error('[3DLite Renderer]',stage,error);
-    try{ViewportDebugLine?.error?.(error,stage);}catch(_){}
-  },
-  markReady(){
-    this.rendererReady=true;this.degraded=false;
-    document.documentElement.dataset.rendererState='ready';
-    document.documentElement.dataset.rendererReady='true';
-  },
-  snapshot(){return Object.freeze({rendererReady:this.rendererReady,snapshotReady:this.snapshotReady,workerReady:this.workerReady,accelerationReady:this.accelerationReady,framebufferReady:this.framebufferReady,degraded:this.degraded,errorCount:this.errors.length});}
-};
-
-const LiteTraceDiagnostics=Object.freeze({
-  snapshot(job=null){
-    const rf=window.RenderFramework||null;
-    const j=job||rf?.jobs?.activeJob||rf?.jobs?.lastJob||null;
-    return Object.freeze({
-      editor:ThreeDLiteVersion.version,
-      renderer:LiteTraceVersion.version,
-      runtime:window.RendererRuntimeState?.snapshot?.()||null,
-      performance:window.RenderPerformanceArchitectureFinal?.diagnostics?.(j)||null,
-      viewportReady:document.documentElement.dataset.viewportReady||'false',
-      editorState:document.documentElement.dataset.editorState||'unknown'
-    });
-  }
-});
-window.LiteTraceDiagnostics=LiteTraceDiagnostics;
-
-var RendererBootstrap=Object.freeze({
-  validate(){
-    const checks=[
-      ['Group 1',()=>validateRenderGroup1()],['Group 2',()=>validateRenderGroup2()],
-      ['Core A',()=>RenderCoreA.validate()],['Group 3',()=>validateRenderGroup3()],['Part 3',()=>validateRenderPart3()],
-      ['Group 4',()=>validateRenderGroup4()],['Core B',()=>RenderCoreB.validate()],['Part 2',()=>RenderPart2Core.validate()],
-      ['Group 5',()=>validateRenderGroup5()],['Group 6',()=>validateRenderGroup6()],
-      ['Core C',()=>RenderCoreC.validate()],['Group 7',()=>validateRenderGroup7()],['Part 4',()=>validateRenderPart4()],
-      ['Group 8',()=>validateRenderGroup8()],['Part 5',()=>validateRenderPart5()],['Part 6',()=>validateRenderPart6()],['Group 9',()=>validateRenderGroup9()],['Group 10',()=>validateRenderGroup10()],['Core E',()=>RenderCoreE.validate()],['Group 11',()=>validateRenderGroup11()],['Group 12',()=>validateRenderGroup12()],['Core D',()=>RenderCoreD.validate()]
-    ];
-    const errors=[];
-    for(const [name,fn] of checks){
-      try{
-        const r=fn();
-        if(!r?.ok)errors.push(`${name}: ${(r?.errors||['validation failure']).join(', ')}`);
-      }catch(err){errors.push(`${name}: ${String(err?.message||err)}`);}
-    }
-    return {ok:errors.length===0,errors};
-  },
-  initialize(){
-    RendererRuntimeState.reset();
-    try{
-      initRenderGroup1();
-      RendererRuntimeState.framebufferReady=!!RenderFramework.ui?.frameBuffer;
-      RendererRuntimeState.workerReady=!!RenderFramework.jobs?.workerPool;
-      const r=this.validate();
-      if(!r.ok){
-        r.errors.forEach(e=>RendererRuntimeState.fail('validation',new RendererError('validation',e)));
-        return r;
-      }
-      RendererRuntimeState.markReady();
-      return {ok:true,errors:[]};
-    }catch(err){
-      RendererRuntimeState.fail('bootstrap',err);
-      return {ok:false,errors:[String(err?.message||err)]};
-    }
-  },
-  showFailure(error){
-    const notice=document.getElementById('renderFrameNotice');
-    if(notice){notice.style.display='flex';notice.innerHTML='Renderer unavailable.<br>'+String(error?.message||error);}
-  },
-  recover(){
-    try{
-      RenderFramework.jobs?.cancel?.(false);
-      if(RenderFramework.jobs?.workerPool){RenderPart3Core.recover(RenderFramework.jobs);RenderFramework.jobs.configureThreads(RenderFramework.settings.cpuThreads);}
-      const r=this.validate();
-      if(!r.ok){r.errors.forEach(e=>RendererRuntimeState.fail('recovery-validation',new RendererError('recovery-validation',e)));return r;}
-      const release=(typeof runRendererReleaseGate==='function')?runRendererReleaseGate():{ok:true,failures:[]};
-      window.__3DLiteRendererRecoveryWarnings=release.ok?[]:[...(release.failures||[])];
-      if(!release.ok){
-        console.warn('[3DLite Renderer] Recovery release diagnostics reported warnings:',release.failures);
-      }
-      RendererRuntimeState.markReady();
-      const notice=document.getElementById('renderFrameNotice');if(notice){notice.style.display='none';notice.innerHTML='';}
-      return {ok:true,errors:[]};
-    }catch(err){RendererRuntimeState.fail('recovery',err);return {ok:false,errors:[String(err?.message||err)]};}
-  },
-  shutdown(){try{RenderFramework.jobs?.dispose?.();}catch(_){}RendererRuntimeState.reset();}
-});
-Object.assign(window,{RendererError,SnapshotError,GeometryCompileError,WorkerError,BVHError,MaterialError,LightError,RenderExecutionError,RendererRuntimeState,RendererBootstrap});
-window.resetRenderer=()=>RendererBootstrap.recover();
-const RenderJobStatus=Object.freeze({
-  IDLE:'Idle',
-  PREPARING:'Preparing',
-  PREPARING_GEOMETRY:'Preparing Geometry',
-  RENDERING:'Rendering',
-  PAUSED:'Paused',
-  FINISHED:'Finished',
-  CANCELLED:'Cancelled',
-  ERROR:'Error'
-});
-
-class RenderSettingsModel{
-  constructor(){
-    this.engine='fast';
-    this.quality='Preview';
-    this.width=1280;this.height=720;this.percentage=100;
-    this.aspectLock=true;this.transparent=false;
-    this.format='PNG';this.colorDepth='8-bit';
-    this.camera='Active View';this.focalLength=50;this.sensor
-hits 2
-
-### static intersect
-hits 0
-
-### GeometryCompiler
--- hit 1 line 4278 --
-available: ${name}`);
-    return service;
-  },
-  setLifecycle(lifecycle,phase=this.phase){
-    this.lifecycle=lifecycle;
-    this.phase=phase;
-    document.documentElement.dataset.appLifecycle=lifecycle;
-    document.documentElement.dataset.appPhase=phase;
-    return lifecycle;
-  },
-  fail(stage,error){
-    const entry=Object.freeze({stage,message:String(error?.message||error),time:Date.now()});
-    this.failures.push(entry);
-    return entry;
-  }
-});
-window.ThreeDLiteAppContext=ThreeDLiteAppContext;
-
-window.SelectionManager=SelectionManager;
-window.ToolManager=ToolManager;
-window.InputController=InputController;
-window.MeshWireManager=MeshWireManager;
-window.OverlayManager=OverlayManager;
-window.RendererBootstrap=RendererBootstrap;
-
-const ThreeDLiteSubsystemRegistry=Object.freeze({
-  editor:Object.freeze(['SelectionManager','ToolManager','InputController','MeshWireManager','OverlayManager']),
-  renderer:Object.freeze(['LiteTraceServices','LiteTraceDiagnostics','RendererBootstrap']),
-  dependencies:Object.freeze({
-    SelectionManager:Object.freeze([]),
-    ToolManager:Object.freeze(['SelectionManager']),
-    InputController:Object.freeze(['ToolManager']),
-    MeshWireManager:Object.freeze([]),
-    OverlayManager:Object.freeze(['MeshWireManager']),
-    RendererBootstrap:Object.freeze(['LiteTraceServices','LiteTraceDiagnostics']),
-    SceneGraph:Object.freeze([]),
-    CommandService:Object.freeze([]),
-    HistoryService:Object.freeze(['CommandService']),
-    NotificationService:Object.freeze([]),
-    EditorServices:Object.freeze(['SceneGraph','CommandService','HistoryService','NotificationService']),
-    SelectionService:Object.freeze([]),
-    ToolService:Object.freeze(['SelectionService']),
-    InputService:Object.freeze(['ToolService']),
-    TransformService:Object.freeze(['SelectionService']),
-    PickingService:Object.freeze(['SelectionService']),
-    ViewportService:Object.freeze([]),
-    MeshService:Object.freeze([]),
-    EvaluationService:Object.freeze(['MeshService']),
-    EditorAPI:Object.freeze(['EditorServices','SelectionService','ToolService','InputService','TransformService','PickingService','ViewportService','MeshService','EvaluationService']),
-    GeometryCompiler:Object.freeze(['MeshService']),
-    DerivedCache:Object.freeze([]),
-    MeshChangeService:Object.freeze(['EvaluationService']),
-    WireService:Object.freeze([]),
-    OverlayService:Object.freeze(['SelectionService']),
-    DisplayService:Object.freeze(['ViewportService']),
-    ViewportInvalidation:Object.freeze(['WireService','OverlayService','DisplayService']),
-    GeometryPipeline:Object.freeze(['GeometryCompiler','DerivedCache','MeshChangeService','EvaluationService']),
-    ModelViewPipeline:Object.freeze(['GeometryPipeline','WireService','OverlayService','DisplayService','ViewportInvalidation']),
-    MaterialService:Object.freeze(['NotificationService']),
-    UVWService:Object.freeze(['MeshChangeService','NotificationService']),
-    ImportService:Object.freeze(['MeshService']),
-    AssetChangeService:Object.freeze(['MeshChangeService','NotificationService','ViewportInvalidation']),
-    AssetServices:Object.freeze(['MaterialService','UVWService','ImportService','AssetChangeService']),
-    RenderSceneService:Object.freeze([]),
-    RenderRequestService:Object.freeze(['RenderSceneService']),
-    RenderFrameworkService:Object.freeze(['RenderRequestService']),
-    RenderSettingsService:Object.freeze([]),
-    RenderOutputService:Object.freeze(['RenderFrameworkService']),
-    RendererDiagnosticsService:Object.freeze([]),
-    RendererFacade:Object.freeze(['RenderSceneService','RenderRequestService','RenderFrameworkService','RenderSettingsService','RenderOutputService','RendererDiagnosticsService']),
-    RenderSchedulerService:Object.freeze([]),
-    WorkerService:Object.freeze([]),
-    AccelerationService:Object.freeze([]),
-    SamplingService:Object.freeze([]),
-    PerformanceService:Object.freeze([]),
-    RenderExecutionContext:Object.freeze(['RenderSchedulerService','WorkerService','AccelerationService','PerformanceService']),
-    RenderExecutionServices:Object.freeze(['RenderSchedulerService','WorkerService','AccelerationService','SamplingService','PerformanceService','RenderExecutionContext']),
-    RenderChannelService:Object.freeze([]),
-    RenderDenoiseService:Object.freeze(['RenderChannelService']),
-    RenderToneMapService:Object.freeze([]),
-    RenderPresentationService:Object.freeze(['RenderChannelService','RenderDenoiseService','RenderToneMapService']),
-    RenderRegionService:Object.freeze(['RenderFrameworkService']),
-    RenderImageService:Object.freeze(['RenderOutputService']),
-    RenderReplayService:Object.freeze(['RenderFrameworkService']),
-    RenderOutputPipeline:Object.freeze(['RenderChannelService','RenderDenoiseService','RenderToneMapService','RenderPresentationService','RenderRegionService','RenderImageService','RenderReplayService'])
-  }),
-  rule:'Declarations and registrations must precede runtime initialization.'
-});
-window.ThreeDLiteSubsystemRegistry=ThreeDLiteSubsystemRegistry;
-function register3DLiteCoreServices(){
-  ThreeDLiteAppContext.setLifecycle(ThreeDLiteLifecycle.REGISTERING,ThreeDLiteBootPhase.REGISTRATION);
-  const services={
-    SelectionManager:window.SelectionManager||null,
-    ToolManager:window.ToolManager||null,
-    InputController:window.InputController||null,
-    MeshWireManager:window.MeshWireManager||null,
-    OverlayManager:window.OverlayManager||null,
-    LiteTraceServices:window.LiteTraceServices||null,
-    LiteTraceDiagnostics:window.LiteTraceDiagnostics||null,
-    RendererBootstrap:window.RendererBootstrap||null,
-    SceneGraph:window.ThreeDLiteSceneGraph||null,
-    CommandService:window.ThreeDLiteCommandService||null,
-    HistoryService:window.ThreeDLiteHistoryService||null,
-    NotificationService:window.ThreeDLiteNotificationService||null,
-    EditorServices:window.ThreeDLiteEditorServices||null,
-    SelectionService:window.ThreeDLiteSelectionService||null,
-    ToolService:window.ThreeDLiteToolService||null,
-    InputService:window.ThreeDLiteInputService||null,
-    TransformService:window.ThreeDLiteTransformService||null,
-    PickingService:window.ThreeDLitePickingService||null,
-    ViewportService:window.ThreeDLiteViewportService||null,
-    MeshService:window.ThreeDLiteMeshService||null,
-    EvaluationService:window.ThreeDLiteEvaluationService||null,
-    EditorAPI:window.ThreeDLiteEditorAPI||null,
-    GeometryCompiler:window.ThreeDLiteGeometryCompiler||null,
-    DerivedCache:window.ThreeDLiteDerivedCacheService||null,
-    MeshChangeService:window.ThreeDLiteMeshChangeService||null,
-    WireService:window.ThreeDLiteWireService||null,
-    OverlayService:window.ThreeDLiteOverlayService||null,
-    DisplayService:window.ThreeDLiteDisplayService||null,
-    ViewportInvalidation:window.ThreeDLiteViewportInvalidation||null,
-    GeometryPipeline:window.ThreeDLiteGeometryPipeline||null,
-    ModelViewPipeline:window.ThreeDLiteModelViewPipeline||null,
-    MaterialService:window.ThreeDLiteMaterialService||null,
-    UVWService:window.ThreeDLiteUVWService||null,
-    ImportService:window.ThreeDLiteImportService||null,
-    AssetChangeService:window.ThreeDLiteAssetChangeService||null,
-    AssetServices:window.ThreeDLiteAssetServices||null,
-    RenderSceneService:window.ThreeDLiteRenderSceneService||null,
-    RenderRequestService:window.ThreeDLiteRenderRequestService||null,
-    RenderFrameworkService:window.ThreeDLiteRenderFrameworkService||null,
-    RenderSettingsService:window.ThreeDLiteRenderSettingsService||null,
-    RenderOutputService:window.ThreeDLiteRenderOutputService||null,
-    RendererDiagnosticsService:window.ThreeDLiteRendererDiagnosticsService||null,
-    RendererFacade:window.ThreeDLiteRendererFacade||null,
-    RenderSchedulerService:window.ThreeDLiteRenderSchedulerService||null,
-    WorkerService:window.ThreeDLiteWorkerService||null,
-    AccelerationService:window.ThreeDLiteAccelerationService||null,
-    SamplingService:window.ThreeDLiteSamplingService||null,
-    PerformanceService:window.ThreeDLitePerformanceService||null,
-    RenderExecutionContext:window.ThreeDLiteRenderExecutionContext||null,
-    RenderExecutionServices:window.ThreeDLiteRenderExecutionServices||null,
-    RenderChannelService:window.ThreeDLiteRenderChannelService||null,
-    RenderDenoiseService:window.ThreeDLiteRenderDenoiseService||null,
-    RenderToneMapService:window.ThreeDLiteRenderToneMapService||null,
-    RenderPresentationService:window.ThreeDLiteRenderPresentationService||null,
-    RenderRegionService:window.ThreeDLiteRenderRegionService||null,
-    RenderImageService:window.ThreeDLiteRenderImageService||null,
-    RenderReplayService:window.ThreeDLiteRend
--- hit 2 line 4285 --
-sh(entry);
-    return entry;
-  }
-});
-window.ThreeDLiteAppContext=ThreeDLiteAppContext;
-
-window.SelectionManager=SelectionManager;
-window.ToolManager=ToolManager;
-window.InputController=InputController;
-window.MeshWireManager=MeshWireManager;
-window.OverlayManager=OverlayManager;
-window.RendererBootstrap=RendererBootstrap;
-
-const ThreeDLiteSubsystemRegistry=Object.freeze({
-  editor:Object.freeze(['SelectionManager','ToolManager','InputController','MeshWireManager','OverlayManager']),
-  renderer:Object.freeze(['LiteTraceServices','LiteTraceDiagnostics','RendererBootstrap']),
-  dependencies:Object.freeze({
-    SelectionManager:Object.freeze([]),
-    ToolManager:Object.freeze(['SelectionManager']),
-    InputController:Object.freeze(['ToolManager']),
-    MeshWireManager:Object.freeze([]),
-    OverlayManager:Object.freeze(['MeshWireManager']),
-    RendererBootstrap:Object.freeze(['LiteTraceServices','LiteTraceDiagnostics']),
-    SceneGraph:Object.freeze([]),
-    CommandService:Object.freeze([]),
-    HistoryService:Object.freeze(['CommandService']),
-    NotificationService:Object.freeze([]),
-    EditorServices:Object.freeze(['SceneGraph','CommandService','HistoryService','NotificationService']),
-    SelectionService:Object.freeze([]),
-    ToolService:Object.freeze(['SelectionService']),
-    InputService:Object.freeze(['ToolService']),
-    TransformService:Object.freeze(['SelectionService']),
-    PickingService:Object.freeze(['SelectionService']),
-    ViewportService:Object.freeze([]),
-    MeshService:Object.freeze([]),
-    EvaluationService:Object.freeze(['MeshService']),
-    EditorAPI:Object.freeze(['EditorServices','SelectionService','ToolService','InputService','TransformService','PickingService','ViewportService','MeshService','EvaluationService']),
-    GeometryCompiler:Object.freeze(['MeshService']),
-    DerivedCache:Object.freeze([]),
-    MeshChangeService:Object.freeze(['EvaluationService']),
-    WireService:Object.freeze([]),
-    OverlayService:Object.freeze(['SelectionService']),
-    DisplayService:Object.freeze(['ViewportService']),
-    ViewportInvalidation:Object.freeze(['WireService','OverlayService','DisplayService']),
-    GeometryPipeline:Object.freeze(['GeometryCompiler','DerivedCache','MeshChangeService','EvaluationService']),
-    ModelViewPipeline:Object.freeze(['GeometryPipeline','WireService','OverlayService','DisplayService','ViewportInvalidation']),
-    MaterialService:Object.freeze(['NotificationService']),
-    UVWService:Object.freeze(['MeshChangeService','NotificationService']),
-    ImportService:Object.freeze(['MeshService']),
-    AssetChangeService:Object.freeze(['MeshChangeService','NotificationService','ViewportInvalidation']),
-    AssetServices:Object.freeze(['MaterialService','UVWService','ImportService','AssetChangeService']),
-    RenderSceneService:Object.freeze([]),
-    RenderRequestService:Object.freeze(['RenderSceneService']),
-    RenderFrameworkService:Object.freeze(['RenderRequestService']),
-    RenderSettingsService:Object.freeze([]),
-    RenderOutputService:Object.freeze(['RenderFrameworkService']),
-    RendererDiagnosticsService:Object.freeze([]),
-    RendererFacade:Object.freeze(['RenderSceneService','RenderRequestService','RenderFrameworkService','RenderSettingsService','RenderOutputService','RendererDiagnosticsService']),
-    RenderSchedulerService:Object.freeze([]),
-    WorkerService:Object.freeze([]),
-    AccelerationService:Object.freeze([]),
-    SamplingService:Object.freeze([]),
-    PerformanceService:Object.freeze([]),
-    RenderExecutionContext:Object.freeze(['RenderSchedulerService','WorkerService','AccelerationService','PerformanceService']),
-    RenderExecutionServices:Object.freeze(['RenderSchedulerService','WorkerService','AccelerationService','SamplingService','PerformanceService','RenderExecutionContext']),
-    RenderChannelService:Object.freeze([]),
-    RenderDenoiseService:Object.freeze(['RenderChannelService']),
-    RenderToneMapService:Object.freeze([]),
-    RenderPresentationService:Object.freeze(['RenderChannelService','RenderDenoiseService','RenderToneMapService']),
-    RenderRegionService:Object.freeze(['RenderFrameworkService']),
-    RenderImageService:Object.freeze(['RenderOutputService']),
-    RenderReplayService:Object.freeze(['RenderFrameworkService']),
-    RenderOutputPipeline:Object.freeze(['RenderChannelService','RenderDenoiseService','RenderToneMapService','RenderPresentationService','RenderRegionService','RenderImageService','RenderReplayService'])
-  }),
-  rule:'Declarations and registrations must precede runtime initialization.'
-});
-window.ThreeDLiteSubsystemRegistry=ThreeDLiteSubsystemRegistry;
-function register3DLiteCoreServices(){
-  ThreeDLiteAppContext.setLifecycle(ThreeDLiteLifecycle.REGISTERING,ThreeDLiteBootPhase.REGISTRATION);
-  const services={
-    SelectionManager:window.SelectionManager||null,
-    ToolManager:window.ToolManager||null,
-    InputController:window.InputController||null,
-    MeshWireManager:window.MeshWireManager||null,
-    OverlayManager:window.OverlayManager||null,
-    LiteTraceServices:window.LiteTraceServices||null,
-    LiteTraceDiagnostics:window.LiteTraceDiagnostics||null,
-    RendererBootstrap:window.RendererBootstrap||null,
-    SceneGraph:window.ThreeDLiteSceneGraph||null,
-    CommandService:window.ThreeDLiteCommandService||null,
-    HistoryService:window.ThreeDLiteHistoryService||null,
-    NotificationService:window.ThreeDLiteNotificationService||null,
-    EditorServices:window.ThreeDLiteEditorServices||null,
-    SelectionService:window.ThreeDLiteSelectionService||null,
-    ToolService:window.ThreeDLiteToolService||null,
-    InputService:window.ThreeDLiteInputService||null,
-    TransformService:window.ThreeDLiteTransformService||null,
-    PickingService:window.ThreeDLitePickingService||null,
-    ViewportService:window.ThreeDLiteViewportService||null,
-    MeshService:window.ThreeDLiteMeshService||null,
-    EvaluationService:window.ThreeDLiteEvaluationService||null,
-    EditorAPI:window.ThreeDLiteEditorAPI||null,
-    GeometryCompiler:window.ThreeDLiteGeometryCompiler||null,
-    DerivedCache:window.ThreeDLiteDerivedCacheService||null,
-    MeshChangeService:window.ThreeDLiteMeshChangeService||null,
-    WireService:window.ThreeDLiteWireService||null,
-    OverlayService:window.ThreeDLiteOverlayService||null,
-    DisplayService:window.ThreeDLiteDisplayService||null,
-    ViewportInvalidation:window.ThreeDLiteViewportInvalidation||null,
-    GeometryPipeline:window.ThreeDLiteGeometryPipeline||null,
-    ModelViewPipeline:window.ThreeDLiteModelViewPipeline||null,
-    MaterialService:window.ThreeDLiteMaterialService||null,
-    UVWService:window.ThreeDLiteUVWService||null,
-    ImportService:window.ThreeDLiteImportService||null,
-    AssetChangeService:window.ThreeDLiteAssetChangeService||null,
-    AssetServices:window.ThreeDLiteAssetServices||null,
-    RenderSceneService:window.ThreeDLiteRenderSceneService||null,
-    RenderRequestService:window.ThreeDLiteRenderRequestService||null,
-    RenderFrameworkService:window.ThreeDLiteRenderFrameworkService||null,
-    RenderSettingsService:window.ThreeDLiteRenderSettingsService||null,
-    RenderOutputService:window.ThreeDLiteRenderOutputService||null,
-    RendererDiagnosticsService:window.ThreeDLiteRendererDiagnosticsService||null,
-    RendererFacade:window.ThreeDLiteRendererFacade||null,
-    RenderSchedulerService:window.ThreeDLiteRenderSchedulerService||null,
-    WorkerService:window.ThreeDLiteWorkerService||null,
-    AccelerationService:window.ThreeDLiteAccelerationService||null,
-    SamplingService:window.ThreeDLiteSamplingService||null,
-    PerformanceService:window.ThreeDLitePerformanceService||null,
-    RenderExecutionContext:window.ThreeDLiteRenderExecutionContext||null,
-    RenderExecutionServices:window.ThreeDLiteRenderExecutionServices||null,
-    RenderChannelService:window.ThreeDLiteRenderChannelService||null,
-    RenderDenoiseService:window.ThreeDLiteRenderDenoiseService||null,
-    RenderToneMapService:window.ThreeDLiteRenderToneMapService||null,
-    RenderPresentationService:window.ThreeDLiteRenderPresentationService||null,
-    RenderRegionService:window.ThreeDLiteRenderRegionService||null,
-    RenderImageService:window.ThreeDLiteRenderImageService||null,
-    RenderReplayService:window.ThreeDLiteRenderReplayService||null,
-    RenderOutputPipeline:window.ThreeDLiteRenderOutputPipeline||null
-  };
-  for(const [name,service] of Object.entries(services)){
-    if(service)ThreeDLiteAppContext.register(name,service);
-  }
-  return services;
-}
-window.register3DLiteCoreServices=register3DLiteCoreServices;
-function get3DLiteBootstrapSnapshot(){
-  return Object.freeze({
-    lifecycle:ThreeDLiteAppContext.lifecycle,
-    phas
--- hit 3 line 4343 --
-  RenderChannelService:Object.freeze([]),
-    RenderDenoiseService:Object.freeze(['RenderChannelService']),
-    RenderToneMapService:Object.freeze([]),
-    RenderPresentationService:Object.freeze(['RenderChannelService','RenderDenoiseService','RenderToneMapService']),
-    RenderRegionService:Object.freeze(['RenderFrameworkService']),
-    RenderImageService:Object.freeze(['RenderOutputService']),
-    RenderReplayService:Object.freeze(['RenderFrameworkService']),
-    RenderOutputPipeline:Object.freeze(['RenderChannelService','RenderDenoiseService','RenderToneMapService','RenderPresentationService','RenderRegionService','RenderImageService','RenderReplayService'])
-  }),
-  rule:'Declarations and registrations must precede runtime initialization.'
-});
-window.ThreeDLiteSubsystemRegistry=ThreeDLiteSubsystemRegistry;
-function register3DLiteCoreServices(){
-  ThreeDLiteAppContext.setLifecycle(ThreeDLiteLifecycle.REGISTERING,ThreeDLiteBootPhase.REGISTRATION);
-  const services={
-    SelectionManager:window.SelectionManager||null,
-    ToolManager:window.ToolManager||null,
-    InputController:window.InputController||null,
-    MeshWireManager:window.MeshWireManager||null,
-    OverlayManager:window.OverlayManager||null,
-    LiteTraceServices:window.LiteTraceServices||null,
-    LiteTraceDiagnostics:window.LiteTraceDiagnostics||null,
-    RendererBootstrap:window.RendererBootstrap||null,
-    SceneGraph:window.ThreeDLiteSceneGraph||null,
-    CommandService:window.ThreeDLiteCommandService||null,
-    HistoryService:window.ThreeDLiteHistoryService||null,
-    NotificationService:window.ThreeDLiteNotificationService||null,
-    EditorServices:window.ThreeDLiteEditorServices||null,
-    SelectionService:window.ThreeDLiteSelectionService||null,
-    ToolService:window.ThreeDLiteToolService||null,
-    InputService:window.ThreeDLiteInputService||null,
-    TransformService:window.ThreeDLiteTransformService||null,
-    PickingService:window.ThreeDLitePickingService||null,
-    ViewportService:window.ThreeDLiteViewportService||null,
-    MeshService:window.ThreeDLiteMeshService||null,
-    EvaluationService:window.ThreeDLiteEvaluationService||null,
-    EditorAPI:window.ThreeDLiteEditorAPI||null,
-    GeometryCompiler:window.ThreeDLiteGeometryCompiler||null,
-    DerivedCache:window.ThreeDLiteDerivedCacheService||null,
-    MeshChangeService:window.ThreeDLiteMeshChangeService||null,
-    WireService:window.ThreeDLiteWireService||null,
-    OverlayService:window.ThreeDLiteOverlayService||null,
-    DisplayService:window.ThreeDLiteDisplayService||null,
-    ViewportInvalidation:window.ThreeDLiteViewportInvalidation||null,
-    GeometryPipeline:window.ThreeDLiteGeometryPipeline||null,
-    ModelViewPipeline:window.ThreeDLiteModelViewPipeline||null,
-    MaterialService:window.ThreeDLiteMaterialService||null,
-    UVWService:window.ThreeDLiteUVWService||null,
-    ImportService:window.ThreeDLiteImportService||null,
-    AssetChangeService:window.ThreeDLiteAssetChangeService||null,
-    AssetServices:window.ThreeDLiteAssetServices||null,
-    RenderSceneService:window.ThreeDLiteRenderSceneService||null,
-    RenderRequestService:window.ThreeDLiteRenderRequestService||null,
-    RenderFrameworkService:window.ThreeDLiteRenderFrameworkService||null,
-    RenderSettingsService:window.ThreeDLiteRenderSettingsService||null,
-    RenderOutputService:window.ThreeDLiteRenderOutputService||null,
-    RendererDiagnosticsService:window.ThreeDLiteRendererDiagnosticsService||null,
-    RendererFacade:window.ThreeDLiteRendererFacade||null,
-    RenderSchedulerService:window.ThreeDLiteRenderSchedulerService||null,
-    WorkerService:window.ThreeDLiteWorkerService||null,
-    AccelerationService:window.ThreeDLiteAccelerationService||null,
-    SamplingService:window.ThreeDLiteSamplingService||null,
-    PerformanceService:window.ThreeDLitePerformanceService||null,
-    RenderExecutionContext:window.ThreeDLiteRenderExecutionContext||null,
-    RenderExecutionServices:window.ThreeDLiteRenderExecutionServices||null,
-    RenderChannelService:window.ThreeDLiteRenderChannelService||null,
-    RenderDenoiseService:window.ThreeDLiteRenderDenoiseService||null,
-    RenderToneMapService:window.ThreeDLiteRenderToneMapService||null,
-    RenderPresentationService:window.ThreeDLiteRenderPresentationService||null,
-    RenderRegionService:window.ThreeDLiteRenderRegionService||null,
-    RenderImageService:window.ThreeDLiteRenderImageService||null,
-    RenderReplayService:window.ThreeDLiteRenderReplayService||null,
-    RenderOutputPipeline:window.ThreeDLiteRenderOutputPipeline||null
-  };
-  for(const [name,service] of Object.entries(services)){
-    if(service)ThreeDLiteAppContext.register(name,service);
-  }
-  return services;
-}
-window.register3DLiteCoreServices=register3DLiteCoreServices;
-function get3DLiteBootstrapSnapshot(){
-  return Object.freeze({
-    lifecycle:ThreeDLiteAppContext.lifecycle,
-    phase:ThreeDLiteAppContext.phase,
-    services:Object.freeze(Object.keys(ThreeDLiteAppContext.services)),
-    failures:Object.freeze(ThreeDLiteAppContext.failures.slice()),
-    dependencyCheck:validate3DLiteServiceDependencies()
-  });
-}
-window.get3DLiteBootstrapSnapshot=get3DLiteBootstrapSnapshot;
-
-function validate3DLiteServiceDependencies(){
-  const missing=[];
-  for(const [name,deps] of Object.entries(ThreeDLiteSubsystemRegistry.dependencies)){
-    if(!ThreeDLiteAppContext.get(name))continue;
-    for(const dep of deps)if(!ThreeDLiteAppContext.get(dep))missing.push(`${name}->${dep}`);
-  }
-  return Object.freeze({ok:missing.length===0,missing});
-}
-window.validate3DLiteServiceDependencies=validate3DLiteServiceDependencies;
-
-
-
-/* ---------- Application Bootstrap ----------
-   No UI subsystem is allowed to start the render loop during partial initialization.
-*/
-
-/* ============================================================
-   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 1 CLEAN RENDER FRAMEWORK
-   This subsystem owns render UI/state only.
-   It does not own editor geometry, selection, transforms or materials.
-   ============================================================ */
-
-/* ============================================================
-   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 2
-   Immutable RenderScene + Evaluation Boundary
-   ============================================================ */
-function freezeRenderSnapshot(v){
-  if(!v||typeof v!=='object'||Object.isFrozen(v)||ArrayBuffer.isView(v))return v;
-  Object.freeze(v);for(const k of Object.keys(v))freezeRenderSnapshot(v[k]);return v;
-}
-class RenderMeshSnapshot{
-  constructor(d){
-    this.positions=d.positions;this.normals=d.normals;this.uvs=d.uvs;
-    this.indices=d.indices;this.materialIndices=d.materialIndices;
-    this.bounds=freezeRenderSnapshot(d.bounds);Object.freeze(this);
-  }
-}
-class RenderMaterialSnapshot{constructor(d){Object.assign(this,d);freezeRenderSnapshot(this)}}
-class RenderCameraSnapshot{constructor(d){Object.assign(this,d);freezeRenderSnapshot(this)}}
-class RenderLightSnapshot{constructor(d){Object.assign(this,d);freezeRenderSnapshot(this)}}
-class RenderObjectSnapshot{constructor(d){Object.assign(this,d);freezeRenderSnapshot(this)}}
-class RenderSceneSnapshot{
-  constructor(d){
-    this.objects=Object.freeze(d.objects.slice());
-    this.materials=Object.freeze(d.materials.slice());
-    this.lights=Object.freeze(d.lights.slice());
-    this.camera=d.camera;this.metadata=freezeRenderSnapshot(d.metadata||{});
-    Object.freeze(this);
-  }
-}
-const RenderRevisionPolicy=Object.freeze({
-  keys:Object.freeze(['sceneRevision','geometryRevision','materialRevision','lightRevision','cameraRevision']),
-  changed(previous,current){
-    const p=previous?.metadata||{},c=current?.metadata||{};
-    return {
-      scene:p.sceneRevision!==c.sceneRevision,
-      geometry:p.geometryRevision!==c.geometryRevision,
-      material:p.materialRevision!==c.materialRevision,
-      light:p.lightRevision!==c.lightRevision,
-      camera:p.cameraRevision!==c.cameraRevision
-    };
-  },
-  invalidation(previous,current){
-    const x=this.changed(previous,current);
-    return Object.freeze({
-      rebuildSnapshot:x.scene||x.geometry||x.material||x.light||x.camera,
-      rebuildGeometry:x.scene||x.geometry,
-      rebuildAcceleration:x.scene||x.geometry,
-      rebuildMaterials:x.scene||x.material,
-      rebuildLights:x.scene||x.light,
-      rebuildCamera:x.scene||x.camera
-    });
-  }
-});
-
-const RenderSnapshotValidator={
-  finite(a){if(!a||typeof a.length!=='number')return false;for(let i=0;i<a.length;i++)if(!Number.isFinite(a[i]))return false;return true},
-  typed(a){return ArrayBuffer.isView(a)&&!(a instanceof DataView)},
-  validate(scene){
-    const errors=[];
-    if(!(scene instanceof Ren
--- hit 4 line 4343 --
-ze([]),
-    RenderDenoiseService:Object.freeze(['RenderChannelService']),
-    RenderToneMapService:Object.freeze([]),
-    RenderPresentationService:Object.freeze(['RenderChannelService','RenderDenoiseService','RenderToneMapService']),
-    RenderRegionService:Object.freeze(['RenderFrameworkService']),
-    RenderImageService:Object.freeze(['RenderOutputService']),
-    RenderReplayService:Object.freeze(['RenderFrameworkService']),
-    RenderOutputPipeline:Object.freeze(['RenderChannelService','RenderDenoiseService','RenderToneMapService','RenderPresentationService','RenderRegionService','RenderImageService','RenderReplayService'])
-  }),
-  rule:'Declarations and registrations must precede runtime initialization.'
-});
-window.ThreeDLiteSubsystemRegistry=ThreeDLiteSubsystemRegistry;
-function register3DLiteCoreServices(){
-  ThreeDLiteAppContext.setLifecycle(ThreeDLiteLifecycle.REGISTERING,ThreeDLiteBootPhase.REGISTRATION);
-  const services={
-    SelectionManager:window.SelectionManager||null,
-    ToolManager:window.ToolManager||null,
-    InputController:window.InputController||null,
-    MeshWireManager:window.MeshWireManager||null,
-    OverlayManager:window.OverlayManager||null,
-    LiteTraceServices:window.LiteTraceServices||null,
-    LiteTraceDiagnostics:window.LiteTraceDiagnostics||null,
-    RendererBootstrap:window.RendererBootstrap||null,
-    SceneGraph:window.ThreeDLiteSceneGraph||null,
-    CommandService:window.ThreeDLiteCommandService||null,
-    HistoryService:window.ThreeDLiteHistoryService||null,
-    NotificationService:window.ThreeDLiteNotificationService||null,
-    EditorServices:window.ThreeDLiteEditorServices||null,
-    SelectionService:window.ThreeDLiteSelectionService||null,
-    ToolService:window.ThreeDLiteToolService||null,
-    InputService:window.ThreeDLiteInputService||null,
-    TransformService:window.ThreeDLiteTransformService||null,
-    PickingService:window.ThreeDLitePickingService||null,
-    ViewportService:window.ThreeDLiteViewportService||null,
-    MeshService:window.ThreeDLiteMeshService||null,
-    EvaluationService:window.ThreeDLiteEvaluationService||null,
-    EditorAPI:window.ThreeDLiteEditorAPI||null,
-    GeometryCompiler:window.ThreeDLiteGeometryCompiler||null,
-    DerivedCache:window.ThreeDLiteDerivedCacheService||null,
-    MeshChangeService:window.ThreeDLiteMeshChangeService||null,
-    WireService:window.ThreeDLiteWireService||null,
-    OverlayService:window.ThreeDLiteOverlayService||null,
-    DisplayService:window.ThreeDLiteDisplayService||null,
-    ViewportInvalidation:window.ThreeDLiteViewportInvalidation||null,
-    GeometryPipeline:window.ThreeDLiteGeometryPipeline||null,
-    ModelViewPipeline:window.ThreeDLiteModelViewPipeline||null,
-    MaterialService:window.ThreeDLiteMaterialService||null,
-    UVWService:window.ThreeDLiteUVWService||null,
-    ImportService:window.ThreeDLiteImportService||null,
-    AssetChangeService:window.ThreeDLiteAssetChangeService||null,
-    AssetServices:window.ThreeDLiteAssetServices||null,
-    RenderSceneService:window.ThreeDLiteRenderSceneService||null,
-    RenderRequestService:window.ThreeDLiteRenderRequestService||null,
-    RenderFrameworkService:window.ThreeDLiteRenderFrameworkService||null,
-    RenderSettingsService:window.ThreeDLiteRenderSettingsService||null,
-    RenderOutputService:window.ThreeDLiteRenderOutputService||null,
-    RendererDiagnosticsService:window.ThreeDLiteRendererDiagnosticsService||null,
-    RendererFacade:window.ThreeDLiteRendererFacade||null,
-    RenderSchedulerService:window.ThreeDLiteRenderSchedulerService||null,
-    WorkerService:window.ThreeDLiteWorkerService||null,
-    AccelerationService:window.ThreeDLiteAccelerationService||null,
-    SamplingService:window.ThreeDLiteSamplingService||null,
-    PerformanceService:window.ThreeDLitePerformanceService||null,
-    RenderExecutionContext:window.ThreeDLiteRenderExecutionContext||null,
-    RenderExecutionServices:window.ThreeDLiteRenderExecutionServices||null,
-    RenderChannelService:window.ThreeDLiteRenderChannelService||null,
-    RenderDenoiseService:window.ThreeDLiteRenderDenoiseService||null,
-    RenderToneMapService:window.ThreeDLiteRenderToneMapService||null,
-    RenderPresentationService:window.ThreeDLiteRenderPresentationService||null,
-    RenderRegionService:window.ThreeDLiteRenderRegionService||null,
-    RenderImageService:window.ThreeDLiteRenderImageService||null,
-    RenderReplayService:window.ThreeDLiteRenderReplayService||null,
-    RenderOutputPipeline:window.ThreeDLiteRenderOutputPipeline||null
-  };
-  for(const [name,service] of Object.entries(services)){
-    if(service)ThreeDLiteAppContext.register(name,service);
-  }
-  return services;
-}
-window.register3DLiteCoreServices=register3DLiteCoreServices;
-function get3DLiteBootstrapSnapshot(){
-  return Object.freeze({
-    lifecycle:ThreeDLiteAppContext.lifecycle,
-    phase:ThreeDLiteAppContext.phase,
-    services:Object.freeze(Object.keys(ThreeDLiteAppContext.services)),
-    failures:Object.freeze(ThreeDLiteAppContext.failures.slice()),
-    dependencyCheck:validate3DLiteServiceDependencies()
-  });
-}
-window.get3DLiteBootstrapSnapshot=get3DLiteBootstrapSnapshot;
-
-function validate3DLiteServiceDependencies(){
-  const missing=[];
-  for(const [name,deps] of Object.entries(ThreeDLiteSubsystemRegistry.dependencies)){
-    if(!ThreeDLiteAppContext.get(name))continue;
-    for(const dep of deps)if(!ThreeDLiteAppContext.get(dep))missing.push(`${name}->${dep}`);
-  }
-  return Object.freeze({ok:missing.length===0,missing});
-}
-window.validate3DLiteServiceDependencies=validate3DLiteServiceDependencies;
-
-
-
-/* ---------- Application Bootstrap ----------
-   No UI subsystem is allowed to start the render loop during partial initialization.
-*/
-
-/* ============================================================
-   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 1 CLEAN RENDER FRAMEWORK
-   This subsystem owns render UI/state only.
-   It does not own editor geometry, selection, transforms or materials.
-   ============================================================ */
-
-/* ============================================================
-   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 2
-   Immutable RenderScene + Evaluation Boundary
-   ============================================================ */
-function freezeRenderSnapshot(v){
-  if(!v||typeof v!=='object'||Object.isFrozen(v)||ArrayBuffer.isView(v))return v;
-  Object.freeze(v);for(const k of Object.keys(v))freezeRenderSnapshot(v[k]);return v;
-}
-class RenderMeshSnapshot{
-  constructor(d){
-    this.positions=d.positions;this.normals=d.normals;this.uvs=d.uvs;
-    this.indices=d.indices;this.materialIndices=d.materialIndices;
-    this.bounds=freezeRenderSnapshot(d.bounds);Object.freeze(this);
-  }
-}
-class RenderMaterialSnapshot{constructor(d){Object.assign(this,d);freezeRenderSnapshot(this)}}
-class RenderCameraSnapshot{constructor(d){Object.assign(this,d);freezeRenderSnapshot(this)}}
-class RenderLightSnapshot{constructor(d){Object.assign(this,d);freezeRenderSnapshot(this)}}
-class RenderObjectSnapshot{constructor(d){Object.assign(this,d);freezeRenderSnapshot(this)}}
-class RenderSceneSnapshot{
-  constructor(d){
-    this.objects=Object.freeze(d.objects.slice());
-    this.materials=Object.freeze(d.materials.slice());
-    this.lights=Object.freeze(d.lights.slice());
-    this.camera=d.camera;this.metadata=freezeRenderSnapshot(d.metadata||{});
-    Object.freeze(this);
-  }
-}
-const RenderRevisionPolicy=Object.freeze({
-  keys:Object.freeze(['sceneRevision','geometryRevision','materialRevision','lightRevision','cameraRevision']),
-  changed(previous,current){
-    const p=previous?.metadata||{},c=current?.metadata||{};
-    return {
-      scene:p.sceneRevision!==c.sceneRevision,
-      geometry:p.geometryRevision!==c.geometryRevision,
-      material:p.materialRevision!==c.materialRevision,
-      light:p.lightRevision!==c.lightRevision,
-      camera:p.cameraRevision!==c.cameraRevision
-    };
-  },
-  invalidation(previous,current){
-    const x=this.changed(previous,current);
-    return Object.freeze({
-      rebuildSnapshot:x.scene||x.geometry||x.material||x.light||x.camera,
-      rebuildGeometry:x.scene||x.geometry,
-      rebuildAcceleration:x.scene||x.geometry,
-      rebuildMaterials:x.scene||x.material,
-      rebuildLights:x.scene||x.light,
-      rebuildCamera:x.scene||x.camera
-    });
-  }
-});
-
-const RenderSnapshotValidator={
-  finite(a){if(!a||typeof a.length!=='number')return false;for(let i=0;i<a.length;i++)if(!Number.isFinite(a[i]))return false;return true},
-  typed(a){return ArrayBuffer.isView(a)&&!(a instanceof DataView)},
-  validate(scene){
-    const errors=[];
-    if(!(scene instanceof RenderSceneSnapshot)||!Object.isFroze
--- hit 5 line 4696 --
-tor');
-  if(typeof RenderRevisionPolicy.invalidation!=='function')errors.push('Missing revision invalidation policy');
-  return {ok:!errors.length,errors};
-}
-Object.assign(window,{RenderSceneSnapshot,RenderObjectSnapshot,RenderMeshSnapshot,RenderMaterialSnapshot,RenderCameraSnapshot,RenderLightSnapshot,RenderSnapshotValidator,RenderRevisionPolicy,RenderSceneBoundary,RenderGroup2Contract});
-
-
-/* ============================================================
-   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 3
-   Worker/Scheduler + Render Geometry Core
-   ============================================================ */
-
-class RenderGeometryPacket{
-  constructor(data){
-    this.objectId=data.objectId;
-    this.name=data.name;
-    this.positions=data.positions;
-    this.normals=data.normals;
-    this.uvs=data.uvs;
-    this.indices=data.indices;
-    this.materialIndices=data.materialIndices;
-    this.bounds=freezeRenderSnapshot(data.bounds);
-    Object.freeze(this);
-  }
-}
-
-const RenderGeometryValidation=Object.freeze({
-  validatePacket(packet){
-    const errors=[];
-    if(!packet)errors.push('Missing geometry packet');
-    const p=packet?.positions,i=packet?.indices,n=packet?.normals,u=packet?.uvs,m=packet?.materialIndices;
-    if(!ArrayBuffer.isView(p)||p.length%3)errors.push('Malformed position buffer');
-    if(!ArrayBuffer.isView(i)||i.length%3)errors.push('Malformed index buffer');
-    const vc=(p?.length||0)/3,tc=(i?.length||0)/3;
-    if(n?.length&&n.length!==p.length)errors.push('Normal count mismatch');
-    if(u?.length&&u.length!==vc*2)errors.push('UV count mismatch');
-    if(m?.length!==tc)errors.push('Material-index count mismatch');
-    if(p)for(let k=0;k<p.length;k++)if(!Number.isFinite(p[k])){errors.push('Non-finite position');break}
-    if(n)for(let k=0;k<n.length;k++)if(!Number.isFinite(n[k])){errors.push('Non-finite normal');break}
-    if(u)for(let k=0;k<u.length;k++)if(!Number.isFinite(u[k])){errors.push('Non-finite UV');break}
-    if(i)for(let k=0;k<i.length;k++)if(!Number.isInteger(i[k])||i[k]<0||i[k]>=vc){errors.push('Index out of range');break}
-    return {ok:errors.length===0,errors,vertexCount:vc,triangleCount:tc};
-  }
-});
-
-var RenderGeometryCompiler={
-  lastStats:Object.freeze({objectCount:0,vertexCount:0,inputTriangles:0}),
-  compileObject(renderObject){
-    const m=renderObject?.mesh;if(!m)return null;
-    const packet=new RenderGeometryPacket({
-      objectId:renderObject.id,name:renderObject.name,
-      positions:new Float32Array(m.positions),normals:new Float32Array(m.normals),uvs:new Float32Array(m.uvs),
-      indices:new Uint32Array(m.indices),materialIndices:new Uint16Array(m.materialIndices),
-      bounds:{min:[...m.bounds.min],max:[...m.bounds.max]}
-    });
-    const check=RenderGeometryValidation.validatePacket(packet);
-    if(!check.ok)throw new GeometryCompileError(`${renderObject.name||renderObject.id}: ${check.errors.join('; ')}`);
-    return packet;
-  },
-  compileScene(renderScene){
-    const packets=[];let vertexCount=0,inputTriangles=0;
-    for(const obj of renderScene.objects){
-      const p=this.compileObject(obj);if(!p)continue;
-      packets.push(p);vertexCount+=p.positions.length/3;inputTriangles+=p.indices.length/3;
-    }
-    this.lastStats=Object.freeze({objectCount:packets.length,vertexCount,inputTriangles});
-    return packets;
-  },
-  transferables(packet){return [packet.positions.buffer,packet.normals.buffer,packet.uvs.buffer,packet.indices.buffer,packet.materialIndices.buffer]}
-};
-
-const RenderWorkerKernelSource=String.raw`
-'use strict';
-
-let paused=false;
-const cancelledJobs=new Set();
-
-function finiteArray(a){
-  for(let i=0;i<a.length;i++)if(!Number.isFinite(a[i]))return false;
-  return true;
-}
-
-function prepareGeometry(message){
-  const p=message.packet;
-  if(cancelledJobs.has(message.jobId)){
-    return {type:'cancelled',jobId:message.jobId,taskId:message.taskId};
-  }
-  if(!p||!p.positions||!p.indices)throw new Error('Missing geometry packet');
-  if(p.positions.length%3!==0)throw new Error('Malformed position buffer');
-  if(p.indices.length%3!==0)throw new Error('Malformed triangle index buffer');
-  if(!finiteArray(p.positions)||!finiteArray(p.normals))throw new Error('Non-finite geometry');
-
-  const vertexCount=p.positions.length/3;
-  const triangleCount=p.indices.length/3;
-
-  for(let i=0;i<p.indices.length;i++){
-    if(p.indices[i]>=vertexCount)throw new Error('Index out of range');
-  }
-
-  const triangleIndices=new Uint32Array(p.indices);
-  const bounds=new Float32Array(6);
-  bounds[0]=Infinity;bounds[1]=Infinity;bounds[2]=Infinity;
-  bounds[3]=-Infinity;bounds[4]=-Infinity;bounds[5]=-Infinity;
-
-  for(let i=0;i<p.positions.length;i+=3){
-    const x=p.positions[i],y=p.positions[i+1],z=p.positions[i+2];
-    if(x<bounds[0])bounds[0]=x;if(y<bounds[1])bounds[1]=y;if(z<bounds[2])bounds[2]=z;
-    if(x>bounds[3])bounds[3]=x;if(y>bounds[4])bounds[4]=y;if(z>bounds[5])bounds[5]=z;
-  }
-
-  if(vertexCount===0){
-    bounds[0]=bounds[1]=bounds[2]=bounds[3]=bounds[4]=bounds[5]=0;
-  }
-
-  return {
-    type:'geometryPrepared',
-    jobId:message.jobId,
-    taskId:message.taskId,
-    objectId:p.objectId,
-    vertexCount,
-    triangleCount,
-    bounds,
-    triangleIndices
-  };
-}
-
-self.onmessage=e=>{
-  const m=e.data||{};
+function runRenderGroup4SelfTests(){
+  const errors=[],approx=(a,b,e=1e-5)=>Math.abs(a-b)<=e;
   try{
-    if(m.type==='cancel'){
-      cancelledJobs.add(m.jobId);
-      return;
+    let ray=new RenderRay([0,0,1],[0,0,-1]);
+    let hit=TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]);
+    if(!hit.hit||!approx(hit.t,1)||!hit.frontFace||!hit.orientedGeometricNormal)errors.push('Triangle front-face hit failed');
+
+    ray=new RenderRay([0,0,-1],[0,0,1]);
+    hit=TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]);
+    if(!hit.hit||hit.frontFace)errors.push('Triangle back-face classification failed');
+
+    ray=new RenderRay([3,3,1],[0,0,-1]);
+    if(TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]).hit)errors.push('Triangle miss failed');
+
+    if(!AABBIntersector.intersect(new RenderRay([0,0,2],[0,0,-1]),[-1,-1,-1],[1,1,1]))errors.push('AABB hit failed');
+
+    const store=new RenderTriangleStore();
+    store.addPacket({objectId:'a',positions:new Float32Array([-1,-1,0,1,-1,0,0,1,0,  -1,-1,-3,1,-1,-3,0,1,-3]),normals:new Float32Array(18),uvs:new Float32Array(12),indices:new Uint32Array([0,1,2,3,4,5]),materialIndices:new Uint16Array([0,0])},0);
+    store.finalize();
+    const bvh=new RenderBVH(store,1),closest=bvh.intersect(new RenderRay([0,0,2],[0,0,-1]));
+    if(!closest.hit||!approx(closest.t,2))errors.push('BVH closest-hit failed');
+    if(!bvh.anyHit(new RenderRay([0,0,2],[0,0,-1],1e-5,2.1,RenderRayType.SHADOW)))errors.push('BVH any-hit failed');
+    if(bvh.anyHit(new RenderRay([0,0,2],[0,0,-1],1e-5,1.9,RenderRayType.SHADOW)))errors.push('Finite shadow tMax failed');
+    const bs=bvh.stats();if(bs.nodeCount<1||bs.leafCount<1||bs.triangleCount!==2)errors.push('BVH statistics failed');
+
+    const legacy=new RenderTriangleStore();
+    legacy.addPacket({objectId:'legacy',positions:new Float32Array([0,0,0,1,0,0,0,1,0]),indices:new Uint32Array([0,1,2]),materialIndices:new Uint16Array([0])},0);legacy.finalize();
+    if(legacy.normals.length!==9||legacy.uvs.length!==6)errors.push('Legacy minimal packet compatibility failed');
+
+    const deg=new RenderTriangleStore();
+    deg.addPacket({objectId:'deg',positions:new Float32Array([0,0,0,0,0,0,0,0,0]),indices:new Uint32Array([0,1,2]),materialIndices:new Uint16Array([0])},0);deg.finalize();
+    if(deg.triangleCount()!==0||deg.stats.rejectedDegenerate!==1)errors.push('Degenerate rejection failed');
+
+    const empty=new RenderTriangleStore();empty.finalize();const ebvh=new RenderBVH(empty,4);
+    if(ebvh.root!==-1||ebvh.intersect(new RenderRay([0,0,0],[0,0,1])).hit||ebvh.anyHit(new RenderRay([0,0,0],[0,0,1])))errors.push('Empty BVH failed');
+
+    const c={position:[0,0,0],quaternion:[0,0,0,1],fov:60,near:0,far:100};
+    const cr=RenderCameraRayGenerator.ray(c,49.5,49.5,100,100);
+    if(cr.direction[2]>-.99||cr.type!==RenderRayType.CAMERA
+-- hit 5 line 5917 --
+rowChunk===0)await new Promise(r=>setTimeout(r,0));
     }
-    if(m.type==='pause'){
-      paused=true;
-      return;
-    }
-    if(m.type==='resume'){
-      paused=false;
-      return;
-    }
-    if(m.type==='reset'){
-      paused=false;
-      cancelledJobs.clear();
-      return;
-    }
-    if(m.type==='prepareGeometry'){
-      if(paused){
-        self.postMessage({type:'paused',jobId:m.jobId,taskId:m.taskId});
-        return;
+    return {width,height,rgba};
+  }
+});
+
+const RenderGroup4Contract=Object.freeze({
+  owns:Object.freeze([
+    'ray representation','ray/triangle intersection','ray/AABB intersection',
+    'triangle store','binary BVH','camera ray generation','diagnostic normal render'
+  ]),
+  consumes:Object.freeze([
+    'Core A immutable RenderSceneSnapshot','Group 3 RenderGeometryCompiler'
+  ]),
+  doesNotOwn:Object.freeze([
+    'editor scene','MNMesh','selection','transforms','editor materials',
+    'physical BSDF','lights','GI','denoising'
+  ])
+});
+
+
+function runRenderGroup4SelfTests(){
+  const errors=[],approx=(a,b,e=1e-5)=>Math.abs(a-b)<=e;
+  try{
+    let ray=new RenderRay([0,0,1],[0,0,-1]);
+    let hit=TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]);
+    if(!hit.hit||!approx(hit.t,1)||!hit.frontFace||!hit.orientedGeometricNormal)errors.push('Triangle front-face hit failed');
+
+    ray=new RenderRay([0,0,-1],[0,0,1]);
+    hit=TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]);
+    if(!hit.hit||hit.frontFace)errors.push('Triangle back-face classification failed');
+
+    ray=new RenderRay([3,3,1],[0,0,-1]);
+    if(TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]).hit)errors.push('Triangle miss failed');
+
+    if(!AABBIntersector.intersect(new RenderRay([0,0,2],[0,0,-1]),[-1,-1,-1],[1,1,1]))errors.push('AABB hit failed');
+
+    const store=new RenderTriangleStore();
+    store.addPacket({objectId:'a',positions:new Float32Array([-1,-1,0,1,-1,0,0,1,0,  -1,-1,-3,1,-1,-3,0,1,-3]),normals:new Float32Array(18),uvs:new Float32Array(12),indices:new Uint32Array([0,1,2,3,4,5]),materialIndices:new Uint16Array([0,0])},0);
+    store.finalize();
+    const bvh=new RenderBVH(store,1),closest=bvh.intersect(new RenderRay([0,0,2],[0,0,-1]));
+    if(!closest.hit||!approx(closest.t,2))errors.push('BVH closest-hit failed');
+    if(!bvh.anyHit(new RenderRay([0,0,2],[0,0,-1],1e-5,2.1,RenderRayType.SHADOW)))errors.push('BVH any-hit failed');
+    if(bvh.anyHit(new RenderRay([0,0,2],[0,0,-1],1e-5,1.9,RenderRayType.SHADOW)))errors.push('Finite shadow tMax failed');
+    const bs=bvh.stats();if(bs.nodeCount<1||bs.leafCount<1||bs.triangleCount!==2)errors.push('BVH statistics failed');
+
+    const legacy=new RenderTriangleStore();
+    legacy.addPacket({objectId:'legacy',positions:new Float32Array([0,0,0,1,0,0,0,1,0]),indices:new Uint32Array([0,1,2]),materialIndices:new Uint16Array([0])},0);legacy.finalize();
+    if(legacy.normals.length!==9||legacy.uvs.length!==6)errors.push('Legacy minimal packet compatibility failed');
+
+    const deg=new RenderTriangleStore();
+    deg.addPacket({objectId:'deg',positions:new Float32Array([0,0,0,0,0,0,0,0,0]),indices:new Uint32Array([0,1,2]),materialIndices:new Uint16Array([0])},0);deg.finalize();
+    if(deg.triangleCount()!==0||deg.stats.rejectedDegenerate!==1)errors.push('Degenerate rejection failed');
+
+    const empty=new RenderTriangleStore();empty.finalize();const ebvh=new RenderBVH(empty,4);
+    if(ebvh.root!==-1||ebvh.intersect(new RenderRay([0,0,0],[0,0,1])).hit||ebvh.anyHit(new RenderRay([0,0,0],[0,0,1])))errors.push('Empty BVH failed');
+
+    const c={position:[0,0,0],quaternion:[0,0,0,1],fov:60,near:0,far:100};
+    const cr=RenderCameraRayGenerator.ray(c,49.5,49.5,100,100);
+    if(cr.direction[2]>-.99||cr.type!==RenderRayType.CAMERA)errors.push('Camera center ray failed');
+    const extreme=RenderCameraRayGenerator.ray({position:[0,0,0],quaternion:[NaN,0,0,1],fov:1000,near:-1,far:0},0,0,1,1);
+    if(!extreme.direction.every(Number.isFinite)||extreme.tMin<=0)errors.pus
+-- hit 6 line 5921 --
+gle intersection','ray/AABB intersection',
+    'triangle store','binary BVH','camera ray generation','diagnostic normal render'
+  ]),
+  consumes:Object.freeze([
+    'Core A immutable RenderSceneSnapshot','Group 3 RenderGeometryCompiler'
+  ]),
+  doesNotOwn:Object.freeze([
+    'editor scene','MNMesh','selection','transforms','editor materials',
+    'physical BSDF','lights','GI','denoising'
+  ])
+});
+
+
+function runRenderGroup4SelfTests(){
+  const errors=[],approx=(a,b,e=1e-5)=>Math.abs(a-b)<=e;
+  try{
+    let ray=new RenderRay([0,0,1],[0,0,-1]);
+    let hit=TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]);
+    if(!hit.hit||!approx(hit.t,1)||!hit.frontFace||!hit.orientedGeometricNormal)errors.push('Triangle front-face hit failed');
+
+    ray=new RenderRay([0,0,-1],[0,0,1]);
+    hit=TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]);
+    if(!hit.hit||hit.frontFace)errors.push('Triangle back-face classification failed');
+
+    ray=new RenderRay([3,3,1],[0,0,-1]);
+    if(TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]).hit)errors.push('Triangle miss failed');
+
+    if(!AABBIntersector.intersect(new RenderRay([0,0,2],[0,0,-1]),[-1,-1,-1],[1,1,1]))errors.push('AABB hit failed');
+
+    const store=new RenderTriangleStore();
+    store.addPacket({objectId:'a',positions:new Float32Array([-1,-1,0,1,-1,0,0,1,0,  -1,-1,-3,1,-1,-3,0,1,-3]),normals:new Float32Array(18),uvs:new Float32Array(12),indices:new Uint32Array([0,1,2,3,4,5]),materialIndices:new Uint16Array([0,0])},0);
+    store.finalize();
+    const bvh=new RenderBVH(store,1),closest=bvh.intersect(new RenderRay([0,0,2],[0,0,-1]));
+    if(!closest.hit||!approx(closest.t,2))errors.push('BVH closest-hit failed');
+    if(!bvh.anyHit(new RenderRay([0,0,2],[0,0,-1],1e-5,2.1,RenderRayType.SHADOW)))errors.push('BVH any-hit failed');
+    if(bvh.anyHit(new RenderRay([0,0,2],[0,0,-1],1e-5,1.9,RenderRayType.SHADOW)))errors.push('Finite shadow tMax failed');
+    const bs=bvh.stats();if(bs.nodeCount<1||bs.leafCount<1||bs.triangleCount!==2)errors.push('BVH statistics failed');
+
+    const legacy=new RenderTriangleStore();
+    legacy.addPacket({objectId:'legacy',positions:new Float32Array([0,0,0,1,0,0,0,1,0]),indices:new Uint32Array([0,1,2]),materialIndices:new Uint16Array([0])},0);legacy.finalize();
+    if(legacy.normals.length!==9||legacy.uvs.length!==6)errors.push('Legacy minimal packet compatibility failed');
+
+    const deg=new RenderTriangleStore();
+    deg.addPacket({objectId:'deg',positions:new Float32Array([0,0,0,0,0,0,0,0,0]),indices:new Uint32Array([0,1,2]),materialIndices:new Uint16Array([0])},0);deg.finalize();
+    if(deg.triangleCount()!==0||deg.stats.rejectedDegenerate!==1)errors.push('Degenerate rejection failed');
+
+    const empty=new RenderTriangleStore();empty.finalize();const ebvh=new RenderBVH(empty,4);
+    if(ebvh.root!==-1||ebvh.intersect(new RenderRay([0,0,0],[0,0,1])).hit||ebvh.anyHit(new RenderRay([0,0,0],[0,0,1])))errors.push('Empty BVH failed');
+
+    const c={position:[0,0,0],quaternion:[0,0,0,1],fov:60,near:0,far:100};
+    const cr=RenderCameraRayGenerator.ray(c,49.5,49.5,100,100);
+    if(cr.direction[2]>-.99||cr.type!==RenderRayType.CAMERA)errors.push('Camera center ray failed');
+    const extreme=RenderCameraRayGenerator.ray({position:[0,0,0],quaternion:[NaN,0,0,1],fov:1000,near:-1,far:0},0,0,1,1);
+    if(!extreme.direction.every(Number.isFinite)||extreme.tMin<=0)errors.push('Camera sanitization failed');
+
+    const small=RenderRayPolicy.epsilonForPoint([0,0,0]),large=RenderRayPolicy.epsilonForPoint([1e6,0,0]);
+    if(!(small>0&&large>=small&&large<=1e-2))errors.push('S
+hits 6
+
+### class TriangleIntersector
+hits 0
+
+### shadowsOnly
+hits 0
+
+### excludeTransparent
+hits 0
+
+### compiled.lights
+-- hit 1 line 6698 --
+env);
+            aovs.set1('Noise',y*width+x,0);
+            const mapped=RenderColor.linearToSrgb(RenderColor.aces(env));
+            rgba[o]=Math.round(RenderColor.clamp01(mapped[0])*255);
+            rgba[o+1]=Math.round(RenderColor.clamp01(mapped[1])*255);
+            rgba[o+2]=Math.round(RenderColor.clamp01(mapped[2])*255);
+            rgba[o+3]=job.settings.transparent?0:255;
+          }
+        }
       }
-      const r=prepareGeometry(m);
-      const transfer=[];
-      if(r.bounds)transfer.push(r.bounds.buffer);
-      if(r.triangleIndices)transfer.push(r.triangleIndices.buffer);
-      self.postMessage(r,transfer);
+      try{window.ThreeDLiteRenderWindow3979?.tile?.(job,width,height,rgba,tile,{total:tiles16.length});}catch(_){}
+      perf16.yields++;
+    },onProgress);
+    RenderCoreH.markStage(job,'render',renderStart16);
+    if(LiteTraceExecutionContext.performance===perf16){LiteTraceExecutionContext.activeJob=null;LiteTraceExecutionContext.performance=null;}
+    job.renderChannels=aovs;
+    return {
+      width,height,rgba,
+      channels:aovs,
+      metadata:Object.freeze({
+        renderer:'Part 4 Fast Direct',
+        materialCount:compiled.materials.list.length,
+        lightCount:compiled.lights.length,
+        toneMapping:'ACES',
+        colorSpace:'sRGB output / linear shading',
+        diagnostics:RenderPart4Core.diagnostics(job,compiled,acceleration),
+        performance:RenderCoreH.performance(job)
+      })
+    };
+  }
+});
+
+
+/* ============================================================
+   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — CORE C
+   CLEAN GROUP 5 + GROUP 6 CONSOLIDATION
+   ============================================================ */
+var RenderCoreC=Object.freeze({
+  version:'3.79.09-core-c',
+
+  compileScene(renderScene,settings){
+    const materials=RenderMaterialLibrary.compile(renderScene);
+    const lights=BasicRenderLighting.create(renderScene,settings);
+    return Object.freeze({materials,lights});
+  },
+
+  evaluateDirect(job,acceleration,compiled,ray,hit,pixelSeed=1,options={}){
+    return DirectLightingIntegrator.evaluate(job,acceleration,compiled,ray,hit,pixelSeed,options);
+  },
+
+  validate(){
+    const errors=[];
+    const g5=validateRenderGroup5();if(!g5.ok)errors.push(...g5.errors);
+    const g6=validateRenderGroup6();if(!g6.ok)errors.push(...g6.errors);
+    if(typeof this.compileScene!=='function')errors.push('Core C scene compiler missing');
+    if(typeof this.evaluateDirect!=='function')errors.push('Core C direct evaluator missing');
+    return {ok:errors.length===0,errors};
+  }
+});
+window.RenderCoreC=RenderCoreC;
+
+const RenderGroup5Contract=Object.freeze({
+  owns:Object.freeze([
+    'render material compilation',
+    'linear color conversion',
+    'GGX physical BRDF',
+    'basic direct directional lighting',
+    'basic environment fill',
+    'tone mapping and display conversion',
+    'barycentric shading-normal interpolation'
+  ]),
+  consumes:Object.freeze([
+    'Core A material snapshots',
+    'Core B ray/BVH hit data',
+    'Core A render settings'
+  ]),
+  doesNotOwn:Object.freeze([
+    'editor viewport materials',
+    'full scene light object system',
+    'shadow visibility',
+    'area-light sampling',
+    'path GI',
+    'light cache',
+    'denoising'
+  ])
+});
+
+function runRenderGroup5SelfTests(){
+  const errors=[];
+  const approx=(a,b,e=1e-4)=>Math.abs(a-b)<=e;
+
+  const white=RenderColor.srgbToLinear([1,1,1]);
+  if(!approx(white[0],1)||!approx(white[1],1)||!approx(white[2],1))errors.push('sRGB white conversion failed');
+
+  const mat=new RenderSurfaceMaterial({
+    id:'t',name:'t',shading:'physical',baseColor:[.8,.3,.2],
+    roughness:.5,metalness:0,opacity:1,emissive:[0,0,0],emissiveIntensity:0
+  });
+  const brdf=PhysicalBSDF.evaluate(mat,[0,0,1],[0,0,1],[0,0,1]);
+  if(brdf.some(x=>!Number.isFinite(
+-- hit 2 line 7412 --
+eleration,hit);
+    const v=RayMath.mul(ray.direction,-1);
+    const includeEmission=options.includeEmission!==false;
+    const includeDome=options.includeDome!==false;
+    let color=includeEmission?RenderColor.mul(material.emissive,material.emissiveIntensity):[0,0,0];
+
+    if(material.shading==='unlit'){
+      return includeEmission?RenderColor.add(material.baseColor,color):[0,0,0];
     }
-  }catch(err){
-    self.postMessage({
-      type:'workerError',
-      jobId:m.jobId,
-      taskId:m.taskId,
-      message:String(err&&err.message||err)
+
+    const emissiveSet=compiled.emissiveTriangles||job.emissiveTriangles||null;
+    if(emissiveSet?.triangles?.length){
+      const es=EmissiveTriangleSet.sample(emissiveSet,pixelSeed,0,hit.position);
+      if(es&&ShadowVisibility.visible(acceleration,hit.position,es.direction,es.distance)){
+        const brdf=PhysicalBSDF.evaluate(material,n,v,es.direction);
+        const bsdfPdf=PathBSDFSampler.pdf(material,n,v,es.direction);
+        const w=RenderMIS.power(es.pdf,bsdfPdf);
+        color=RenderColor.add(color,RenderColor.mul(RenderColor.mul(brdf,es.radiance),w));
+      }
+    }
+
+    for(let li=0;li<compiled.lights.length;li++){
+      const light=compiled.lights[li];
+
+      if(light.type==='dome'){
+        if(includeDome){
+          const ambient=EnvironmentSampler.radiance(light,n);
+          const diffuse=RenderColor.mul(material.baseColor,(1-material.metalness)/Math.PI);
+          color=RenderColor.add(color,RenderColor.mul(RenderColor.mul(diffuse,ambient),Math.PI));
+        }
+        continue;
+      }
+
+      const count=this.samplesFor(light,job.settings);
+      let accum=[0,0,0];
+
+      for(let si=0;si<count;si++){
+        const uv=RenderSampling.sample2D(pixelSeed^(li*2654435761),si);
+        const sample=['rectangle','disc','sphere','mesh'].includes(light.type)
+          ? AreaLightSampler.sample(light,hit.position,uv[0],uv[1])
+          : DirectLightSampler.sample(light,hit.position);
+
+        if(!sample||!sample.direction)continue;
+        if(!sample.radiance||sample.radiance.every(v=>v<=0||!Number.isFinite(v)))continue;
+
+        if(light.castShadows!==false){
+          const visible=ShadowVisibility.visible(acceleration,hit.position,sample.direction,sample.distance);
+          if(!visible)continue;
+        }
+
+        const brdf=PhysicalBSDF.evaluate(material,n,v,sample.direction);
+        accum=RenderColor.add(accum,RenderColor.mul(brdf,sample.radiance));
+      }
+
+      if(count>1)accum=RenderColor.mul(accum,1/count);
+      color=RenderColor.add(color,accum);
+    }
+
+    return color;
+  }
+});
+
+
+/* ============================================================
+   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — CORE D
+   CLEAN GROUP 7 + GROUP 8 CONSOLIDATION
+   ============================================================ */
+
+var RenderCoreD=Object.freeze({
+  version:'3.90.0-core-d',
+
+  evaluateSurfaceDirect(job,acceleration,compiled,ray,hit,pixelSeed,options={}){
+    return DirectLightingIntegrator.evaluate(
+      job,acceleration,compiled,ray,hit,pixelSeed,options
+    );
+  },
+
+  evaluateEnvironment(job,compiled,rayDirection){
+    return EnvironmentSampler.background(
+      job.renderScene,job.settings,compiled.lights,rayDirection
+    );
+  },
+
+  tracePath(job,acceleration,compiled,ray,pixelSeed,initialHit=null){
+    return PathIntegrator.trace(
+      job,acceleration,compiled,ray,pixelSeed,initialHit
+    );
+  },
+
+  visible(acceleration,origin,direction,maxDistance){
+    return ShadowVisibility.visible(acceleration,origin,direction,maxDistance);
+  },
+
+  validate(){
+    const errors=[];
+    const g7=validateRenderGroup7();if(!g7.ok)errors.push(...g7.errors);
+    const g8=validateRenderGroup8();if(!g8.ok)errors.push(...g8.errors);
+    if(typeof this.evalu
+-- hit 3 line 7413 --
+ction,-1);
+    const includeEmission=options.includeEmission!==false;
+    const includeDome=options.includeDome!==false;
+    let color=includeEmission?RenderColor.mul(material.emissive,material.emissiveIntensity):[0,0,0];
+
+    if(material.shading==='unlit'){
+      return includeEmission?RenderColor.add(material.baseColor,color):[0,0,0];
+    }
+
+    const emissiveSet=compiled.emissiveTriangles||job.emissiveTriangles||null;
+    if(emissiveSet?.triangles?.length){
+      const es=EmissiveTriangleSet.sample(emissiveSet,pixelSeed,0,hit.position);
+      if(es&&ShadowVisibility.visible(acceleration,hit.position,es.direction,es.distance)){
+        const brdf=PhysicalBSDF.evaluate(material,n,v,es.direction);
+        const bsdfPdf=PathBSDFSampler.pdf(material,n,v,es.direction);
+        const w=RenderMIS.power(es.pdf,bsdfPdf);
+        color=RenderColor.add(color,RenderColor.mul(RenderColor.mul(brdf,es.radiance),w));
+      }
+    }
+
+    for(let li=0;li<compiled.lights.length;li++){
+      const light=compiled.lights[li];
+
+      if(light.type==='dome'){
+        if(includeDome){
+          const ambient=EnvironmentSampler.radiance(light,n);
+          const diffuse=RenderColor.mul(material.baseColor,(1-material.metalness)/Math.PI);
+          color=RenderColor.add(color,RenderColor.mul(RenderColor.mul(diffuse,ambient),Math.PI));
+        }
+        continue;
+      }
+
+      const count=this.samplesFor(light,job.settings);
+      let accum=[0,0,0];
+
+      for(let si=0;si<count;si++){
+        const uv=RenderSampling.sample2D(pixelSeed^(li*2654435761),si);
+        const sample=['rectangle','disc','sphere','mesh'].includes(light.type)
+          ? AreaLightSampler.sample(light,hit.position,uv[0],uv[1])
+          : DirectLightSampler.sample(light,hit.position);
+
+        if(!sample||!sample.direction)continue;
+        if(!sample.radiance||sample.radiance.every(v=>v<=0||!Number.isFinite(v)))continue;
+
+        if(light.castShadows!==false){
+          const visible=ShadowVisibility.visible(acceleration,hit.position,sample.direction,sample.distance);
+          if(!visible)continue;
+        }
+
+        const brdf=PhysicalBSDF.evaluate(material,n,v,sample.direction);
+        accum=RenderColor.add(accum,RenderColor.mul(brdf,sample.radiance));
+      }
+
+      if(count>1)accum=RenderColor.mul(accum,1/count);
+      color=RenderColor.add(color,accum);
+    }
+
+    return color;
+  }
+});
+
+
+/* ============================================================
+   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — CORE D
+   CLEAN GROUP 7 + GROUP 8 CONSOLIDATION
+   ============================================================ */
+
+var RenderCoreD=Object.freeze({
+  version:'3.90.0-core-d',
+
+  evaluateSurfaceDirect(job,acceleration,compiled,ray,hit,pixelSeed,options={}){
+    return DirectLightingIntegrator.evaluate(
+      job,acceleration,compiled,ray,hit,pixelSeed,options
+    );
+  },
+
+  evaluateEnvironment(job,compiled,rayDirection){
+    return EnvironmentSampler.background(
+      job.renderScene,job.settings,compiled.lights,rayDirection
+    );
+  },
+
+  tracePath(job,acceleration,compiled,ray,pixelSeed,initialHit=null){
+    return PathIntegrator.trace(
+      job,acceleration,compiled,ray,pixelSeed,initialHit
+    );
+  },
+
+  visible(acceleration,origin,direction,maxDistance){
+    return ShadowVisibility.visible(acceleration,origin,direction,maxDistance);
+  },
+
+  validate(){
+    const errors=[];
+    const g7=validateRenderGroup7();if(!g7.ok)errors.push(...g7.errors);
+    const g8=validateRenderGroup8();if(!g8.ok)errors.push(...g8.errors);
+    if(typeof this.evaluateSurfaceDirect!=='function')errors.push('Core 
+-- hit 4 line 7470 --
+position,sample.direction,sample.distance);
+          if(!visible)continue;
+        }
+
+        const brdf=PhysicalBSDF.evaluate(material,n,v,sample.direction);
+        accum=RenderColor.add(accum,RenderColor.mul(brdf,sample.radiance));
+      }
+
+      if(count>1)accum=RenderColor.mul(accum,1/count);
+      color=RenderColor.add(color,accum);
+    }
+
+    return color;
+  }
+});
+
+
+/* ============================================================
+   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — CORE D
+   CLEAN GROUP 7 + GROUP 8 CONSOLIDATION
+   ============================================================ */
+
+var RenderCoreD=Object.freeze({
+  version:'3.90.0-core-d',
+
+  evaluateSurfaceDirect(job,acceleration,compiled,ray,hit,pixelSeed,options={}){
+    return DirectLightingIntegrator.evaluate(
+      job,acceleration,compiled,ray,hit,pixelSeed,options
+    );
+  },
+
+  evaluateEnvironment(job,compiled,rayDirection){
+    return EnvironmentSampler.background(
+      job.renderScene,job.settings,compiled.lights,rayDirection
+    );
+  },
+
+  tracePath(job,acceleration,compiled,ray,pixelSeed,initialHit=null){
+    return PathIntegrator.trace(
+      job,acceleration,compiled,ray,pixelSeed,initialHit
+    );
+  },
+
+  visible(acceleration,origin,direction,maxDistance){
+    return ShadowVisibility.visible(acceleration,origin,direction,maxDistance);
+  },
+
+  validate(){
+    const errors=[];
+    const g7=validateRenderGroup7();if(!g7.ok)errors.push(...g7.errors);
+    const g8=validateRenderGroup8();if(!g8.ok)errors.push(...g8.errors);
+    if(typeof this.evaluateSurfaceDirect!=='function')errors.push('Core D direct evaluator missing');
+    if(typeof this.tracePath!=='function')errors.push('Core D path tracer missing');
+    if(typeof this.evaluateEnvironment!=='function')errors.push('Core D environment evaluator missing');
+    return {ok:errors.length===0,errors};
+  }
+});
+window.RenderCoreD=RenderCoreD;
+
+const RenderGroup7Contract=Object.freeze({
+  owns:Object.freeze([
+    'shadow-ray visibility',
+    'shadow bias',
+    'stochastic area-light sampling',
+    'constant-color dome environment radiance',
+    'direct-light sample accumulation'
+  ]),
+  consumes:Object.freeze([
+    'Core B acceleration trace',
+    'Core C materials and scene lights',
+    'Group 5 PhysicalBSDF'
+  ]),
+  doesNotOwn:Object.freeze([
+    'path GI',
+    'MIS',
+    'adaptive sampling',
+    'HDRI importance sampling',
+    'light cache',
+    'path guiding'
+  ])
+});
+
+function runRenderGroup7SelfTests(){
+  const errors=[];
+
+  {
+    const store=new RenderTriangleStore();
+    store.addPacket({
+      objectId:'shadow-test',
+      positions:new Float32Array([-1,-1,0,1,-1,0,0,1,0]),
+      normals:new Float32Array([0,0,1,0,0,1,0,0,1]),
+      uvs:new Float32Array([0,0,1,0,.5,1]),
+      indices:new Uint32Array([0,1,2]),
+      materialIndices:new Uint16Array([0])
+    },0);
+    store.finalize();
+    const acceleration=new RenderAccelerationSet(store,new RenderBVH(store,1));
+    if(ShadowVisibility.visible(acceleration,[0,0,-1],[0,0,1],10)!==false){
+      errors.push('Shadow occlusion test failed');
+    }
+    if(ShadowVisibility.visible(acceleration,[3,3,-1],[0,0,1],10)!==true){
+      errors.push('Shadow clear test failed');
+    }
+    const occRay=new RenderRay([0,0,-1],[0,0,1],1e-4,10);
+    if(acceleration.occluded(occRay)!==true)errors.push('BVH any-hit test failed');
+  }
+
+  {
+    const light=new RenderSceneLight({
+      id:'r',name:'r',type:'rectangle',enabled:true,color:'#ffffff',intensity:10,
+      range:0,size:1,width:2,height:2,coneAngle:90,penumbra:0,castShadows:true,
+      position:[0,0,5],direction:[0,0,-1]
+    
+-- hit 5 line 8026 --
+r(sample.distance)||1);
+      const cosEmitter=Math.max(1e-6,Number(sample.emitterCos)||1);
+      return (distance*distance)/(area*cosEmitter);
+    }
+    return 0;
+  },
+
+  evaluate(job,acceleration,compiled,ray,hit,pixelSeed=1){
+    const material=RenderMaterialLibrary.resolveHit(job.renderScene,compiled.materials,hit);
+    const n=SurfaceInterpolator.normal(acceleration,hit);
+    const v=RayMath.mul(ray.direction,-1);
+    let color=RenderColor.mul(material.emissive,material.emissiveIntensity);
+    const maxShadowRays=Math.max(1,Math.min(4096,Number(job?.settings?.maxShadowRaysPerHit)||1024));
+    let shadowRays=0;
+
+    if(material.shading==='unlit')return RenderColor.add(material.baseColor,color);
+
+    const useTree=LightTreePolicy.enabled(job,compiled)&&job.lightTree;
+    const selected=useTree?job.lightTree.sample(hit.position,pixelSeed^0x51ED270B):null;
+    const candidates=selected
+      ? [{light:selected.light,sourceIndex:selected.sourceIndex,selectionPdf:selected.pdf}]
+      : compiled.lights.map((light,sourceIndex)=>({light,sourceIndex,selectionPdf:1}));
+
+    for(const candidate of candidates){
+      const light=candidate.light;
+      if(!light||light.type==='dome')continue;
+
+      const li=candidate.sourceIndex;
+      const selectionPdf=Math.max(1e-8,candidate.selectionPdf||1);
+      const count=DirectLightingIntegrator.samplesFor(light,job.settings);
+      let accum=[0,0,0];
+
+      for(let si=0;si<count;si++){
+        const uv=RenderSampling.sample2D(pixelSeed^(li*2654435761),si);
+        const sample=['rectangle','disc','sphere','mesh'].includes(light.type)
+          ? AreaLightSampler.sample(light,hit.position,uv[0],uv[1])
+          : DirectLightSampler.sample(light,hit.position);
+
+        if(!sample?.direction||!sample.radiance||sample.radiance.every(x=>x<=0||!Number.isFinite(x)))continue;
+        if(light.castShadows!==false){
+          if(shadowRays>=maxShadowRays)break;
+          shadowRays++;
+          if(!ShadowVisibility.visible(acceleration,hit.position,sample.direction,sample.distance))continue;
+        }
+
+        const scaledRadiance=useTree?RenderColor.mul(sample.radiance,1/selectionPdf):sample.radiance;
+        const brdf=PhysicalBSDF.evaluate(material,n,v,sample.direction);
+        const bsdfPdf=PathBSDFSampler.pdf(material,n,v,sample.direction);
+        const conditionalPdf=this.lightPdf(light,sample);
+        const lightPdf=Number.isFinite(conditionalPdf)?conditionalPdf*selectionPdf:conditionalPdf;
+        const weight=Number.isFinite(lightPdf)?RenderMIS.power(lightPdf,bsdfPdf):1;
+        accum=RenderColor.add(accum,RenderColor.mul(RenderColor.mul(brdf,scaledRadiance),weight));
+      }
+
+      if(count>1)accum=RenderColor.mul(accum,1/count);
+      color=RenderColor.add(color,accum);
+    }
+    return color;
+  }
+});
+
+const LightCachePolicy=Object.freeze({
+  sceneScale(acceleration){
+    const root=acceleration?.bvh?.root;
+    const node=(root!=null&&root>=0)?acceleration.bvh.nodes[root]:null;
+    if(!node)return 1;
+    const d=RayMath.sub(node.max,node.min);
+    return Math.max(1e-4,RayMath.length(d));
+  },
+  radius(job,acceleration){
+    const q=String(job?.settings?.quality||'Preview');
+    const divisor=q==='Ultra'?64:q==='High'?48:q==='Draft'?20:32;
+    return Math.max(RenderRayPolicy.epsilonForPoint([0,0,0])*32,this.sceneScale(acceleration)/divisor);
+  },
+  probes(job){
+    const q=String(job?.settings?.quality||'Preview');
+    return q==='Ultra'?16:q==='High'?12:q==='Draft'?3:8;
+  },
+  maxRecords(job){
+    const q=String(job?.settings?.quality||'Preview');
+    return q==='Ultra'?12000:q==='High'?8000:q==='Draft'?1500:4
+-- hit 6 line 9846 --
+e));}
+
+  return {ok:errors.length===0,errors};
+}
+
+function validateRenderGroup15(){
+  const errors=[];
+  if(typeof RenderLightTree!=='function')errors.push('RenderLightTree missing');
+  if(typeof LightTreePolicy?.enabled!=='function')errors.push('LightTreePolicy missing');
+  if(typeof RenderPathGuideField!=='function')errors.push('RenderPathGuideField missing');
+  if(typeof GuidedBSDFSampler?.sample!=='function')errors.push('GuidedBSDFSampler missing');
+  if(!document.getElementById('rsLightTree'))errors.push('Light Tree setting control missing');
+  if(!document.getElementById('rsPathGuiding'))errors.push('Path Guiding setting control missing');
+  const tests=runRenderGroup15SelfTests();if(!tests.ok)errors.push(...tests.errors);
+  return {ok:errors.length===0,errors};
+}
+
+const RenderGroup15Core=Object.freeze({
+  version:'3.79.30-group15-rewrite-gen3',
+  validate:validateRenderGroup15,
+  createLightTree(job,compiled){
+    return LightTreePolicy.enabled(job,compiled)?new RenderLightTree(compiled.lights):null;
+  },
+  createPathGuide(job,acceleration){
+    return PathGuidePolicy.enabled(job)?new RenderPathGuideField(job,acceleration):null;
+  },
+  lightTreePolicy:LightTreePolicy,
+  pathGuidePolicy:PathGuidePolicy
+});
+
+Object.assign(window,{
+  LightTreePolicy,RenderLightTree,
+  PathGuidePolicy,RenderPathGuideField,GuidedBSDFSampler,
+  RenderGroup15Contract,runRenderGroup15SelfTests,validateRenderGroup15,RenderGroup15Core
+});
+
+
+/* ============================================================
+   3DLite / LiteTrace — CORE H GEN3
+   CLEAN GROUP 15 + GROUP 16 CONSOLIDATION
+   Advanced light/path sampling + safe renderer performance layer.
+   ============================================================ */
+
+const LiteTracePerformanceService=Object.freeze({
+  attach:job=>RenderPerformanceRuntime16.attach(job),
+  snapshot:job=>RenderPerformanceRuntime16.snapshot(job),
+  mark:(job,name,start)=>RenderPerformanceRuntime16.markStage(job,name,start),
+  begin:()=>RenderProfiler16.begin(),
+  workers:()=>window.RenderFramework?.jobs?.workerStats?.()||null
+});
+window.LiteTracePerformanceService=LiteTracePerformanceService;
+
+var RenderPerformanceArchitectureFinal=Object.freeze({
+  version:LiteTraceVersion.version+'-performance',
+  fixes:25,
+  acceleration:RenderAccelerationHierarchy16,
+  rayBatch:RenderRayBatch16,
+  workQueue:RenderWorkQueue16,
+  tileScheduler:RenderTileScheduler16,
+  profiler:RenderProfiler16,
+  diagnostics(job=null){
+    const j=job||RenderFramework?.jobs?.activeJob||RenderFramework?.jobs?.lastJob||null;
+    return Object.freeze({
+      performance:RenderCoreH?.performance?.(j)||null,
+      workers:RenderFramework?.jobs?.workerStats?.()||null,
+      acceleration:RenderAccelerationCache16.stats(),
+      tileSize:j?RenderCoreH?.tileSize?.(j):null,
+      controlShared:!!j?.controlToken16?.shared
     });
   }
-};
-`;
-
-const LiteTraceWorkerTracing=Object.freeze({
-  enabled:false,
-  canUse:pool=>!!pool?.available&&pool.size>0,
-  architecture:'worker tile tracing boundary; current proven integrator remains fallback',
-  activationRule:'Enable only after browser-proven serialized integrator kernel.'
 });
-window.LiteTraceWorkerTracing=LiteTraceWorkerTracing;
+window.RenderPerformanceArchitectureFinal=RenderPerformanceArchitectureFinal;
+window.get3DLiteRenderPerformance=()=>RenderPerformanceArchitectureFinal.diagnostics();
+window.getLiteTracePerformance=()=>RenderPerformanceArchitectureFinal.diagnostics();
 
-var RenderWorkerPool = class RenderWorkerPool{
-  constructor(size=0){
-    const hc=Math.max(1,Number(navigator.hardwareConcurrency)||2);
-    this.autoSize=Math.max(1,Math.min(Math.max(1,hc-1),64));
-    this.size=this._normalizeSize(size||this.autoSize);
-    this.workers=[];
-    this.idle=[];
-    this.queue=[];
-    this.activeTasks=new Map();
-    this.nextTaskId=1;
-    this.nextWorkerId=1;
-    this.workerURL=null;
-    this.available=typeof Worker!=='undefined';
-    this.disposed=false;
-    this.paused=false;
-    this.generation=1;
-    this.failureCount=0;
-    this.completedCount=0;
-    this.cancelledCount=0;
-    this.timeoutCount=0;
-  }
 
-  _normalizeSize(value){
-    return Math.max(1,Math.min(Number(value)||1,64));
-  }
 
-  _ensureURL(){
-    if(this.workerURL||!this.available)return;
-    const blob=new Blob([RenderWorkerKernelSource],{type:'text/javascript'});
-    this.workerURL=URL.createObjectURL(blob);
-  }
 
-  _spawnWorker(){
-    if(this.disposed||!this.available)return null;
-    this._ensureURL();
-    const worker=new Worker(this.workerURL);
-    worker.__renderWorkerId=this.nextWorkerId++;
-    worker.__renderBusy=false;
-    worker.__renderState=this.paused?'paused':'idle';
-    worker.__renderTaskId=null;
-    worker.__renderJobId=null;
-    worker.__renderPoolGeneration=this.generation;
-    worker.__perf={tasks:0,totalMs:0,lastMs:0,failures:0,idleSince:performance.now(),busySince:0};
-    worker.onmessage=e=>this._handleMessage(worker,e.data||{});
-    worker.onerror=e=>{
-      e?.preventDefault?.();
-      this._handleFailure(worker,e?.message||'Worker error');
-    };
-    this.workers.push(worker);
-    if(!this.paused)this.idle.push(worker);
-    return worker;
-  }
+const RenderCoreHContract=Object.freeze({
+  owns:Object.freeze([
+    'advanced direct-light selection policy',
+    'Light Tree construction and selection PDF ownership',
+    'job-local Path Guide creation and lookup',
+    'guided/BSDF mixture sampling boundary',
+    'renderer cooperative row-batch policy',
+    'renderer ray/sample/yield counters',
+    'renderer performance timing and diagnostics'
+  ]),
+  consumes:Object.freeze([
+    'Group 9 MIS and BSDF PDFs',
+    'Group 14 region-aware Fast/Path trav
+hits 6
 
-  _retireWorker(worker,{terminate=true,replace=false}={}){
-    if(!worker)return;
-    this.idle=this.idle.filter(w=>w!==worker);
-    this.workers=this.workers.filter(w=>w!==worker);
-    worker.__renderBusy=false;
-    worker.__renderState='retired';
-    worker.__renderTaskId=null;
-    worker.__renderJobId=null;
-    if(terminate){try{worker.terminate();}catch(_){}}
-    if(replace&&!this.disposed&&this.available&&this.workers.length<this.size){
-      this._spawnWorker();
+### light.type==='spot'
+-- hit 1 line 7073 --
+nst snapshot of (renderScene?.lights||[])){
+      if(snapshot?.enabled===false)continue;
+      try{compiled.push(new RenderSceneLight(snapshot));}
+      catch(err){throw new LightError(`${snapshot?.name||snapshot?.id||'Light'}: ${String(err?.message||err)}`,err);}
     }
+    return Object.freeze(compiled);
   }
+});
 
-  ensure(){
-    if(this.disposed||!this.available)return;
-    this._ensureURL();
-    
--- hit 6 line 5251 --
-       state:w.__renderState||'unknown',
-        jobId:w.__renderJobId??null,
-        taskId:w.__renderTaskId??null,
-        tasks:w.__perf?.tasks||0,
-        totalMs:Math.round(w.__perf?.totalMs||0),
-        lastMs:Math.round(w.__perf?.lastMs||0),
-        failures:w.__perf?.failures||0,
-        busyMs:w.__renderBusy?Math.round(performance.now()-(w.__perf?.busySince||performance.now())):0,
-        idleMs:!w.__renderBusy?Math.round(performance.now()-(w.__perf?.idleSince||performance.now())):0
-      }))
-    };
-  }
-
-  dispose(){
-    if(this.disposed)return;
-    this.disposed=true;
-    this.generation++;
-
-    for(const task of this.queue){
-      task.reject(new WorkerError('Worker pool disposed'));
+const DirectLightSampler=Object.freeze({
+  sample(light,point){
+    if(light.type==='dome'){
+      return {kind:'ambient',direction:null,distance:Infinity,radiance:LightEnergyPolicy.radiance(light)};
     }
-    this.queue=[];
-
-    for(const task of this.activeTasks.values()){
-      task.reject(new WorkerError('Worker pool disposed'));
+    if(light.type==='sun'){
+      return {kind:'directional',direction:RayMath.mul(light.direction,-1),distance:Infinity,radiance:LightEnergyPolicy.radiance(light)};
     }
-    this.activeTasks.clear();
 
-    for(const worker of [...this.workers]){
-      try{worker.terminate();}catch(_){}
-    }
-    this.workers=[];this.idle=[];
+    const to=RayMath.sub(light.position,point);
+    const dist=Math.max(RayMath.length(to),1e-4);
+    const dir=RayMath.mul(to,1/dist);
+    let attenuation=LightEnergyPolicy.distanceAttenuation(light,dist);
+    if(attenuation<=0)return {kind:'local',direction:dir,distance:dist,radiance:[0,0,0]};
 
-    if(this.workerURL){
-      URL.revokeObjectURL(this.workerURL);
-      this.workerURL=null;
-    }
-  }
-}
-
-class PreparedGeometrySet{
-  constructor(items){
-    this.items=Object.freeze(items.slice());
-    this.objectCount=items.length;
-    this.vertexCount=items.reduce((n,x)=>n+x.vertexCount,0);
-    this.triangleCount=items.reduce((n,x)=>n+x.triangleCount,0);
-    Object.freeze(this);
-  }
-}
-
-var RenderGeometryPreparation={
-  mainThread(job,packet){
-    if(job.cancelled)throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
-
-    const vertexCount=packet.positions.length/3;
-    const triangleCount=packet.indices.length/3;
-
-    for(let i=0;i<packet.indices.length;i++){
-      if(packet.indices[i]>=vertexCount)throw new GeometryCompileError('Index out of range in main-thread worker fallback');
+    if(light.type==='spot'){
+      const fromLight=RayMath.mul(dir,-1);
+      const cosTheta=RayMath.dot(light.direction,fromLight);
+      const outer=Math.cos(light.coneAngle*.5);
+      const inner=Math.cos(light.coneAngle*.5*(1-light.penumbra));
+      const cone=inner<=outer?(cosTheta>=outer?1:0):Math.max(0,Math.min(1,(cosTheta-outer)/(inner-outer)));
+      if(cone<=0)return {kind:'local',direction:dir,distance:dist,radiance:[0,0,0]};
+      attenuation*=cone;
     }
 
     return {
-      type:'geometryPrepared',
-      jobId:job.id,
-      objectId:packet.objectId,
-      vertexCount,
-      triangleCount,
-      bounds:new Float32Array([
-        ...packet.bounds.min,
-        ...packet.bounds.max
-      ]),
-      triangleIndices:new Uint32Array(packet.indices)
+      kind:'local',
+      direction:dir,
+      distance:dist,
+      radiance:LightEnergyPolicy.radiance(light,attenuation)
     };
-  },
-
-  async prepare(job,pool,onProgress=()=>{}){
-    const packets=RenderGeometryCompiler.compileScene(job.renderScene);
-    if(!packets.length)return new PreparedGeometrySet([]);
-
-    const items=[];
-    const total=packets.length;
-
-    for(let i=0;i<packets.length;i++){
-      if(job.cancelled)throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
-
-      while(job.paused&&!job.cancelled){
-        await new Promise(resolve=>setTimeout(resolve,25));
-      }
-
-      const packet=packets[i];
-      let result;
-
-      try{
-        result=await pool.run(
-          {type:'prepareGeometry',jobId:job.id,packet},
-          RenderGeometryCompiler.transferables(packet)
-        );
-      }catch(err){
-        if(err?.workerUnavailable){
-          result=this.mainThread(job,packet);
-        }else{
-          throw err;
-        }
-      }
-
-      items.push(Object.freeze({
-        objectId:result.objectId,
-        vertexCount:result.vertexCount,
-        triangleCount:result.triangleCount,
-        bounds:Object.freeze(Array.from(result.bounds||[])),
-        triangleIndices:result.triangleIndices
-      }));
-
-      onProgress((i+1)/total,items[items.length-1]);
-    }
-
-    return new PreparedGeometrySet(items);
   }
-};
+});
 
+function updateSelectedLightPanel(){
+  const section=document.getElementById('lightModifySection');
+  if(!section)return;
+  const obj=selected;
+  const isLight=EditorLightSystem.isLightObject(obj);
+  section.style.display=isLight?'':'none';
+  if(!isLight)return;
 
-/* ============================================================
-   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — CORE B
-   CLEAN GROUP 3 + GROUP 4 CONSOLIDATION
-   ============================================================ */
-class RenderExecutionGeometry{
-  constructor(renderScene){
-    this.accelerationPackets=RenderGeometryCompiler.compileScene(renderScene);
-    this.workerPackets=this.accelerationPackets.map(p=>new RenderGeometryPacket({
-      objectId:p.objectId,name:p.name,
-      positions:new Float32Array(p.positions),
-      normals:new Float32Array(p.normals),
-      uvs:new Float32Array(p.uvs),
-      indices:new Uint32Array(p.indices),
-      materialIndices:new Uint16Array(p.materialIndices),
-      bounds:{min:[...p.bounds.min],max:[...p.bounds.max]}
-    }));
-    Object.freeze(this.accelerationPackets);
-    Object.freeze(this.workerPackets);
-  }
+  const l=obj.userData.renderLight;
+  const set=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v};
+  set('lightTypeReadout',l.type);
+  set('lightIntensity',l.intensity);
+  set('lightColor',l.color);
+  set('lightRange',l.range);
+  set('lightSize',l.size);
+  set('lightWidth',l.width);
+  set('lightHeight',l.height);
+  set('lightConeAngle',l.coneAngle);
+  set('lightPenumbra',l.penumbra);
+  const en=document.getElementById('lightEnabled');if(en)en.checked=l.enabled!==false;
+  const sh=document.getElementById('lightCastShadows');if(sh)sh.checked=l.castShadows!==false;
 }
 
-var RenderCoreB=Object.freeze({
-  version:'3.79.16-core-b-part2',
-
-  createExecutionGeometry(renderScene){
-    return new RenderExecutionGeometry(renderScene);
-  },
-
-  buildAccelerationFromPackets(packets){
-    const store=new RenderTriangleStore();
-    packets.forEach((p,i)=>store.addPacket(p,i));
-    store.finalize();
-    return new RenderAccelerationSet(store,new RenderBVH(store,4));
-  },
-
-  async prepareWorkerGeometry(job,pool,executionGeometry,onProgress=()=>{}){
-    const items=[],packets=executionGeometry.workerPackets,total=packets.length;
-    for(let i=0;i<packets.length;i++){
-      if(job.cancelled)throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
-      while(job.paused&&!job.cancelled)await new Promise(r=>setTimeout(r,25));
-
-      const packet=packets[i];
-      let result;
-      try{
-        result=await pool.run(
-          {type:'prepareGeometry',jobId:job.id,packet},
-          RenderGeometryCompiler.transferables(packet)
-        );
-      }catch(err){
-        if(err?.workerUnavailable){job.progress.workerFallback=true;result=RenderGeometryPreparation.mainThread(job,packet);}
-        else throw err;
-      }
-
-      items.push(Object.freeze({
-        objectId:result.objectId,
-        vertexCount:result.vertexCount,
-        triangleCount:result.triangleCount,
-        bounds:Object.freeze(Array.from(result.bounds||[])),
-        triangleIndices:result.triangleIndices
-      }));
-      onProgress((i+1)/Math.max(1,total),items[items.length-1]);
-    }
-    return new PreparedGeometrySet(items);
-  },
-
-  validate(){
-    const errors=[];
-    const g3=validateRenderGroup3();if(!g3.ok)errors.push(...g3.errors);
-    const g4=validateRenderGroup4();if(!g4.ok)errors.push(...g4.errors);
-    if(typeof this.createExecutionGeometry!=='function')errors.push('Core B execution geometry missing');
-    if(typeof this.buildAccelerationFromPackets!=='function')errors.push('Core B acceleration builder missing');
-    return {ok:errors.length===0,errors};
-  }
-});
-window.RenderCoreB=RenderCoreB;
-
-const RenderGroup3Contract=Object.freeze({
-  owns:Object.freeze([
-    'worker pool',
-    'render execution queue',
-    'worker-safe geometry packets',
-    'render geometry preparation',
-    'prepared triangle-index payloads'
-  ]),
-  consumes:Object.freeze([
-    'RenderCoreA render jobs',
-    'immutable RenderSceneSnapshot'
-  ]),
-  doesNotOwn:Object.freeze([
-    'editor objects',
-    'editor geometry buffers',
-    'MNMesh',
-    'viewport renderer',
-    'selection',
-    'transforms',
-    'editor undo'
-  ])
-});
-
-function validateRenderGroup3(){
-  const errors=[];
-  if(typeof RenderWorkerPool!=='function')errors.push('RenderWorkerPool missing');
-  if(typeof RenderGeometryCompiler.compileScene!=='function')errors.push('RenderGeometryCompiler missing');
-  if(typeof RenderGeometryValidation.validatePacket!=='function')errors.push('RenderGeometryValidation missing');
-  if(typeof RenderGeometryPreparation.prepare!=='function')errors.push('RenderGeometryPreparation missing');
-  if(typeof PreparedGeometrySet!=='function')errors.push('PreparedGeometrySet missing');
-  return {ok:errors.length===0,errors};
+function markRenderLightDirty(){
+  window.__3DLiteLightRevision=(window.__3DLiteLightRevision||0)+1;
+  requestRender();
 }
 
-Object.assign(window,{
-  RenderGeometryPacket,
-  RenderGeometryCompiler,RenderGeometryValidation,
-  RenderWorkerPool,
-  PreparedGeometrySet,
-  RenderGeometryPreparation,
-  RenderGroup3Contract
-});
-
-/* ============================================================
-   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 4
-   Rays + Triangle Intersections + BVH + Camera
-   ============================================================ */
-const RayMath=Object.freeze({
-  EPSILON:1e-6,
-  add(a,b){return [a[0]+b[0],a[1]+b[1],a[2]+b[2]]},
-  sub(a,b){return [a[0]-b[0],a[1]-b[1],a[2]-b[2]]},
-  mul(a,s){return [a[0]*s,a[1]*s,a[2]*s]},
-  dot(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]},
-  cross(a,b){return [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]},
-  length(a){return Math.hypot(a[0],a[1],a[2])},
-  normalize(a){const l=Math.hypot(a[0],a[1],a[2])||1;return [a[0]/l,a[1]/l,a[2]/l]},
-  min3(a,b){return [Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.min(a[2],b[2])]},
-  max3(a,b){return [Math.max(a[0],b[0]),Math.max(a[1],b[1]),Math.max(a[2],b[2])]}
-});
-
-const RenderRayType=Object.freeze({CAMERA:'camera',SHADOW:'shadow',DIFFUSE:'diffuse',GLOSSY:'glossy',TRANSMISSION:'transmission'});
-class RenderRay{
-  constructor(origin,direction,tMin=1e-5,tMax=Infinity,type=RenderRayType.CAMERA,depth=0){
-    this.origin=o
--- hit 7 line 5270 --
-isposed=true;
-    this.generation++;
-
-    for(const task of this.queue){
-      task.reject(new WorkerError('Worker pool disposed'));
-    }
-    this.queue=[];
-
-    for(const task of this.activeTasks.values()){
-      task.reject(new WorkerError('Worker pool disposed'));
-    }
-    this.activeTasks.clear();
-
-    for(const worker of [...this.workers]){
-      try{worker.terminate();}catch(_){}
-    }
-    this.workers=[];this.idle=[];
-
-    if(this.workerURL){
-      URL.revokeObjectURL(this.workerURL);
-      this.workerURL=null;
-    }
-  }
-}
-
-class PreparedGeometrySet{
-  constructor(items){
-    this.items=Object.freeze(items.slice());
-    this.objectCount=items.length;
-    this.vertexCount=items.reduce((n,x)=>n+x.vertexCount,0);
-    this.triangleCount=items.reduce((n,x)=>n+x.triangleCount,0);
-    Object.freeze(this);
-  }
-}
-
-var RenderGeometryPreparation={
-  mainThread(job,packet){
-    if(job.cancelled)throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
-
-    const vertexCount=packet.positions.length/3;
-    const triangleCount=packet.indices.length/3;
-
-    for(let i=0;i<packet.indices.length;i++){
-      if(packet.indices[i]>=vertexCount)throw new GeometryCompileError('Index out of range in main-thread worker fallback');
-    }
-
-    return {
-      type:'geometryPrepared',
-      jobId:job.id,
-      objectId:packet.objectId,
-      vertexCount,
-      triangleCount,
-      bounds:new Float32Array([
-        ...packet.bounds.min,
-        ...packet.bounds.max
-      ]),
-      triangleIndices:new Uint32Array(packet.indices)
-    };
-  },
-
-  async prepare(job,pool,onProgress=()=>{}){
-    const packets=RenderGeometryCompiler.compileScene(job.renderScene);
-    if(!packets.length)return new PreparedGeometrySet([]);
-
-    const items=[];
-    const total=packets.length;
-
-    for(let i=0;i<packets.length;i++){
-      if(job.cancelled)throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
-
-      while(job.paused&&!job.cancelled){
-        await new Promise(resolve=>setTimeout(resolve,25));
-      }
-
-      const packet=packets[i];
-      let result;
-
-      try{
-        result=await pool.run(
-          {type:'prepareGeometry',jobId:job.id,packet},
-          RenderGeometryCompiler.transferables(packet)
-        );
-      }catch(err){
-        if(err?.workerUnavailable){
-          result=this.mainThread(job,packet);
-        }else{
-          throw err;
-        }
-      }
-
-      items.push(Object.freeze({
-        objectId:result.objectId,
-        vertexCount:result.vertexCount,
-        triangleCount:result.triangleCount,
-        bounds:Object.freeze(Array.from(result.bounds||[])),
-        triangleIndices:result.triangleIndices
-      }));
-
-      onProgress((i+1)/total,items[items.length-1]);
-    }
-
-    return new PreparedGeometrySet(items);
-  }
-};
-
-
-/* ============================================================
-   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — CORE B
-   CLEAN GROUP 3 + GROUP 4 CONSOLIDATION
-   ============================================================ */
-class RenderExecutionGeometry{
-  constructor(renderScene){
-    this.accelerationPackets=RenderGeometryCompiler.compileScene(renderScene);
-    this.workerPackets=this.accelerationPackets.map(p=>new RenderGeometryPacket({
-      objectId:p.objectId,name:p.name,
-      positions:new Float32Array(p.positions),
-      normals:new Float32Array(p.normals),
-      uvs:new Float32Array(p.uvs),
-      indices:new Uint32Array(p.indices),
-      materialIndices:new Uint16Array(p.materialIndices),
-      bounds:{min:[...p.bounds.min],max:[...p.bounds.max]}
-    }));
-    Object.freeze(this.accelerationPackets);
-    Object.freeze(this.workerPackets);
-  }
-}
-
-var RenderCoreB=Object.freeze({
-  version:'3.79.16-core-b-part2',
-
-  createExecutionGeometry(renderScene){
-    return new RenderExecutionGeometry(renderScene);
-  },
-
-  buildAccelerationFromPackets(packets){
-    const store=new RenderTriangleStore();
-    packets.forEach((p,i)=>store.addPacket(p,i));
-    store.finalize();
-    return new RenderAccelerationSet(store,new RenderBVH(store,4));
-  },
-
-  async prepareWorkerGeometry(job,pool,executionGeometry,onProgress=()=>{}){
-    const items=[],packets=executionGeometry.workerPackets,total=packets.length;
-    for(let i=0;i<packets.length;i++){
-      if(job.cancelled)throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
-      while(job.paused&&!job.cancelled)await new Promise(r=>setTimeout(r,25));
-
-      const packet=packets[i];
-      let result;
-      try{
-        result=await pool.run(
-          {type:'prepareGeometry',jobId:job.id,packet},
-          RenderGeometryCompiler.transferables(packet)
-        );
-      }catch(err){
-        if(err?.workerUnavailable){job.progress.workerFallback=true;result=RenderGeometryPreparation.mainThread(job,packet);}
-        else throw err;
-      }
-
-      items.push(Object.freeze({
-        objectId:result.objectId,
-        vertexCount:result.vertexCount,
-        triangleCount:result.triangleCount,
-        bounds:Object.freeze(Array.from(result.bounds||[])),
-        triangleIndices:result.triangleIndices
-      }));
-      onProgress((i+1)/Math.max(1,total),items[items.length-1]);
-    }
-    return new PreparedGeometrySet(items);
-  },
-
-  validate(){
-    const errors=[];
-    const g3=validateRenderGroup3();if(!g3.ok)errors.push(...g3.errors);
-    const g4=validateRenderGroup4();if(!g4.ok)errors.push(...g4.errors);
-    if(typeof this.createExecutionGeometry!=='function')errors.push('Core B execution geometry missing');
-    if(typeof this.buildAccelerationFromPackets!=='function')errors.push('Core B acceleration builder missing');
-    return {ok:errors.length===0,errors};
-  }
-});
-window.RenderCoreB=RenderCoreB;
-
-const RenderGroup3Contract=Object.freeze({
-  owns:Object.freeze([
-    'worker pool',
-    'render execution queue',
-    'worker-safe geometry packets',
-    'render geometry preparation',
-    'prepared triangle-index payloads'
-  ]),
-  consumes:Object.freeze([
-    'RenderCoreA render jobs',
-    'immutable RenderSceneSnapshot'
-  ]),
-  doesNotOwn:Object.freeze([
-    'editor objects',
-    'editor geometry buffers',
-    'MNMesh',
-    'viewport renderer',
-    'selection',
-    'transforms',
-    'editor undo'
-  ])
-});
-
-function validateRenderGroup3(){
-  const errors=[];
-  if(typeof RenderWorkerPool!=='function')errors.push('RenderWorkerPool missing');
-  if(typeof RenderGeometryCompiler.compileScene!=='function')errors.push('RenderGeometryCompiler missing');
-  if(typeof RenderGeometryValidation.validatePacket!=='function')errors.push('RenderGeometryValidation missing');
-  if(typeof RenderGeometryPreparation.prepare!=='function')errors.push('RenderGeometryPreparation missing');
-  if(typeof PreparedGeometrySet!=='function')errors.push('PreparedGeometrySet missing');
-  return {ok:errors.length===0,errors};
-}
-
-Object.assign(window,{
-  RenderGeometryPacket,
-  RenderGeometryCompiler,RenderGeometryValidation,
-  RenderWorkerPool,
-  PreparedGeometrySet,
-  RenderGeometryPreparation,
-  RenderGroup3Contract
-});
-
-/* ============================================================
-   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 4
-   Rays + Triangle Intersections + BVH + Camera
-   ============================================================ */
-const RayMath=Object.freeze({
-  EPSILON:1e-6,
-  add(a,b){return [a[0]+b[0],a[1]+b[1],a[2]+b[2]]},
-  sub(a,b){return [a[0]-b[0],a[1]-b[1],a[2]-b[2]]},
-  mul(a,s){return [a[0]*s,a[1]*s,a[2]*s]},
-  dot(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]},
-  cross(a,b){return [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]},
-  length(a){return Math.hypot(a[0],a[1],a[2])},
-  normalize(a){const l=Math.hypot(a[0],a[1],a[2])||1;return [a[0]/l,a[1]/l,a[2]/l]},
-  min3(a,b){return [Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.min(a[2],b[2])]},
-  max3(a,b){return [Math.max(a[0],b[0]),Math.max(a[1],b[1]),Math.max(a[2],b[2])]}
-});
-
-const RenderRayType=Object.freeze({CAMERA:'camera',SHADOW:'shadow',DIFFUSE:'diffuse',GLOSSY:'glossy',TRANSMISSION:'transmission'});
-class RenderRay{
-  constructor(origin,direction,tMin=1e-5,tMax=Infinity,type=RenderRayType.CAMERA,depth=0){
-    this.origin=origin;this.direction=RayMath.normalize(direction);
-    this.invDirection=[
-      Math.abs(this.direction[0])<RayMath.EPSILON?Infinity:1/this.direction[0],
-      Math.abs(this.direction[1])<RayMath.EPSILON?Infinity:1/this.direction[1],
-      Math.abs(this.direction[2])<RayMath.EPSILON?Infinity:1/this.direction[2]
-    ];
-    this.tMin=tMin;this.tMax=tMax;this.type=type;this.depth=depth;
-  }
-  at(t){return RayMath.add(this.origin,RayMath.mul(this.direction,t))}
-}
-const RenderRayPolicy=Object.freeze({
-  epsilonForPoint(p){const scale=Math.max(1,Math.abs(p[0]),Math.abs(
--- hit 8 line 5302 --
-sign(new Error('Render job cancelled'),{cancelled:true});
-
-    const vertexCount=packet.positions.length/3;
-    const triangleCount=packet.indices.length/3;
-
-    for(let i=0;i<packet.indices.length;i++){
-      if(packet.indices[i]>=vertexCount)throw new GeometryCompileError('Index out of range in main-thread worker fallback');
-    }
-
-    return {
-      type:'geometryPrepared',
-      jobId:job.id,
-      objectId:packet.objectId,
-      vertexCount,
-      triangleCount,
-      bounds:new Float32Array([
-        ...packet.bounds.min,
-        ...packet.bounds.max
-      ]),
-      triangleIndices:new Uint32Array(packet.indices)
-    };
-  },
-
-  async prepare(job,pool,onProgress=()=>{}){
-    const packets=RenderGeometryCompiler.compileScene(job.renderScene);
-    if(!packets.length)return new PreparedGeometrySet([]);
-
-    const items=[];
-    const total=packets.length;
-
-    for(let i=0;i<packets.length;i++){
-      if(job.cancelled)throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
-
-      while(job.paused&&!job.cancelled){
-        await new Promise(resolve=>setTimeout(resolve,25));
-      }
-
-      const packet=packets[i];
-      let result;
-
-      try{
-        result=await pool.run(
-          {type:'prepareGeometry',jobId:job.id,packet},
-          RenderGeometryCompiler.transferables(packet)
-        );
-      }catch(err){
-        if(err?.workerUnavailable){
-          result=this.mainThread(job,packet);
-        }else{
-          throw err;
-        }
-      }
-
-      items.push(Object.freeze({
-        objectId:result.objectId,
-        vertexCount:result.vertexCount,
-        triangleCount:result.triangleCount,
-        bounds:Object.freeze(Array.from(result.bounds||[])),
-        triangleIndices:result.triangleIndices
-      }));
-
-      onProgress((i+1)/total,items[items.length-1]);
-    }
-
-    return new PreparedGeometrySet(items);
-  }
-};
-
-
-/* ============================================================
-   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — CORE B
-   CLEAN GROUP 3 + GROUP 4 CONSOLIDATION
-   ============================================================ */
-class RenderExecutionGeometry{
-  constructor(renderScene){
-    this.accelerationPackets=RenderGeometryCompiler.compileScene(renderScene);
-    this.workerPackets=this.accelerationPackets.map(p=>new RenderGeometryPacket({
-      objectId:p.objectId,name:p.name,
-      positions:new Float32Array(p.positions),
-      normals:new Float32Array(p.normals),
-      uvs:new Float32Array(p.uvs),
-      indices:new Uint32Array(p.indices),
-      materialIndices:new Uint16Array(p.materialIndices),
-      bounds:{min:[...p.bounds.min],max:[...p.bounds.max]}
-    }));
-    Object.freeze(this.accelerationPackets);
-    Object.freeze(this.workerPackets);
-  }
-}
-
-var RenderCoreB=Object.freeze({
-  version:'3.79.16-core-b-part2',
-
-  createExecutionGeometry(renderScene){
-    return new RenderExecutionGeometry(renderScene);
-  },
-
-  buildAccelerationFromPackets(packets){
-    const store=new RenderTriangleStore();
-    packets.forEach((p,i)=>store.addPacket(p,i));
-    store.finalize();
-    return new RenderAccelerationSet(store,new RenderBVH(store,4));
-  },
-
-  async prepareWorkerGeometry(job,pool,executionGeometry,onProgress=()=>{}){
-    const items=[],packets=executionGeometry.workerPackets,total=packets.length;
-    for(let i=0;i<packets.length;i++){
-      if(job.cancelled)throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
-      while(job.paused&&!job.cancelled)await new Promise(r=>setTimeout(r,25));
-
-      const packet=packets[i];
-      let result;
-      try{
-        result=await pool.run(
-          {type:'prepareGeometry',jobId:job.id,packet},
-          RenderGeometryCompiler.transferables(packet)
-        );
-      }catch(err){
-        if(err?.workerUnavailable){job.progress.workerFallback=true;result=RenderGeometryPreparation.mainThread(job,packet);}
-        else throw err;
-      }
-
-      items.push(Object.freeze({
-        objectId:result.objectId,
-        vertexCount:result.vertexCount,
-        triangleCount:result.triangleCount,
-        bounds:Object.freeze(Array.from(result.bounds||[])),
-        triangleIndices:result.triangleIndices
-      }));
-      onProgress((i+1)/Math.max(1,total),items[items.length-1]);
-    }
-    return new PreparedGeometrySet(items);
-  },
-
-  validate(){
-    const errors=[];
-    const g3=validateRenderGroup3();if(!g3.ok)errors.push(...g3.errors);
-    const g4=validateRenderGroup4();if(!g4.ok)errors.push(...g4.errors);
-    if(typeof this.createExecutionGeometry!=='function')errors.push('Core B execution geometry missing');
-    if(typeof this.buildAccelerationFromPackets!=='function')errors.push('Core B acceleration builder missing');
-    return {ok:errors.length===0,errors};
-  }
-});
-window.RenderCoreB=RenderCoreB;
-
-const RenderGroup3Contract=Object.freeze({
-  owns:Object.freeze([
-    'worker pool',
-    'render execution queue',
-    'worker-safe geometry packets',
-    'render geometry preparation',
-    'prepared triangle-index payloads'
-  ]),
-  consumes:Object.freeze([
-    'RenderCoreA render jobs',
-    'immutable RenderSceneSnapshot'
-  ]),
-  doesNotOwn:Object.freeze([
-    'editor objects',
-    'editor geometry buffers',
-    'MNMesh',
-    'viewport renderer',
-    'selection',
-    'transforms',
-    'editor undo'
-  ])
-});
-
-function validateRenderGroup3(){
-  const errors=[];
-  if(typeof RenderWorkerPool!=='function')errors.push('RenderWorkerPool missing');
-  if(typeof RenderGeometryCompiler.compileScene!=='function')errors.push('RenderGeometryCompiler missing');
-  if(typeof RenderGeometryValidation.validatePacket!=='function')errors.push('RenderGeometryValidation missing');
-  if(typeof RenderGeometryPreparation.prepare!=='function')errors.push('RenderGeometryPreparation missing');
-  if(typeof PreparedGeometrySet!=='function')errors.push('PreparedGeometrySet missing');
-  return {ok:errors.length===0,errors};
-}
-
-Object.assign(window,{
-  RenderGeometryPacket,
-  RenderGeometryCompiler,RenderGeometryValidation,
-  RenderWorkerPool,
-  PreparedGeometrySet,
-  RenderGeometryPreparation,
-  RenderGroup3Contract
-});
-
-/* ============================================================
-   3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 4
-   Rays + Triangle Intersections + BVH + Camera
-   ============================================================ */
-const RayMath=Object.freeze({
-  EPSILON:1e-6,
-  add(a,b){return [a[0]+b[0],a[1]+b[1],a[2]+b[2]]},
-  sub(a,b){return [a[0]-b[0],a[1]-b[1],a[2]-b[2]]},
-  mul(a,s){return [a[0]*s,a[1]*s,a[2]*s]},
-  dot(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]},
-  cross(a,b){return [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]},
-  length(a){return Math.hypot(a[0],a[1],a[2])},
-  normalize(a){const l=Math.hypot(a[0],a[1],a[2])||1;return [a[0]/l,a[1]/l,a[2]/l]},
-  min3(a,b){return [Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.min(a[2],b[2])]},
-  max3(a,b){return [Math.max(a[0],b[0]),Math.max(a[1],b[1]),Math.max(a[2],b[2])]}
-});
-
-const RenderRayType=Object.freeze({CAMERA:'camera',SHADOW:'shadow',DIFFUSE:'diffuse',GLOSSY:'glossy',TRANSMISSION:'transmission'});
-class RenderRay{
-  constructor(origin,direction,tMin=1e-5,tMax=Infinity,type=RenderRayType.CAMERA,depth=0){
-    this.origin=origin;this.direction=RayMath.normalize(direction);
-    this.invDirection=[
-      Math.abs(this.direction[0])<RayMath.EPSILON?Infinity:1/this.direction[0],
-      Math.abs(this.direction[1])<RayMath.EPSILON?Infinity:1/this.direction[1],
-      Math.abs(this.direction[2])<RayMath.EPSILON?Infinity:1/this.direction[2]
-    ];
-    this.tMin=tMin;this.tMax=tMax;this.type=type;this.depth=depth;
-  }
-  at(t){return RayMath.add(this.origin,RayMath.mul(this.direction,t))}
-}
-const RenderRayPolicy=Object.freeze({
-  epsilonForPoint(p){const scale=Math.max(1,Math.abs(p[0]),Math.abs(p[1]),Math.abs(p[2]));return Math.min(1e-2,Math.max(1e-6,scale*1e-7));}
-});
-Object.assign(window,{RenderRayType,RenderRayPolicy});
-
-class RenderHit{
-  constructor(){
-    this.hit=false;this.t=Infinity;this.u=0;this.v=0;
-    this.objectIndex=-1;this.triangleIndex=-1;
-    this.position=null;this.geometricNormal=null;this.orientedGeometricNormal=null;this.frontFace=true;this.materialIndex=0;
-  }
-}
-
-const TriangleIntersector=Object.freeze({
-  intersect(ray,p0,p1,p2,hit=new RenderHit()){
-    const e1=RayMath.sub(p1,p0),e2=RayMath.sub(p2,p0);
-    const pvec=RayMath.cross(ray.direction,e2);
-    const det=RayMath.dot(e1,pvec);
-    if(Math.abs(det)<RayMath.EPSILON)return hit;
-    const invDet=1/det;
-    const tvec=RayMath.sub(ray.origin,p0);
-    const u=RayMath.dot(tvec,pvec)*invDet;
-    if(u<0||u>1)return hit;
-    const qvec=RayMath.cross(tvec,e1);
-    const v=RayMath.dot(ray.direction,qvec)*invDet;
-    if(v<0||u+v
-hits 8
-
-### shadeHit(state
-hits 0
-
-### traceVisibility(accel
-hits 0
-
-### PhysicalLightingCore=
-hits 0
-
-### render(job,compiled,acceleration
-hits 0
+function bindLightUI(){
+  document.querySelectorAll('[data-light-create]').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      EditorLightSystem.create(btn.dataset.lightCreate,{
+        intensity:Number(document.getElementById('newLightIntensity')?.value)||10,
+        color:document.getElementById('newLightColor')?.value||'#ffffff',
+        size:Number(document.getElementById('newLightSize')?.value)||25,
+        range:Number(document.getElementById('newLightRange')?.value)||0
+      });
+    });
+  });
+
+  const bindings=[
+    ['lightIntensity','intensity','number'],
+    ['lightColor','color','string'],
+    ['lightRange','range','number'],
+    ['lightSize','size','number'],
+    ['lightWidth','width','number'],
+    ['lightHeight','height','number'],
+    ['lightConeAngle','coneAngle','number'],
+    ['lightPenumbra','penumbra','number']
+  ];
+
+  for(const [id,key,kind] of bindings){
+    document.getElementById(id)?.addEventListener('change',e=>{
+      if(!EditorLightSystem.isLightObject(selected))return;
+      selec
+hits 1
