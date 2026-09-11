@@ -11,36 +11,53 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Extract renderer symbols and focused source
+      - name: Extract exact renderer blocks
         shell: python
         run: |
           from pathlib import Path
-          import re
           s=Path('index.html').read_text(encoding='utf-8')
           Path('tmp').mkdir(exist_ok=True)
-          pats=['BVH','Acceleration','PhysicalBSDF','DirectLightSampler','DirectLightingIntegrator','LiteTrace','trace(','intersect','roughness','refraction','MIS','renderPass','AOV']
-          lines=s.splitlines()
-          out=[]
-          for i,line in enumerate(lines,1):
-              if any(p.lower() in line.lower() for p in pats):
-                  t=line.strip()
-                  if len(t)>500:t=t[:500]
-                  out.append(f'{i}: {t}')
-          Path('tmp/v3980_symbols.txt').write_text('\n'.join(out[:1400]),encoding='utf-8')
-          def around(term,n=2,before=5000,after=14000):
-              ms=list(re.finditer(re.escape(term),s,re.I))
-              chunks=[]
-              for m in ms[:n]:
-                  chunks.append(f'===== {term} @ {m.start()} =====\n'+s[max(0,m.start()-before):min(len(s),m.start()+after)])
-              return '\n\n'.join(chunks)
-          Path('tmp/v3980_bvh.txt').write_text(around('RenderBVH',4)+around('Acceleration',4),encoding='utf-8')
-          Path('tmp/v3980_bsdf.txt').write_text(around('PhysicalBSDF',4)+around('DirectLightingIntegrator',3),encoding='utf-8')
-          Path('tmp/v3980_litetrace.txt').write_text(around('LiteTraceExecutionContext',3)+around('LiteTraceRenderer',3),encoding='utf-8')
-      - name: Commit inspection files
+          def block(marker,tail=';'):
+              st=s.find(marker)
+              if st<0:return 'MISSING '+marker
+              b=s.find('{',st)
+              if b<0:return 'NO BRACE '+marker
+              depth=0; quote=None; esc=False; i=b
+              while i<len(s):
+                  c=s[i]
+                  if quote:
+                      if esc: esc=False
+                      elif c=='\\': esc=True
+                      elif c==quote: quote=None
+                  else:
+                      if c in "'\"`": quote=c
+                      elif c=='{': depth+=1
+                      elif c=='}':
+                          depth-=1
+                          if depth==0:
+                              e=i+1
+                              while e<len(s) and s[e].isspace(): e+=1
+                              if tail and s.startswith(tail,e): e+=len(tail)
+                              return s[st:e]
+                  i+=1
+              return 'UNTERMINATED '+marker
+          specs={
+            'RenderBVH':'var RenderBVH = class RenderBVH',
+            'PhysicalBSDF':'const PhysicalBSDF=Object.freeze(',
+            'GGXImportanceSampler':'const GGXImportanceSampler=Object.freeze(',
+            'PathSampler':'const PathSampler=Object.freeze(',
+            'DirectLightingIntegrator':'const DirectLightingIntegrator=Object.freeze(',
+            'Group9DirectMIS':'const Group9DirectMIS=Object.freeze(',
+            'PathIntegrator':'var PathIntegrator=Object.freeze(',
+            'RenderMIS':'const RenderMIS=Object.freeze('
+          }
+          for name,marker in specs.items():
+              Path(f'tmp/v3980_{name}.txt').write_text(block(marker),encoding='utf-8')
+      - name: Commit exact blocks
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add tmp/v3980_symbols.txt tmp/v3980_bvh.txt tmp/v3980_bsdf.txt tmp/v3980_litetrace.txt
+          git add tmp/v3980_*.txt
           git diff --cached --quiet && exit 0
-          git commit -m 'Temporary v3.98.0 renderer focused inspection'
+          git commit -m 'Temporary v3.98.0 exact renderer blocks'
           git push
