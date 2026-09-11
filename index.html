@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>3DLite v3.99.5 L3N GitHub Runtime</title>
+<title>3DLite v3.99.6 L3N GitHub Runtime</title>
 <style>
 :root{
   --bg:#202020;--panel:#2a2a2a;--panel2:#303030;--line:#444;--line2:#555;
@@ -4185,7 +4185,7 @@ function validateArchitectureCore(){
   return {ok:errors.length===0,errors};
 }
 
-const ThreeDLiteVersion=Object.freeze({name:'3DLite',version:'3.99.5'});
+const ThreeDLiteVersion=Object.freeze({name:'3DLite',version:'3.99.6'});
 const LiteTraceVersion=Object.freeze({name:'LiteTrace Renderer',version:'1.1 RC1'});
 window.ThreeDLiteVersion=ThreeDLiteVersion;
 window.LiteTraceVersion=LiteTraceVersion;
@@ -4517,6 +4517,9 @@ var RenderSceneBoundary={
     const c=m?.color;
     return new RenderMaterialSnapshot({
       id:this.materialId(m),name:m?.name||'Material',
+      // v3.99.6: THREE.Color component values are already in the renderer working-linear space.
+      // Mark the snapshot explicitly so RenderSurfaceMaterial does not linearize them a second time.
+      colorSpace:'linear',
       shading:m?.isMeshBasicMaterial?'unlit':m?.isMeshLambertMaterial?'lambert':'physical',
       baseColor:c?[c.r,c.g,c.b]:[.54,.54,.54],
       roughness:Number.isFinite(m?.roughness)?m.roughness:.65,
@@ -6033,8 +6036,9 @@ class RenderSurfaceMaterial{
     this.id=String(snapshot.id||'__material__');
     this.name=String(snapshot.name||'Material');
     this.shading=RenderMaterialPolicy.shading(snapshot.shading);
-    const srgb=RenderMaterialPolicy.finiteColor(snapshot.baseColor,[.54,.54,.54]);
-    this.baseColor=Object.freeze(RenderColor.srgbToLinear(srgb));
+    const colorSpace=snapshot.colorSpace==='linear'?'linear':'srgb';
+    const baseInput=RenderMaterialPolicy.finiteColor(snapshot.baseColor,[.54,.54,.54]);
+    this.baseColor=Object.freeze(colorSpace==='linear'?baseInput:RenderColor.srgbToLinear(baseInput));
     this.roughness=RenderMaterialPolicy.scalar(snapshot.roughness,.65,.045,1);
     this.metalness=RenderMaterialPolicy.scalar(snapshot.metalness,0,0,1);
     this.opacity=RenderMaterialPolicy.scalar(snapshot.opacity,1,0,1);
@@ -6042,11 +6046,11 @@ class RenderSurfaceMaterial{
     this.transmission=RenderMaterialPolicy.scalar(snapshot.transmission,0,0,1);
     this.ior=RenderMaterialPolicy.scalar(snapshot.ior,1.5,1.0001,3);
     this.thickness=RenderMaterialPolicy.scalar(snapshot.thickness,0,0,1e9);
-    const attenSrgb=RenderMaterialPolicy.finiteColor(snapshot.attenuationColor,[1,1,1]);
-    this.attenuationColor=Object.freeze(RenderColor.srgbToLinear(attenSrgb));
+    const attenuationInput=RenderMaterialPolicy.finiteColor(snapshot.attenuationColor,[1,1,1]);
+    this.attenuationColor=Object.freeze(colorSpace==='linear'?attenuationInput:RenderColor.srgbToLinear(attenuationInput));
     this.attenuationDistance=(Number.isFinite(Number(snapshot.attenuationDistance))&&Number(snapshot.attenuationDistance)>0)?Number(snapshot.attenuationDistance):Infinity;
-    const emissiveSrgb=RenderMaterialPolicy.finiteColor(snapshot.emissive,[0,0,0]);
-    this.emissive=Object.freeze(RenderColor.srgbToLinear(emissiveSrgb));
+    const emissiveInput=RenderMaterialPolicy.finiteColor(snapshot.emissive,[0,0,0]);
+    this.emissive=Object.freeze(colorSpace==='linear'?emissiveInput:RenderColor.srgbToLinear(emissiveInput));
     this.emissiveIntensity=RenderMaterialPolicy.scalar(snapshot.emissiveIntensity,0,0,1e8);
     Object.freeze(this);
   }
@@ -23423,7 +23427,7 @@ window.ThreeDLiteRenderDataCode3991={version:'3.99.1',snapshot:()=>A.renderDataS
 <script id="l3n-litetrace-telemetry-3992">
 (()=>{
 'use strict';
-const VERSION='3.99.5';
+const VERSION='3.99.6';
 const root=window;
 const A=root.ThreeDLiteAdaptiveRender3990||null;
 const jobs=()=>root.RenderFramework?.jobs||null;
@@ -23509,6 +23513,7 @@ document.documentElement.dataset.liteTraceTelemetryVersion=VERSION;
 root.__3DLiteLiteTraceTelemetry3994=true;
 root.__3DLiteLiteTraceTelemetry3992=true;
 root.__3DLiteFastDirectLighting3995=true;
+root.__3DLiteMaterialLinearColor3996=true;
 })();
 </script>
 </body>

@@ -1,0 +1,56 @@
+name: v3.99.6 Material Linear Color Patch
+
+on:
+  push:
+    branches: [v3.99.6-dark-gi-lighting-fix]
+    paths:
+      - '.github/workflows/v3996-material-color-patch.yml'
+      - 'patches/v3.99.6/fix-material-linear-color.py'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v3.99.6-dark-gi-lighting-fix
+          fetch-depth: 0
+      - name: Apply material color-space fix
+        run: python3 patches/v3.99.6/fix-material-linear-color.py
+      - name: Structural gate
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs=require('fs');
+          const h=fs.readFileSync('index.html','utf8');
+          const failures=[];
+          for(const x of [
+            '<title>3DLite v3.99.6 L3N GitHub Runtime</title>',
+            "const ThreeDLiteVersion=Object.freeze({name:'3DLite',version:'3.99.6'});",
+            "colorSpace:'linear'",
+            "const colorSpace=snapshot.colorSpace==='linear'?'linear':'srgb';",
+            "colorSpace==='linear'?baseInput:RenderColor.srgbToLinear(baseInput)",
+            'root.__3DLiteMaterialLinearColor3996=true;'
+          ]) if(!h.includes(x)) failures.push('missing '+x);
+          const ids=[...h.matchAll(/\bid\s*=\s*["']([^"']+)["']/gi)].map(m=>m[1]);
+          const seen=new Set(),dups=[];for(const id of ids){if(seen.has(id))dups.push(id);else seen.add(id)}
+          if(dups.length)failures.push('duplicate ids '+[...new Set(dups)].join(','));
+          const ext=[...h.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].filter(m=>/\bsrc\s*=/.test(m[1])&&(m[2]||'').trim());
+          if(ext.length)failures.push('external script inline bodies '+ext.length);
+          const loops=(h.match(/requestAnimationFrame\s*\(\s*animate\s*\)/g)||[]).length;
+          if(loops!==1)failures.push('animation loop owners '+loops);
+          if(failures.length){console.error(failures.join('\n'));process.exit(1)}
+          console.log('v3.99.6 structural gate passed');
+          NODE
+      - name: Commit gated update
+        shell: bash
+        run: |
+          if git diff --quiet -- index.html; then exit 0; fi
+          git config user.name '3DLite Gate'
+          git config user.email 'actions@users.noreply.github.com'
+          git add index.html
+          git commit -m 'Gate 3DLite v3.99.6 material linear color fix'
+          git push origin HEAD:v3.99.6-dark-gi-lighting-fix
