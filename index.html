@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>3D Lite — LitePix v4.44.0 Legacy Migration</title>
+<title>3D Lite — LitePix v4.45.0 Adaptive Ray Budget</title>
 <style>
 :root{
   --bg:#202020;--panel:#2a2a2a;--panel2:#303030;--line:#444;--line2:#555;
@@ -4185,7 +4185,7 @@ function validateArchitectureCore(){
   return {ok:errors.length===0,errors};
 }
 
-const LitePixVersion=Object.freeze({name:'LitePix',version:'4.44.0',legacyName:'3DLite',legacyVersion:'3.99.6',architecture:'All Cores Optimized'});
+const LitePixVersion=Object.freeze({name:'LitePix',version:'4.45.0',legacyName:'3DLite',legacyVersion:'3.99.6',architecture:'All Cores Optimized'});
 // Compatibility bridge: existing 3DLite services keep working while the renderer migrates to LitePix ownership.
 const ThreeDLiteVersion=LitePixVersion;
 
@@ -8150,7 +8150,8 @@ const Group9DirectMIS=Object.freeze({
 
       const li=candidate.sourceIndex;
       const selectionPdf=Math.max(1e-8,candidate.selectionPdf||1);
-      const count=DirectLightingIntegrator.samplesFor(light,job.settings);
+      const requestedCount=DirectLightingIntegrator.samplesFor(light,job.settings);
+      const count=job.litePixRayBudget445?.samplesFor?.(light,requestedCount)??requestedCount;
       let accum=[0,0,0];
 
       for(let si=0;si<count;si++){
@@ -8163,7 +8164,8 @@ const Group9DirectMIS=Object.freeze({
         if(light.castShadows!==false){
           if(shadowRays>=maxShadowRays)break;
           shadowRays++;
-          if(!ShadowVisibility.visible(acceleration,hit.position,sample.direction,sample.distance))continue;
+          const visible445=job.litePixRayBudget445?.visible?.(acceleration,hit.position,sample.direction,sample.distance,light,li,hit,()=>ShadowVisibility.visible(acceleration,hit.position,sample.direction,sample.distance))??ShadowVisibility.visible(acceleration,hit.position,sample.direction,sample.distance);
+          if(!visible445)continue;
         }
 
         const scaledRadiance=useTree?RenderColor.mul(sample.radiance,1/selectionPdf):sample.radiance;
@@ -8550,6 +8552,8 @@ var PathGIRenderer=Object.freeze({
     job.lightCache=LightCacheEstimator.enabled(job)?new RenderLightCache(job,acceleration):null;
     job.lightTree=RenderCoreH.createLightTree(job,compiled);
     job.pathGuide=RenderCoreH.createPathGuide(job,acceleration);
+    const litePixRayBudget445=(typeof window.LitePixRayBudget445==='function')?new window.LitePixRayBudget445(job,acceleration,compiled,width,height):null;
+    job.litePixRayBudget445=litePixRayBudget445;
     job.progress.gi=settings.secondaryGI==='Light Cache'?'Brute Force + Light Cache':settings.secondaryGI;
     const accumulator=new ProgressiveAccumulator(width,height);
     const aovs=new RenderAOVSet(width,height);
@@ -8686,6 +8690,7 @@ var PathGIRenderer=Object.freeze({
         litePixCore3Production:job.litePixCore3Stats423||litePixCore3Production423?.snapshot?.()||null,
         litePixCores4to8Production:job.litePixCores4to8Stats443||litePixCores4to8Production443?.snapshot?.()||null,
         litePixLegacyMigration:window.LitePixLegacyMigration444?.audit?.()||null,
+        litePixRayBudget:job.litePixRayBudget445?.snapshot?.()||null,
         litePixCore2Production:job.litePixCore2Production419?.snapshot?.()||null,
         litePixCore2Partial:job.litePixCore2Partial415?.snapshot?.()||null,
         litePixCore2Persistent:job.litePixCore2Persistent414?.snapshot?.()||null,
@@ -23698,6 +23703,7 @@ root.__3DLiteMaterialLinearColor3996=true;
 <script src="./litepix/core8-production-v4.43.js"></script>
 <script src="./litepix/cores4-8-production-v4.43.js"></script>
 <script src="./litepix/legacy-migration-v4.44.js"></script>
+<script src="./litepix/core5-ray-budget-v4.45.js"></script>
 <script src="./litepix/runtime-v4.09.js"></script>
 <script src="./litepix/path-integration-v4.10.js"></script>
 <script src="./litepix/core2-path-v4.12.js"></script>
