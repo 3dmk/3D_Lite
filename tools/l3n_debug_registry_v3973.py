@@ -19,8 +19,8 @@ required=[
     '__3DLiteL3NDebugRegistry3973',
     'ThreeDLiteL3NDebugRegistry',
     'ingestRuntimeReport',
-    "category:'lighting'",
-    "category:'performance'",
+    'lighting:[',
+    'performance:[',
 ]
 for x in required:
     if x not in s: raise SystemExit('missing required marker: '+x)
