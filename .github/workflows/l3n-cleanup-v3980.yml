@@ -1,0 +1,35 @@
+name: L3N v3.98.0 Cleanup
+on:
+  push:
+    branches: [l3n-dev]
+    paths:
+      - '.l3n-cleanup-v3980-trigger'
+permissions:
+  contents: write
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Remove temporary v3.98.0 machinery
+        run: |
+          rm -f \
+            .github/workflows/l3n-kernel-inspect-v3980.yml \
+            .l3n-kernel-inspect-v3980-trigger \
+            .github/workflows/l3n-kernel-v3980.yml \
+            .l3n-kernel-v3980-trigger \
+            .github/workflows/l3n-browser-smoke-v3980.yml \
+            .l3n-browser-smoke-v3980-trigger \
+            tools/l3n_kernel_v3980.py \
+            tools/l3n_kernel_v3980_pdf_fix.py
+          rm -f tmp/v3980_*.txt
+          rm -f .l3n-cleanup-v3980-trigger
+          rm -f .github/workflows/l3n-cleanup-v3980.yml
+      - name: Commit clean v3.98.0 development tree
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m 'Clean temporary v3.98.0 development machinery'
+          git push
