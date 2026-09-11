@@ -1,5 +1,481 @@
 
+===== class RenderAccelerationSet @ 5875 =====
+5840:     const fov=Math.max(1,Math.min(179,Number.isFinite(Number(s.fov))?Number(s.fov):50));
+5841:     const aspect=Math.max(1e-6,Number.isFinite(Number(s.aspect))?Number(s.aspect):1);
+5842:     const near=Math.max(RenderRayPolicy.epsilonForPoint(position),Number.isFinite(Number(s.near))?Number(s.near):1e-4);
+5843:     const far=(Number.isFinite(Number(s.far))&&Number(s.far)>near)?Number(s.far):Infinity;
+5844:     return {type:'Perspective',position,quaternion:q,up,fov,aspect,near,far};
+5845:   },
+5846:   outputAspect(width,height){
+5847:     width=Math.max(1,Number(width)||1);height=Math.max(1,Number(height)||1);
+5848:     return width/height;
+5849:   }
+5850: });
+5851: 
+5852: const RenderCameraRayGenerator=Object.freeze({
+5853:   rotateByQuaternion(v,q){
+5854:     const x=v[0],y=v[1],z=v[2],qx=q[0],qy=q[1],qz=q[2],qw=q[3];
+5855:     const ix=qw*x+qy*z-qz*y,iy=qw*y+qz*x-qx*z,iz=qw*z+qx*y-qy*x,iw=-qx*x-qy*y-qz*z;
+5856:     return [
+5857:       ix*qw+iw*-qx+iy*-qz-iz*-qy,
+5858:       iy*qw+iw*-qy+iz*-qx-ix*-qz,
+5859:       iz*qw+iw*-qz+ix*-qy-iy*-qx
+5860:     ];
+5861:   },
+5862:   ray(cameraSnapshot,px,py,width,height){
+5863:     const c=RenderCameraPolicy.sanitize(cameraSnapshot);
+5864:     width=Math.max(1,Number(width)||1);height=Math.max(1,Number(height)||1);
+5865:     const nx=((px+.5)/width)*2-1;
+5866:     const ny=1-((py+.5)/height)*2;
+5867:     const aspect=Math.max(1e-6,width/height);
+5868:     const fovRad=c.fov*Math.PI/180,tan=Math.tan(fovRad*.5);
+5869:     const local=RayMath.normalize([nx*aspect*tan,ny*tan,-1]);
+5870:     const world=RayMath.normalize(this.rotateByQuaternion(local,c.quaternion));
+5871:     return new RenderRay(c.position,world,c.near,c.far,RenderRayType.CAMERA,0);
+5872:   }
+5873: });
+5874: 
+5875: var RenderAccelerationSet = class RenderAccelerationSet{
+5876:   constructor(store,bvh){
+5877:     this.store=store;this.bvh=bvh;
+5878:     this.vertexCount=store.positions.length/3;
+5879:     this.triangleCount=store.triangleCount();
+5880:     this.nodeCount=bvh.nodes.length;
+5881:     this.stats=Object.freeze({geometry:store.stats,bvh:bvh.stats()});
+5882:     Object.freeze(this);
+5883:   }
+5884:   trace(ray){return this.bvh.intersect(ray)}
+5885:   occluded(ray){return this.bvh.anyHit(ray)}
+5886: }
+5887: 
+5888: 
+5889: const RenderAccelerationCache16={
+5890:   geometryRevision:null,
+5891:   acceleration:null,
+5892:   hits:0,
+5893:   misses:0,
+5894:   reset(){this.geometryRevision=null;this.acceleration=null;this.hits=0;this.misses=0;},
+5895:   invalidate(){this.geometryRevision=null;this.acceleration=null;},
+5896:   revision(scene){
+5897:     const m=scene?.metadata||{};
+5898:     return [m.sceneRevision??'s?',m.geometryRevision??'g?',m.materialRevision??'m?',m.lightRevision??'l?',scene?.objects?.length||0,
+5899:       ...(scene?.objects||[]).map(o=>`${o.id}:${o.visible!==false?1:0}:${o.mesh?.positions?.length||0}:${o.mesh?.indices?.length||0}`)
+5900:     ].join('|');
+5901:   },
+5902:   get(scene){
+5903:     const rev=this.revision(scene);
+5904:     if(this.acceleration&&this.geometryRevision===rev){this.hits++;return this.acceleration;}
+5905:     this.misses++;return null;
+5906:   },
+5907:   put(scene,acceleration){
+5908:     this.geometryRevision=this.revision(scene);
+5909:     this.acceleration=acceleration;
+5910:     return acceleration;
+5911:   },
+5912:   stats(){return Object.freeze({geometryRevision:this.geometryRevision,hits:this.hits,misses:this.misses,reused:!!this.acceleration});}
+5913: };
+5914: 
+5915: /*
+5916:   BLAS/TLAS boundary:
+5917:   - object mesh geometry revisions feed BLAS-equivalent cached acceleration data;
+5918:   - scene/object transform revisions are intentionally kept outside this cache key
+5919:     so a future TLAS can update instances without rebuilding object geometry.
+5920:   Current browser renderer still uses the proven binary RenderAccelerationSet.
+5921: */
+5922: const RenderAccelerationHierarchy16=Object.freeze({
+5923:   mode:'geometry-revision acceleration cache; TLAS/BLAS boundary reserved',
+5924:   cache:RenderAccelerationCache16,
+5925:   build(scene,builder){
+5926:     const cached=RenderAccelerationCache16.get(scene);
+5927:     if(cached)return cached;
+5928:     return RenderAccelerationCache16.put(scene,builder());
+5929:   }
+5930: });
+5931: window.RenderAccelerationCache16=RenderAccelerationCache16;
+5932: window.RenderAccelerationHierarchy16=RenderAccelerationHierarchy16;
+5933: 
+5934: const RenderAccelerationBuilder=Object.freeze({
+5935:   build(renderScene){
+5936:     return RenderAccelerationHierarchy16.build(renderScene,()=>{
+5937:       const packets=RenderGeometryCompiler.compileScene(renderScene);
+5938:       const store=new RenderTriangleStore();
+5939:       packets.forEach((p,i)=>store.addPacket(p,i));
+5940:       store.finalize();
+5941:       return new RenderAccelerationSet(store,new RenderBVH(store,4));
+5942:     });
+5943:   }
+5944: });
+5945: 
+5946: const DiagnosticRenderer=Object.freeze({
+5947:   async render(job,acceleration,onProgress=()=>{}){
+5948:     const width=Math.min(640,Math.max(1,job.progress.resolution[0]));
+5949:     const height=Math.min(360,Math.max(1,job.progress.resolution[1]));
+5950:     const rgba=new Uint8ClampedArray(width*height*4);
+5951:     const cameraSnapshot=job.renderScene.camera;
+5952:     const rowChunk=8;
+5953:     for(let y=0;y<height;y++){
+5954:       if(job.cancelled||job.controlToken16?.cancelled?.())throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
+5955:       while((job.paused||job.controlToken16?.paused?.())&&!job.cancelled)await new Promise(r=>setTimeout(r,20));
+5956:       for(let x=0;x<width;x++){
+5957:         const ray=RenderCameraRayGenerator.ray(cameraSnapshot,x,y,width,height);
+5958:         perf16.addRay(RenderRayType.CAMERA);
+5959:         perf16.addRay(RenderRayType.CAMERA);
+5960:         const hit=acceleration.trace(ray);
+5961:         const o=(y*width+x)*4;
+5962:         if(hit.hit){
+5963:           const n=hit.geometricNormal;
+5964:           rgba[o]=Math.round((n[0]*.5+.5)*255);
+5965:           rgba[o+1]=Math.round((n[1]*.5+.5)*255);
+5966:           rgba[o+2]=Math.round((n[2]*.5+.5)*255);
+5967:           rgba[o+3]=255;
+5968:         }else{
+5969:           rgba[o]=24;rgba[o+1]=24;rgba[o+2]=24;rgba[o+3]=255;
+5970:         }
+5971:       }
+5972:       if(y%rowChunk===0)onProgress((y+1)/height);
+5973:       if(y%rowChunk===0)await new Promise(r=>setTimeout(r,0));
+5974:     }
+5975:     return {width,height,rgba};
+5976:   }
+5977: });
+5978: 
+5979: const RenderGroup4Contract=Object.freeze({
+5980:   owns:Object.freeze([
+5981:     'ray representation','ray/triangle intersection','ray/AABB intersection',
+5982:     'triangle store','binary BVH','camera ray generation','diagnostic normal render'
+5983:   ]),
+5984:   consumes:Object.freeze([
+5985:     'Core A immutable RenderSceneSnapshot','Group 3 RenderGeometryCompiler'
+5986:   ]),
+5987:   doesNotOwn:Object.freeze([
+5988:     'editor scene','MNMesh','selection','transforms','editor materials',
+5989:     'physical BSDF','lights','GI','denoising'
+5990:   ])
+5991: });
+5992: 
+5993: 
+5994: function runRenderGroup4SelfTests(){
+
+===== trace(ray) @ 5884 =====
+5849:   }
+5850: });
+5851: 
+5852: const RenderCameraRayGenerator=Object.freeze({
+5853:   rotateByQuaternion(v,q){
+5854:     const x=v[0],y=v[1],z=v[2],qx=q[0],qy=q[1],qz=q[2],qw=q[3];
+5855:     const ix=qw*x+qy*z-qz*y,iy=qw*y+qz*x-qx*z,iz=qw*z+qx*y-qy*x,iw=-qx*x-qy*y-qz*z;
+5856:     return [
+5857:       ix*qw+iw*-qx+iy*-qz-iz*-qy,
+5858:       iy*qw+iw*-qy+iz*-qx-ix*-qz,
+5859:       iz*qw+iw*-qz+ix*-qy-iy*-qx
+5860:     ];
+5861:   },
+5862:   ray(cameraSnapshot,px,py,width,height){
+5863:     const c=RenderCameraPolicy.sanitize(cameraSnapshot);
+5864:     width=Math.max(1,Number(width)||1);height=Math.max(1,Number(height)||1);
+5865:     const nx=((px+.5)/width)*2-1;
+5866:     const ny=1-((py+.5)/height)*2;
+5867:     const aspect=Math.max(1e-6,width/height);
+5868:     const fovRad=c.fov*Math.PI/180,tan=Math.tan(fovRad*.5);
+5869:     const local=RayMath.normalize([nx*aspect*tan,ny*tan,-1]);
+5870:     const world=RayMath.normalize(this.rotateByQuaternion(local,c.quaternion));
+5871:     return new RenderRay(c.position,world,c.near,c.far,RenderRayType.CAMERA,0);
+5872:   }
+5873: });
+5874: 
+5875: var RenderAccelerationSet = class RenderAccelerationSet{
+5876:   constructor(store,bvh){
+5877:     this.store=store;this.bvh=bvh;
+5878:     this.vertexCount=store.positions.length/3;
+5879:     this.triangleCount=store.triangleCount();
+5880:     this.nodeCount=bvh.nodes.length;
+5881:     this.stats=Object.freeze({geometry:store.stats,bvh:bvh.stats()});
+5882:     Object.freeze(this);
+5883:   }
+5884:   trace(ray){return this.bvh.intersect(ray)}
+5885:   occluded(ray){return this.bvh.anyHit(ray)}
+5886: }
+5887: 
+5888: 
+5889: const RenderAccelerationCache16={
+5890:   geometryRevision:null,
+5891:   acceleration:null,
+5892:   hits:0,
+5893:   misses:0,
+5894:   reset(){this.geometryRevision=null;this.acceleration=null;this.hits=0;this.misses=0;},
+5895:   invalidate(){this.geometryRevision=null;this.acceleration=null;},
+5896:   revision(scene){
+5897:     const m=scene?.metadata||{};
+5898:     return [m.sceneRevision??'s?',m.geometryRevision??'g?',m.materialRevision??'m?',m.lightRevision??'l?',scene?.objects?.length||0,
+5899:       ...(scene?.objects||[]).map(o=>`${o.id}:${o.visible!==false?1:0}:${o.mesh?.positions?.length||0}:${o.mesh?.indices?.length||0}`)
+5900:     ].join('|');
+5901:   },
+5902:   get(scene){
+5903:     const rev=this.revision(scene);
+5904:     if(this.acceleration&&this.geometryRevision===rev){this.hits++;return this.acceleration;}
+5905:     this.misses++;return null;
+5906:   },
+5907:   put(scene,acceleration){
+5908:     this.geometryRevision=this.revision(scene);
+5909:     this.acceleration=acceleration;
+5910:     return acceleration;
+5911:   },
+5912:   stats(){return Object.freeze({geometryRevision:this.geometryRevision,hits:this.hits,misses:this.misses,reused:!!this.acceleration});}
+5913: };
+5914: 
+5915: /*
+5916:   BLAS/TLAS boundary:
+5917:   - object mesh geometry revisions feed BLAS-equivalent cached acceleration data;
+5918:   - scene/object transform revisions are intentionally kept outside this cache key
+5919:     so a future TLAS can update instances without rebuilding object geometry.
+5920:   Current browser renderer still uses the proven binary RenderAccelerationSet.
+5921: */
+5922: const RenderAccelerationHierarchy16=Object.freeze({
+5923:   mode:'geometry-revision acceleration cache; TLAS/BLAS boundary reserved',
+5924:   cache:RenderAccelerationCache16,
+5925:   build(scene,builder){
+5926:     const cached=RenderAccelerationCache16.get(scene);
+5927:     if(cached)return cached;
+5928:     return RenderAccelerationCache16.put(scene,builder());
+5929:   }
+5930: });
+5931: window.RenderAccelerationCache16=RenderAccelerationCache16;
+5932: window.RenderAccelerationHierarchy16=RenderAccelerationHierarchy16;
+5933: 
+5934: const RenderAccelerationBuilder=Object.freeze({
+5935:   build(renderScene){
+5936:     return RenderAccelerationHierarchy16.build(renderScene,()=>{
+5937:       const packets=RenderGeometryCompiler.compileScene(renderScene);
+5938:       const store=new RenderTriangleStore();
+5939:       packets.forEach((p,i)=>store.addPacket(p,i));
+5940:       store.finalize();
+5941:       return new RenderAccelerationSet(store,new RenderBVH(store,4));
+5942:     });
+5943:   }
+5944: });
+5945: 
+5946: const DiagnosticRenderer=Object.freeze({
+5947:   async render(job,acceleration,onProgress=()=>{}){
+5948:     const width=Math.min(640,Math.max(1,job.progress.resolution[0]));
+5949:     const height=Math.min(360,Math.max(1,job.progress.resolution[1]));
+5950:     const rgba=new Uint8ClampedArray(width*height*4);
+5951:     const cameraSnapshot=job.renderScene.camera;
+5952:     const rowChunk=8;
+5953:     for(let y=0;y<height;y++){
+5954:       if(job.cancelled||job.controlToken16?.cancelled?.())throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
+5955:       while((job.paused||job.controlToken16?.paused?.())&&!job.cancelled)await new Promise(r=>setTimeout(r,20));
+5956:       for(let x=0;x<width;x++){
+5957:         const ray=RenderCameraRayGenerator.ray(cameraSnapshot,x,y,width,height);
+5958:         perf16.addRay(RenderRayType.CAMERA);
+5959:         perf16.addRay(RenderRayType.CAMERA);
+5960:         const hit=acceleration.trace(ray);
+5961:         const o=(y*width+x)*4;
+5962:         if(hit.hit){
+5963:           const n=hit.geometricNormal;
+5964:           rgba[o]=Math.round((n[0]*.5+.5)*255);
+5965:           rgba[o+1]=Math.round((n[1]*.5+.5)*255);
+5966:           rgba[o+2]=Math.round((n[2]*.5+.5)*255);
+5967:           rgba[o+3]=255;
+5968:         }else{
+5969:           rgba[o]=24;rgba[o+1]=24;rgba[o+2]=24;rgba[o+3]=255;
+5970:         }
+5971:       }
+5972:       if(y%rowChunk===0)onProgress((y+1)/height);
+5973:       if(y%rowChunk===0)await new Promise(r=>setTimeout(r,0));
+5974:     }
+5975:     return {width,height,rgba};
+5976:   }
+5977: });
+5978: 
+5979: const RenderGroup4Contract=Object.freeze({
+5980:   owns:Object.freeze([
+5981:     'ray representation','ray/triangle intersection','ray/AABB intersection',
+5982:     'triangle store','binary BVH','camera ray generation','diagnostic normal render'
+5983:   ]),
+5984:   consumes:Object.freeze([
+5985:     'Core A immutable RenderSceneSnapshot','Group 3 RenderGeometryCompiler'
+5986:   ]),
+5987:   doesNotOwn:Object.freeze([
+5988:     'editor scene','MNMesh','selection','transforms','editor materials',
+5989:     'physical BSDF','lights','GI','denoising'
+5990:   ])
+5991: });
+5992: 
+5993: 
+5994: function runRenderGroup4SelfTests(){
+5995:   const errors=[],approx=(a,b,e=1e-5)=>Math.abs(a-b)<=e;
+5996:   try{
+5997:     let ray=new RenderRay([0,0,1],[0,0,-1]);
+5998:     let hit=TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]);
+5999:     if(!hit.hit||!approx(hit.t,1)||!hit.frontFace||!hit.orientedGeometricNormal)errors.push('Triangle front-face hit failed');
+6000: 
+6001:     ray=new RenderRay([0,0,-1],[0,0,1]);
+6002:     hit=TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]);
+6003:     if(!hit.hit||hit.frontFace)errors.push('Triangle back-face classification failed');
+
+===== occluded( @ 5885 =====
+5850: });
+5851: 
+5852: const RenderCameraRayGenerator=Object.freeze({
+5853:   rotateByQuaternion(v,q){
+5854:     const x=v[0],y=v[1],z=v[2],qx=q[0],qy=q[1],qz=q[2],qw=q[3];
+5855:     const ix=qw*x+qy*z-qz*y,iy=qw*y+qz*x-qx*z,iz=qw*z+qx*y-qy*x,iw=-qx*x-qy*y-qz*z;
+5856:     return [
+5857:       ix*qw+iw*-qx+iy*-qz-iz*-qy,
+5858:       iy*qw+iw*-qy+iz*-qx-ix*-qz,
+5859:       iz*qw+iw*-qz+ix*-qy-iy*-qx
+5860:     ];
+5861:   },
+5862:   ray(cameraSnapshot,px,py,width,height){
+5863:     const c=RenderCameraPolicy.sanitize(cameraSnapshot);
+5864:     width=Math.max(1,Number(width)||1);height=Math.max(1,Number(height)||1);
+5865:     const nx=((px+.5)/width)*2-1;
+5866:     const ny=1-((py+.5)/height)*2;
+5867:     const aspect=Math.max(1e-6,width/height);
+5868:     const fovRad=c.fov*Math.PI/180,tan=Math.tan(fovRad*.5);
+5869:     const local=RayMath.normalize([nx*aspect*tan,ny*tan,-1]);
+5870:     const world=RayMath.normalize(this.rotateByQuaternion(local,c.quaternion));
+5871:     return new RenderRay(c.position,world,c.near,c.far,RenderRayType.CAMERA,0);
+5872:   }
+5873: });
+5874: 
+5875: var RenderAccelerationSet = class RenderAccelerationSet{
+5876:   constructor(store,bvh){
+5877:     this.store=store;this.bvh=bvh;
+5878:     this.vertexCount=store.positions.length/3;
+5879:     this.triangleCount=store.triangleCount();
+5880:     this.nodeCount=bvh.nodes.length;
+5881:     this.stats=Object.freeze({geometry:store.stats,bvh:bvh.stats()});
+5882:     Object.freeze(this);
+5883:   }
+5884:   trace(ray){return this.bvh.intersect(ray)}
+5885:   occluded(ray){return this.bvh.anyHit(ray)}
+5886: }
+5887: 
+5888: 
+5889: const RenderAccelerationCache16={
+5890:   geometryRevision:null,
+5891:   acceleration:null,
+5892:   hits:0,
+5893:   misses:0,
+5894:   reset(){this.geometryRevision=null;this.acceleration=null;this.hits=0;this.misses=0;},
+5895:   invalidate(){this.geometryRevision=null;this.acceleration=null;},
+5896:   revision(scene){
+5897:     const m=scene?.metadata||{};
+5898:     return [m.sceneRevision??'s?',m.geometryRevision??'g?',m.materialRevision??'m?',m.lightRevision??'l?',scene?.objects?.length||0,
+5899:       ...(scene?.objects||[]).map(o=>`${o.id}:${o.visible!==false?1:0}:${o.mesh?.positions?.length||0}:${o.mesh?.indices?.length||0}`)
+5900:     ].join('|');
+5901:   },
+5902:   get(scene){
+5903:     const rev=this.revision(scene);
+5904:     if(this.acceleration&&this.geometryRevision===rev){this.hits++;return this.acceleration;}
+5905:     this.misses++;return null;
+5906:   },
+5907:   put(scene,acceleration){
+5908:     this.geometryRevision=this.revision(scene);
+5909:     this.acceleration=acceleration;
+5910:     return acceleration;
+5911:   },
+5912:   stats(){return Object.freeze({geometryRevision:this.geometryRevision,hits:this.hits,misses:this.misses,reused:!!this.acceleration});}
+5913: };
+5914: 
+5915: /*
+5916:   BLAS/TLAS boundary:
+5917:   - object mesh geometry revisions feed BLAS-equivalent cached acceleration data;
+5918:   - scene/object transform revisions are intentionally kept outside this cache key
+5919:     so a future TLAS can update instances without rebuilding object geometry.
+5920:   Current browser renderer still uses the proven binary RenderAccelerationSet.
+5921: */
+5922: const RenderAccelerationHierarchy16=Object.freeze({
+5923:   mode:'geometry-revision acceleration cache; TLAS/BLAS boundary reserved',
+5924:   cache:RenderAccelerationCache16,
+5925:   build(scene,builder){
+5926:     const cached=RenderAccelerationCache16.get(scene);
+5927:     if(cached)return cached;
+5928:     return RenderAccelerationCache16.put(scene,builder());
+5929:   }
+5930: });
+5931: window.RenderAccelerationCache16=RenderAccelerationCache16;
+5932: window.RenderAccelerationHierarchy16=RenderAccelerationHierarchy16;
+5933: 
+5934: const RenderAccelerationBuilder=Object.freeze({
+5935:   build(renderScene){
+5936:     return RenderAccelerationHierarchy16.build(renderScene,()=>{
+5937:       const packets=RenderGeometryCompiler.compileScene(renderScene);
+5938:       const store=new RenderTriangleStore();
+5939:       packets.forEach((p,i)=>store.addPacket(p,i));
+5940:       store.finalize();
+5941:       return new RenderAccelerationSet(store,new RenderBVH(store,4));
+5942:     });
+5943:   }
+5944: });
+5945: 
+5946: const DiagnosticRenderer=Object.freeze({
+5947:   async render(job,acceleration,onProgress=()=>{}){
+5948:     const width=Math.min(640,Math.max(1,job.progress.resolution[0]));
+5949:     const height=Math.min(360,Math.max(1,job.progress.resolution[1]));
+5950:     const rgba=new Uint8ClampedArray(width*height*4);
+5951:     const cameraSnapshot=job.renderScene.camera;
+5952:     const rowChunk=8;
+5953:     for(let y=0;y<height;y++){
+5954:       if(job.cancelled||job.controlToken16?.cancelled?.())throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
+5955:       while((job.paused||job.controlToken16?.paused?.())&&!job.cancelled)await new Promise(r=>setTimeout(r,20));
+5956:       for(let x=0;x<width;x++){
+5957:         const ray=RenderCameraRayGenerator.ray(cameraSnapshot,x,y,width,height);
+5958:         perf16.addRay(RenderRayType.CAMERA);
+5959:         perf16.addRay(RenderRayType.CAMERA);
+5960:         const hit=acceleration.trace(ray);
+5961:         const o=(y*width+x)*4;
+5962:         if(hit.hit){
+5963:           const n=hit.geometricNormal;
+5964:           rgba[o]=Math.round((n[0]*.5+.5)*255);
+5965:           rgba[o+1]=Math.round((n[1]*.5+.5)*255);
+5966:           rgba[o+2]=Math.round((n[2]*.5+.5)*255);
+5967:           rgba[o+3]=255;
+5968:         }else{
+5969:           rgba[o]=24;rgba[o+1]=24;rgba[o+2]=24;rgba[o+3]=255;
+5970:         }
+5971:       }
+5972:       if(y%rowChunk===0)onProgress((y+1)/height);
+5973:       if(y%rowChunk===0)await new Promise(r=>setTimeout(r,0));
+5974:     }
+5975:     return {width,height,rgba};
+5976:   }
+5977: });
+5978: 
+5979: const RenderGroup4Contract=Object.freeze({
+5980:   owns:Object.freeze([
+5981:     'ray representation','ray/triangle intersection','ray/AABB intersection',
+5982:     'triangle store','binary BVH','camera ray generation','diagnostic normal render'
+5983:   ]),
+5984:   consumes:Object.freeze([
+5985:     'Core A immutable RenderSceneSnapshot','Group 3 RenderGeometryCompiler'
+5986:   ]),
+5987:   doesNotOwn:Object.freeze([
+5988:     'editor scene','MNMesh','selection','transforms','editor materials',
+5989:     'physical BSDF','lights','GI','denoising'
+5990:   ])
+5991: });
+5992: 
+5993: 
+5994: function runRenderGroup4SelfTests(){
+5995:   const errors=[],approx=(a,b,e=1e-5)=>Math.abs(a-b)<=e;
+5996:   try{
+5997:     let ray=new RenderRay([0,0,1],[0,0,-1]);
+5998:     let hit=TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]);
+5999:     if(!hit.hit||!approx(hit.t,1)||!hit.frontFace||!hit.orientedGeometricNormal)errors.push('Triangle front-face hit failed');
+6000: 
+6001:     ray=new RenderRay([0,0,-1],[0,0,1]);
+6002:     hit=TriangleIntersector.intersect(ray,[-1,-1,0],[1,-1,0],[0,1,0]);
+6003:     if(!hit.hit||hit.frontFace)errors.push('Triangle back-face classification failed');
+6004: 
+
 ===== class RenderBVH @ 5660 =====
+5625:       const nx=aby*acz-abz*acy,ny=abz*acx-abx*acz,nz=abx*acy-aby*acx;
+5626:       if(nx*nx+ny*ny+nz*nz<1e-20){this.stats.rejectedDegenerate++;continue;}
+5627:       this.triangles.push(baseVertex+ia,baseVertex+ib,baseVertex+ic);
+5628:       this.materialIndices.push(packet.materialIndices?.[t/3]||0);
+5629:       this.objectIndices.push(objectIndex);
 5630:       this.stats.acceptedTriangles++;
 5631:     }
 5632:     this.objectIds[objectIndex]=packet.objectId;
@@ -120,130 +596,43 @@
 5747:     if(this.root<0)return best;
 5748:     const stack=[this.root];stack.length=1; // traversal stack retained; avoids unsafe structural rewrite
 5749:     while(stack.length){
+5750:       const ni=stack.pop(),node=this.nodes[ni];
+5751:       if(!AABBIntersector.intersect(ray,node.min,node.max,best.t))continue;
+5752:       if(node.leaf){
+5753:         for(let i=node.start;i<node.start+node.count;i++){
+5754:           const tri=this.primitiveIndices[i],k=tri*3;
+5755:           const p0=this.store.vertex(this.store.triangles[k]);
+5756:           const p1=this.store.vertex(this.store.triangles[k+1]);
+5757:           const p2=this.store.vertex(this.store.triangles[k+2]);
+5758:           const before=best.t;
+5759:           TriangleIntersector.intersect(ray,p0,p1,p2,best);
+5760:           if(best.t<before){
+5761:             best.triangleIndex=tri;
+5762:             best.objectIndex=this.store.objectIndices[tri];
+5763:             best.materialIndex=this.store.materialIndices[tri];
+5764:           }
+5765:         }
+5766:       }else{
+5767:         const left=this.nodes[node.left],right=this.nodes[node.right];
+5768:         const lt=AABBIntersector.entry(ray,left.min,left.max,best.t);
+5769:         const rt=AABBIntersector.entry(ray,right.min,right.max,best.t);
+5770:         const lh=Number.isFinite(lt),rh=Number.isFinite(rt);
+5771:         if(lh&&rh){
+5772:           if(lt<=rt)stack.push(node.right,node.left);else stack.push(node.left,node.right);
+5773:         }else if(lh)stack.push(node.left);
+5774:         else if(rh)stack.push(node.right);
+5775:       }
+5776:     }
+5777:     return best;
+5778:   }
+5779:   stats(){
 
-===== intersect(ray @ 5543 =====
-5513:   max3(a,b){return [Math.max(a[0],b[0]),Math.max(a[1],b[1]),Math.max(a[2],b[2])]}
-5514: });
-5515: 
-5516: const RenderRayType=Object.freeze({CAMERA:'camera',SHADOW:'shadow',DIFFUSE:'diffuse',GLOSSY:'glossy',TRANSMISSION:'transmission'});
-5517: class RenderRay{
-5518:   constructor(origin,direction,tMin=1e-5,tMax=Infinity,type=RenderRayType.CAMERA,depth=0){
-5519:     this.origin=origin;this.direction=RayMath.normalize(direction);
-5520:     this.invDirection=[
-5521:       Math.abs(this.direction[0])<RayMath.EPSILON?Infinity:1/this.direction[0],
-5522:       Math.abs(this.direction[1])<RayMath.EPSILON?Infinity:1/this.direction[1],
-5523:       Math.abs(this.direction[2])<RayMath.EPSILON?Infinity:1/this.direction[2]
-5524:     ];
-5525:     this.tMin=tMin;this.tMax=tMax;this.type=type;this.depth=depth;
-5526:   }
-5527:   at(t){return RayMath.add(this.origin,RayMath.mul(this.direction,t))}
-5528: }
-5529: const RenderRayPolicy=Object.freeze({
-5530:   epsilonForPoint(p){const scale=Math.max(1,Math.abs(p[0]),Math.abs(p[1]),Math.abs(p[2]));return Math.min(1e-2,Math.max(1e-6,scale*1e-7));}
-5531: });
-5532: Object.assign(window,{RenderRayType,RenderRayPolicy});
-5533: 
-5534: class RenderHit{
-5535:   constructor(){
-5536:     this.hit=false;this.t=Infinity;this.u=0;this.v=0;
-5537:     this.objectIndex=-1;this.triangleIndex=-1;
-5538:     this.position=null;this.geometricNormal=null;this.orientedGeometricNormal=null;this.frontFace=true;this.materialIndex=0;
-5539:   }
-5540: }
-5541: 
-5542: const TriangleIntersector=Object.freeze({
-5543:   intersect(ray,p0,p1,p2,hit=new RenderHit()){
-5544:     const e1=RayMath.sub(p1,p0),e2=RayMath.sub(p2,p0);
-5545:     const pvec=RayMath.cross(ray.direction,e2);
-5546:     const det=RayMath.dot(e1,pvec);
-5547:     if(Math.abs(det)<RayMath.EPSILON)return hit;
-5548:     const invDet=1/det;
-5549:     const tvec=RayMath.sub(ray.origin,p0);
-5550:     const u=RayMath.dot(tvec,pvec)*invDet;
-5551:     if(u<0||u>1)return hit;
-5552:     const qvec=RayMath.cross(tvec,e1);
-5553:     const v=RayMath.dot(ray.direction,qvec)*invDet;
-5554:     if(v<0||u+v>1)return hit;
-5555:     const t=RayMath.dot(e2,qvec)*invDet;
-5556:     if(t<ray.tMin||t>ray.tMax||t>=hit.t)return hit;
-5557:     hit.hit=true;hit.t=t;hit.u=u;hit.v=v;
-5558:     hit.position=ray.at(t);
-5559:     hit.geometricNormal=RayMath.normalize(RayMath.cross(e1,e2));
-5560:     hit.frontFace=RayMath.dot(ray.direction,hit.geometricNormal)<0;
-5561:     hit.orientedGeometricNormal=hit.frontFace?hit.geometricNormal:RayMath.mul(hit.geometricNormal,-1);
-5562:     return hit;
-5563:   }
-5564: });
-5565: 
-5566: const AABBIntersector=Object.freeze({
-5567:   entry(ray,min,max,tLimit=Infinity){
-5568:     let t0=ray.tMin,t1=Math.min(ray.tMax,tLimit);
-5569:     for(let axis=0;axis<3;axis++){
-5570:       const d=ray.direction[axis];
-5571:       if(Math.abs(d)<RayMath.EPSILON){
-5572:         if(ray.origin[axis]<min[axis]||ray.origin[axis]>max[axis])return Infinity;
-5573:         continue;
-5574:       }
-5575:       let a=(min[axis]-ray.origin[axis])*ray.invDirection[axis];
-5576:       let b=(max[axis]-ray.origin[axis])*ray.invDirection[axis];
-5577:       if(a>b){const tmp=a;a=b;b=tmp}
-5578:       t0=Math.max(t0,a);t1=Math.min(t1,b);
-5579:       if(t1<t0)return Infinity;
-5580:     }
-5581:     return t0;
-5582:   },
-5583:   intersect(ray,min,max,tLimit=Infinity){return Number.isFinite(this.entry(ray,min,max,tLimit))}
-5584: });
-5585: 
-5586: var RenderTriangleStore = class RenderTriangleStore{
-5587:   constructor(){
-5588:     this.positions=[];
-5589:     this.normals=[];
-5590:     this.uvs=[];
-5591:     this.triangles=[];
-5592:     this.materialIndices=[];
-5593:     this.objectIndices=[];
-5594:     this.objectIds=[];
-5595:     this.stats={inputTriangles:0,acceptedTriangles:0,rejectedInvalidIndex:0,rejectedNonFinite:0,rejectedDegenerate:0};
-5596:   }
-5597:   addPacket(packet,objectIndex){
-5598:     const baseVertex=this.positions.length/3;
-5599:     for(let i=0;i<packet.positions.length;i++)this.positions.push(packet.positions[i]);
-5600: 
-5601:     // Startup-safe cross-generation compatibility.
-5602:     // Geometry packets created by earlier diagnostic/self-test paths may not
-5603:     // contain shading normals or UVs. Missing optional attributes must not
-5604:     // abort editor initialization.
-5605:     const packetVertexCount=packet.positions.length/3;
-5606:     const srcNormals=(packet.normals&&packet.normals.length===packet.positions.length)
-5607:       ? packet.normals
-5608:       : new Float32Array(packet.positions.length);
-5609:     const srcUVs=(packet.uvs&&packet.uvs.length===packetVertexCount*2)
-5610:       ? packet.uvs
-5611:       : new Float32Array(packetVertexCount*2);
-5612: 
-5613:     for(let i=0;i<srcNormals.length;i++)this.normals.push(srcNormals[i]);
-5614:     for(let i=0;i<srcUVs.length;i++)this.uvs.push(srcUVs[i]);
-5615:     const idx=packet.indices;
-5616:     for(let t=0;t<idx.length;t+=3){
-5617:       this.stats.inputTriangles++;
-5618:       const ia=idx[t],ib=idx[t+1],ic=idx[t+2];
-5619:       if(!Number.isInteger(ia)||!Number.isInteger(ib)||!Number.isInteger(ic)||ia<0||ib<0||ic<0||ia>=packetVertexCount||ib>=packetVertexCount||ic>=packetVertexCount){this.stats.rejectedInvalidIndex++;continue;}
-5620:       const ax=packet.positions[ia*3],ay=packet.positions[ia*3+1],az=packet.positions[ia*3+2];
-5621:       const bx=packet.positions[ib*3],by=packet.positions[ib*3+1],bz=packet.positions[ib*3+2];
-5622:       const cx=packet.positions[ic*3],cy=packet.positions[ic*3+1],cz=packet.positions[ic*3+2];
-5623:       if(!Number.isFinite(ax+ay+az+bx+by+bz+cx+cy+cz)){this.stats.rejectedNonFinite++;continue;}
-5624:       const abx=bx-ax,aby=by-ay,abz=bz-az,acx=cx-ax,acy=cy-ay,acz=cz-az;
-5625:       const nx=aby*acz-abz*acy,ny=abz*acx-abx*acz,nz=abx*acy-aby*acx;
-5626:       if(nx*nx+ny*ny+nz*nz<1e-20){this.stats.rejectedDegenerate++;continue;}
-5627:       this.triangles.push(baseVertex+ia,baseVertex+ib,baseVertex+ic);
-5628:       this.materialIndices.push(packet.materialIndices?.[t/3]||0);
-5629:       this.objectIndices.push(objectIndex);
-5630:       this.stats.acceptedTriangles++;
-5631:     }
-5632:     this.objectIds[objectIndex]=packet.objectId;
-
-===== PathIntegrator= @ 8290 =====
+===== var PathIntegrator=Object.freeze @ 8290 =====
+8255:       try{LiteTraceExecutionContext.performance?.addProbe?.();}catch(_){}
+8256:       const ph=acceleration.trace(probeRay);
+8257:       let li;
+8258:       if(!ph.hit){
+8259:         li=PathIntegrator.safeColor(RenderCoreD.evaluateEnvironment(job,compiled,d));
 8260:       }else{
 8261:         li=PathIntegrator.safeColor(Group9DirectMIS.evaluate(job,acceleration,compiled,probeRay,ph,seed^Math.imul(i+3,0x9E3779B9)));
 8262:       }
@@ -364,8 +753,44 @@
 8377:         throughput=RenderColor.mul(
 8378:           throughput,
 8379:           DielectricTransport.beerLambert(material.attenuationColor,material.thickness,material.attenuationDistance)
+8380:         );
+8381:       }
+8382: 
+8383:       previousGuide=(!sample.transmission&&job.pathGuide&&RayMath.dot(n,sample.direction)>0)
+8384:         ? {position:hit.position.slice(),normal:n.slice(),direction:sample.direction.slice()}
+8385:         : null;
+8386: 
+8387:       if(pathRays>=maxPathRays)break;
+8388:       pathRays++;
+8389:       const origin=this.offsetOrigin(hit,n,sample.direction);
+8390:       const eps=RenderRayPolicy.epsilonForPoint(origin);
+8391:       const rayType=sample.transmission?RenderRayType.TRANSMISSION:(sample.lobe==='ggx'?RenderRayType.GLOSSY:RenderRayType.DIFFUSE);
+8392:       RenderCoreH.attachPerformance(job).addRay(rayType);
+8393:       ray=new RenderRay(origin,sample.direction,eps,Infinity,rayType,bounce+1);
+8394:     }
+8395: 
+8396:     return radiance;
+8397:   },
+8398: 
+8399:   tracePixel(job,acceleration,compiled,primaryRay,pixelSeed){
+8400:     const primaryHitRecord=acceleration.trace(primaryRay);
+8401:     if(!primaryHitRecord.hit){
+8402:       const env=this.safeColor(RenderCoreD.evaluateEnvironment(job,compiled,primaryRay.direction));
+8403:       return {radiance:env,primaryHit:false,primaryHitRecord:null};
+8404:     }
+8405:     return {
+8406:       radiance:this.trace(job,acceleration,compiled,primaryRay,pixelSeed,primaryHitRecord),
+8407:       primaryHit:true,
+8408:       primaryHitRecord
+8409:     };
 
-===== RenderTriangle @ 5410 =====
+===== buildAccelerationFromPackets @ 5409 =====
+5374:     }
+5375: 
+5376:     return new PreparedGeometrySet(items);
+5377:   }
+5378: };
+5379: 
 5380: 
 5381: /* ============================================================
 5382:    3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — CORE B
@@ -486,3 +911,189 @@
 5497: });
 5498: 
 5499: /* ============================================================
+5500:    3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 4
+5501:    Rays + Triangle Intersections + BVH + Camera
+5502:    ============================================================ */
+5503: const RayMath=Object.freeze({
+5504:   EPSILON:1e-6,
+5505:   add(a,b){return [a[0]+b[0],a[1]+b[1],a[2]+b[2]]},
+5506:   sub(a,b){return [a[0]-b[0],a[1]-b[1],a[2]-b[2]]},
+5507:   mul(a,s){return [a[0]*s,a[1]*s,a[2]*s]},
+5508:   dot(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]},
+5509:   cross(a,b){return [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]},
+5510:   length(a){return Math.hypot(a[0],a[1],a[2])},
+5511:   normalize(a){const l=Math.hypot(a[0],a[1],a[2])||1;return [a[0]/l,a[1]/l,a[2]/l]},
+5512:   min3(a,b){return [Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.min(a[2],b[2])]},
+5513:   max3(a,b){return [Math.max(a[0],b[0]),Math.max(a[1],b[1]),Math.max(a[2],b[2])]}
+5514: });
+5515: 
+5516: const RenderRayType=Object.freeze({CAMERA:'camera',SHADOW:'shadow',DIFFUSE:'diffuse',GLOSSY:'glossy',TRANSMISSION:'transmission'});
+5517: class RenderRay{
+5518:   constructor(origin,direction,tMin=1e-5,tMax=Infinity,type=RenderRayType.CAMERA,depth=0){
+5519:     this.origin=origin;this.direction=RayMath.normalize(direction);
+5520:     this.invDirection=[
+5521:       Math.abs(this.direction[0])<RayMath.EPSILON?Infinity:1/this.direction[0],
+5522:       Math.abs(this.direction[1])<RayMath.EPSILON?Infinity:1/this.direction[1],
+5523:       Math.abs(this.direction[2])<RayMath.EPSILON?Infinity:1/this.direction[2]
+5524:     ];
+5525:     this.tMin=tMin;this.tMax=tMax;this.type=type;this.depth=depth;
+5526:   }
+5527:   at(t){return RayMath.add(this.origin,RayMath.mul(this.direction,t))}
+5528: }
+
+===== const acceleration= @ 7622 =====
+7587:     'shadow-ray visibility',
+7588:     'shadow bias',
+7589:     'stochastic area-light sampling',
+7590:     'constant-color dome environment radiance',
+7591:     'direct-light sample accumulation'
+7592:   ]),
+7593:   consumes:Object.freeze([
+7594:     'Core B acceleration trace',
+7595:     'Core C materials and scene lights',
+7596:     'Group 5 PhysicalBSDF'
+7597:   ]),
+7598:   doesNotOwn:Object.freeze([
+7599:     'path GI',
+7600:     'MIS',
+7601:     'adaptive sampling',
+7602:     'HDRI importance sampling',
+7603:     'light cache',
+7604:     'path guiding'
+7605:   ])
+7606: });
+7607: 
+7608: function runRenderGroup7SelfTests(){
+7609:   const errors=[];
+7610: 
+7611:   {
+7612:     const store=new RenderTriangleStore();
+7613:     store.addPacket({
+7614:       objectId:'shadow-test',
+7615:       positions:new Float32Array([-1,-1,0,1,-1,0,0,1,0]),
+7616:       normals:new Float32Array([0,0,1,0,0,1,0,0,1]),
+7617:       uvs:new Float32Array([0,0,1,0,.5,1]),
+7618:       indices:new Uint32Array([0,1,2]),
+7619:       materialIndices:new Uint16Array([0])
+7620:     },0);
+7621:     store.finalize();
+7622:     const acceleration=new RenderAccelerationSet(store,new RenderBVH(store,1));
+7623:     if(ShadowVisibility.visible(acceleration,[0,0,-1],[0,0,1],10)!==false){
+7624:       errors.push('Shadow occlusion test failed');
+7625:     }
+7626:     if(ShadowVisibility.visible(acceleration,[3,3,-1],[0,0,1],10)!==true){
+7627:       errors.push('Shadow clear test failed');
+7628:     }
+7629:     const occRay=new RenderRay([0,0,-1],[0,0,1],1e-4,10);
+7630:     if(acceleration.occluded(occRay)!==true)errors.push('BVH any-hit test failed');
+7631:   }
+7632: 
+7633:   {
+7634:     const light=new RenderSceneLight({
+7635:       id:'r',name:'r',type:'rectangle',enabled:true,color:'#ffffff',intensity:10,
+7636:       range:0,size:1,width:2,height:2,coneAngle:90,penumbra:0,castShadows:true,
+7637:       position:[0,0,5],direction:[0,0,-1]
+7638:     });
+7639:     const s=AreaLightSampler.sample(light,[0,0,0],.5,.5);
+7640:     if(!s||Math.abs(s.distance-5)>1e-4||s.radiance.some(x=>!Number.isFinite(x)||x<0)){
+7641:       errors.push('Rectangle area sample failed');
+7642:     }
+7643:   }
+7644: 
+7645:   {
+7646:     const a=RenderSampling.sample2D(123,4),b=RenderSampling.sample2D(123,4);
+7647:     if(a[0]!==b[0]||a[1]!==b[1])errors.push('Deterministic sampling test failed');
+7648:   }
+7649: 
+7650:   return {ok:errors.length===0,errors};
+7651: }
+7652: window.runRenderGroup7SelfTests=runRenderGroup7SelfTests;
+7653: 
+7654: function validateRenderGroup7(){
+7655:   const errors=[];
+7656:   if(typeof ShadowVisibility.visible!=='function')errors.push('ShadowVisibility missing');
+7657:   if(typeof AreaLightSampler.sample!=='function')errors.push('AreaLightSampler missing');
+7658:   if(typeof DirectLightingIntegrator.evaluate!=='function')errors.push('DirectLightingIntegrator missing');
+7659:   if(typeof EnvironmentSampler.background!=='function')errors.push('EnvironmentSampler missing');
+7660:   const tests=runRenderGroup7SelfTests();if(!tests.ok)errors.push(...tests.errors);
+7661:   return {ok:errors.length===0,errors};
+7662: }
+7663: 
+7664: Object.assign(window,{
+7665:   RenderSampling,LightBasis,EnvironmentSampler,ShadowVisibility,
+7666:   AreaLightSampler,DirectLightingIntegrator,RenderGroup7Contract
+7667: });
+7668: 
+7669: /* ============================================================
+7670:    3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 8
+7671:    Path GI Core
+7672:    ============================================================ */
+7673: 
+7674: const PathSampler=Object.freeze({
+7675:   scalar(seed,bounce,dimension){
+7676:     return RenderSampling.hash32(
+7677:       ((seed>>>0) ^ Math.imul((bounce+1),0x9E3779B1) ^ Math.imul((dimension+1),0x85EBCA77))>>>0
+7678:     );
+7679:   },
+7680: 
+7681:   cosineHemisphere(n,seed,bounce){
+7682:     const u1=this.scalar(seed,bounce,0);
+7683:     const u2=this.scalar(seed,bounce,1);
+7684:     const r=Math.sqrt(u1);
+7685:     const phi=2*Math.PI*u2;
+7686:     const x=r*Math.cos(phi),y=r*Math.sin(phi),z=Math.sqrt(Math.max(0,1-u1));
+7687: 
+7688:     const basis=LightBasis.fromDirection(n);
+7689:     return RayMath.normalize(
+7690:       RayMath.add(
+7691:         RayMath.add(RayMath.mul(basis.tangent,x),RayMath.mul(basis.bitangent,y)),
+7692:         RayMath.mul(basis.n,z)
+7693:       )
+7694:     );
+7695:   }
+7696: });
+7697: 
+7698: var RenderMIS=Object.freeze({
+7699:   power(a,b){
+7700:     a=Math.max(0,Number(a)||0);b=Math.max(0,Number(b)||0);
+7701:     const aa=a*a,bb=b*b,d=aa+bb;
+7702:     return d>0?aa/d:1;
+7703:   }
+7704: });
+7705: 
+7706: const GGXImportanceSampler=Object.freeze({
+7707:   sampleHalfVector(n,roughness,u1,u2){
+7708:     const a=Math.max(.002025,roughness*roughness);
+7709:     const a2=a*a;
+7710:     const phi=2*Math.PI*u1;
+7711:     const cosTheta=Math.sqrt(Math.max(0,(1-u2)/(1+(a2-1)*u2)));
+7712:     const sinTheta=Math.sqrt(Math.max(0,1-cosTheta*cosTheta));
+7713:     const basis=LightBasis.fromDirection(n);
+7714:     return RayMath.normalize(
+7715:       RayMath.add(
+7716:         RayMath.add(RayMath.mul(basis.tangent,sinTheta*Math.cos(phi)),RayMath.mul(basis.bitangent,sinTheta*Math.sin(phi))),
+7717:         RayMath.mul(basis.n,cosTheta)
+7718:       )
+7719:     );
+7720:   },
+7721:   sampleVisibleHalfVector(n,v,roughness,u1,u2){
+7722:     const a=Math.max(.002025,roughness*roughness);
+7723:     const basis=LightBasis.fromDirection(n);
+7724:     const vl=[RayMath.dot(v,basis.tangent),RayMath.dot(v,basis.bitangent),Math.max(1e-6,RayMath.dot(v,basis.n))];
+7725:     const vh=RayMath.normalize([a*vl[0],a*vl[1],vl[2]]);
+7726:     const lensq=vh[0]*vh[0]+vh[1]*vh[1];
+7727:     const t1=lensq>1e-12?[-vh[1]/Math.sqrt(lensq),vh[0]/Math.sqrt(lensq),0]:[1,0,0];
+7728:     const t2=RayMath.cross(vh,t1);
+7729:     const r=Math.sqrt(Math.max(0,u1)),phi=2*Math.PI*u2;
+7730:     const p1=r*Math.cos(phi);
+7731:     let p2=r*Math.sin(phi);
+7732:     const mix=.5*(1+vh[2]);
+7733:     p2=(1-mix)*Math.sqrt(Math.max(0,1-p1*p1))+mix*p2;
+7734:     const z=Math.sqrt(Math.max(0,1-p1*p1-p2*p2));
+7735:     const nh=RayMath.add(RayMath.add(RayMath.mul(t1,p1),RayMath.mul(t2,p2)),RayMath.mul(vh,z));
+7736:     const ne=RayMath.normalize([a*nh[0],a*nh[1],Math.max(0,nh[2])]);
+7737:     return RayMath.normalize(RayMath.add(RayMath.add(RayMath.mul(basis.tangent,ne[0]),RayMath.mul(basis.bitangent,ne[1])),RayMath.mul(basis.n,ne[2])));
+7738:   },
+7739:   reflect(i,n){return RayMath.sub(i,RayMath.mul(n,2*RayMath.dot(i,n)));},
+7740:   distribution(nDotH,roughness){
+7741:     const a=Math.max(.002025,roughness*roughness),a2=a*a;
