@@ -1,0 +1,488 @@
+
+===== class RenderBVH @ 5660 =====
+5630:       this.stats.acceptedTriangles++;
+5631:     }
+5632:     this.objectIds[objectIndex]=packet.objectId;
+5633:   }
+5634:   finalize(){
+5635:     this.positions=new Float32Array(this.positions);
+5636:     this.normals=new Float32Array(this.normals);
+5637:     this.uvs=new Float32Array(this.uvs);
+5638:     this.triangles=new Uint32Array(this.triangles);
+5639:     this.materialIndices=new Uint16Array(this.materialIndices);
+5640:     this.objectIndices=new Uint32Array(this.objectIndices);
+5641:     Object.freeze(this.objectIds);Object.freeze(this.stats);
+5642:     return this;
+5643:   }
+5644:   triangleCount(){return this.triangles.length/3}
+5645:   vertex(i){const p=i*3;return [this.positions[p],this.positions[p+1],this.positions[p+2]]}
+5646:   triangleBounds(t){
+5647:     const k=t*3,a=this.vertex(this.triangles[k]),b=this.vertex(this.triangles[k+1]),c=this.vertex(this.triangles[k+2]);
+5648:     return {min:RayMath.min3(a,RayMath.min3(b,c)),max:RayMath.max3(a,RayMath.max3(b,c)),
+5649:       centroid:[(a[0]+b[0]+c[0])/3,(a[1]+b[1]+c[1])/3,(a[2]+b[2]+c[2])/3]};
+5650:   }
+5651: }
+5652: 
+5653: class BVHNode{
+5654:   constructor(min,max,left=-1,right=-1,start=0,count=0){
+5655:     this.min=min;this.max=max;this.left=left;this.right=right;this.start=start;this.count=count;
+5656:   }
+5657:   get leaf(){return this.count>0}
+5658: }
+5659: 
+5660: var RenderBVH = class RenderBVH{
+5661:   constructor(store,maxLeafSize=4){
+5662:     this.store=store;
+5663:     this.maxLeafSize=Math.max(1,maxLeafSize|0);
+5664:     this.nodes=[];
+5665:     this.primitiveIndices=Uint32Array.from({length:store.triangleCount()},(_,i)=>i);
+5666:     this._boundsCache=Array.from({length:store.triangleCount()},(_,i)=>store.triangleBounds(i));
+5667:     if(store.triangleCount())this.root=this._build(0,store.triangleCount());
+5668:     else this.root=-1;
+5669:   }
+5670:   _rangeBounds(start,end){
+5671:     let mn=[Infinity,Infinity,Infinity],mx=[-Infinity,-Infinity,-Infinity],cmn=[Infinity,Infinity,Infinity],cmx=[-Infinity,-Infinity,-Infinity];
+5672:     for(let i=start;i<end;i++){
+5673:       const b=this._boundsCache[this.primitiveIndices[i]];
+5674:       mn=RayMath.min3(mn,b.min);mx=RayMath.max3(mx,b.max);
+5675:       cmn=RayMath.min3(cmn,b.centroid);cmx=RayMath.max3(cmx,b.centroid);
+5676:     }
+5677:     return {min:mn,max:mx,cmin:cmn,cmax:cmx};
+5678:   }
+5679:   _surfaceArea(min,max){
+5680:     const x=Math.max(0,max[0]-min[0]),y=Math.max(0,max[1]-min[1]),z=Math.max(0,max[2]-min[2]);
+5681:     return 2*(x*y+y*z+z*x);
+5682:   }
+5683:   _sahSplit(start,end,rb){
+5684:     const count=end-start;
+5685:     if(count<8)return null;
+5686:     let best=null,bestCost=Infinity;
+5687:     const binsN=12;
+5688:     const parentArea=Math.max(1e-12,this._surfaceArea(rb.min,rb.max));
+5689:     const leafCost=count;
+5690:     for(let axis=0;axis<3;axis++){
+5691:       const lo=rb.cmin[axis],hi=rb.cmax[axis],span=hi-lo;
+5692:       if(!(span>1e-12))continue;
+5693:       const bins=Array.from({length:binsN},()=>({count:0,min:[Infinity,Infinity,Infinity],max:[-Infinity,-Infinity,-Infinity]}));
+5694:       for(let i=start;i<end;i++){
+5695:         const pi=this.primitiveIndices[i],b=this._boundsCache[pi];
+5696:         const bi=Math.min(binsN-1,Math.max(0,Math.floor(((b.centroid[axis]-lo)/span)*binsN)));
+5697:         const bn=bins[bi];bn.count++;bn.min=RayMath.min3(bn.min,b.min);bn.max=RayMath.max3(bn.max,b.max);
+5698:       }
+5699:       const leftC=[],rightC=[],leftB=[],rightB=[];
+5700:       let c=0,mn=[Infinity,Infinity,Infinity],mx=[-Infinity,-Infinity,-Infinity];
+5701:       for(let i=0;i<binsN;i++){c+=bins[i].count;if(bins[i].count){mn=RayMath.min3(mn,bins[i].min);mx=RayMath.max3(mx,bins[i].max);}leftC[i]=c;leftB[i]={min:mn.slice(),max:mx.slice()};}
+5702:       c=0;mn=[Infinity,Infinity,Infinity];mx=[-Infinity,-Infinity,-Infinity];
+5703:       for(let i=binsN-1;i>=0;i--){c+=bins[i].count;if(bins[i].count){mn=RayMath.min3(mn,bins[i].min);mx=RayMath.max3(mx,bins[i].max);}rightC[i]=c;rightB[i]={min:mn.slice(),max:mx.slice()};}
+5704:       for(let i=0;i<binsN-1;i++){
+5705:         if(!leftC[i]||!rightC[i+1])continue;
+5706:         const splitCost=1+(
+5707:           this._surfaceArea(leftB[i].min,leftB[i].max)*leftC[i]+
+5708:           this._surfaceArea(rightB[i+1].min,rightB[i+1].max)*rightC[i+1]
+5709:         )/parentArea;
+5710:         if(splitCost<bestCost){bestCost=splitCost;best={axis,threshold:lo+span*((i+1)/binsN),cost:splitCost};}
+5711:       }
+5712:     }
+5713:     return best&&bestCost<leafCost?best:null;
+5714:   }
+5715:   _build(start,end){
+5716:     const rb=this._rangeBounds(start,end);
+5717:     const nodeIndex=this.nodes.length;
+5718:     this.nodes.push(null);
+5719:     const count=end-start;
+5720:     if(count<=this.maxLeafSize){
+5721:       this.nodes[nodeIndex]=new BVHNode(rb.min,rb.max,-1,-1,start,count);
+5722:       return nodeIndex;
+5723:     }
+5724:     const ext=RayMath.sub(rb.cmax,rb.cmin);
+5725:     let axis=0;if(ext[1]>ext[axis])axis=1;if(ext[2]>ext[axis])axis=2;
+5726:     const sah=this._sahSplit(start,end,rb);
+5727:     if(sah)axis=sah.axis;
+5728:     const sorted=new Array(end-start);for(let si=0;si<sorted.length;si++)sorted[si]=this.primitiveIndices[start+si];
+5729:     sorted.sort((a,b)=>this._boundsCache[a].centroid[axis]-this._boundsCache[b].centroid[axis]);
+5730:     this.primitiveIndices.set(sorted,start);
+5731:     let mid=start+Math.floor(count/2);
+5732:     if(sah){
+5733:       let split=start;
+5734:       while(split<end&&this._boundsCache[this.primitiveIndices[split]].centroid[axis]<sah.threshold)split++;
+5735:       if(split>start&&split<end)mid=split;
+5736:     }
+5737:     if(mid===start||mid===end){
+5738:       this.nodes[nodeIndex]=new BVHNode(rb.min,rb.max,-1,-1,start,count);
+5739:       return nodeIndex;
+5740:     }
+5741:     const left=this._build(start,mid),right=this._build(mid,end);
+5742:     this.nodes[nodeIndex]=new BVHNode(rb.min,rb.max,left,right,0,0);
+5743:     return nodeIndex;
+5744:   }
+5745:   intersect(ray){
+5746:     const best=new RenderHit();
+5747:     if(this.root<0)return best;
+5748:     const stack=[this.root];stack.length=1; // traversal stack retained; avoids unsafe structural rewrite
+5749:     while(stack.length){
+
+===== intersect(ray @ 5543 =====
+5513:   max3(a,b){return [Math.max(a[0],b[0]),Math.max(a[1],b[1]),Math.max(a[2],b[2])]}
+5514: });
+5515: 
+5516: const RenderRayType=Object.freeze({CAMERA:'camera',SHADOW:'shadow',DIFFUSE:'diffuse',GLOSSY:'glossy',TRANSMISSION:'transmission'});
+5517: class RenderRay{
+5518:   constructor(origin,direction,tMin=1e-5,tMax=Infinity,type=RenderRayType.CAMERA,depth=0){
+5519:     this.origin=origin;this.direction=RayMath.normalize(direction);
+5520:     this.invDirection=[
+5521:       Math.abs(this.direction[0])<RayMath.EPSILON?Infinity:1/this.direction[0],
+5522:       Math.abs(this.direction[1])<RayMath.EPSILON?Infinity:1/this.direction[1],
+5523:       Math.abs(this.direction[2])<RayMath.EPSILON?Infinity:1/this.direction[2]
+5524:     ];
+5525:     this.tMin=tMin;this.tMax=tMax;this.type=type;this.depth=depth;
+5526:   }
+5527:   at(t){return RayMath.add(this.origin,RayMath.mul(this.direction,t))}
+5528: }
+5529: const RenderRayPolicy=Object.freeze({
+5530:   epsilonForPoint(p){const scale=Math.max(1,Math.abs(p[0]),Math.abs(p[1]),Math.abs(p[2]));return Math.min(1e-2,Math.max(1e-6,scale*1e-7));}
+5531: });
+5532: Object.assign(window,{RenderRayType,RenderRayPolicy});
+5533: 
+5534: class RenderHit{
+5535:   constructor(){
+5536:     this.hit=false;this.t=Infinity;this.u=0;this.v=0;
+5537:     this.objectIndex=-1;this.triangleIndex=-1;
+5538:     this.position=null;this.geometricNormal=null;this.orientedGeometricNormal=null;this.frontFace=true;this.materialIndex=0;
+5539:   }
+5540: }
+5541: 
+5542: const TriangleIntersector=Object.freeze({
+5543:   intersect(ray,p0,p1,p2,hit=new RenderHit()){
+5544:     const e1=RayMath.sub(p1,p0),e2=RayMath.sub(p2,p0);
+5545:     const pvec=RayMath.cross(ray.direction,e2);
+5546:     const det=RayMath.dot(e1,pvec);
+5547:     if(Math.abs(det)<RayMath.EPSILON)return hit;
+5548:     const invDet=1/det;
+5549:     const tvec=RayMath.sub(ray.origin,p0);
+5550:     const u=RayMath.dot(tvec,pvec)*invDet;
+5551:     if(u<0||u>1)return hit;
+5552:     const qvec=RayMath.cross(tvec,e1);
+5553:     const v=RayMath.dot(ray.direction,qvec)*invDet;
+5554:     if(v<0||u+v>1)return hit;
+5555:     const t=RayMath.dot(e2,qvec)*invDet;
+5556:     if(t<ray.tMin||t>ray.tMax||t>=hit.t)return hit;
+5557:     hit.hit=true;hit.t=t;hit.u=u;hit.v=v;
+5558:     hit.position=ray.at(t);
+5559:     hit.geometricNormal=RayMath.normalize(RayMath.cross(e1,e2));
+5560:     hit.frontFace=RayMath.dot(ray.direction,hit.geometricNormal)<0;
+5561:     hit.orientedGeometricNormal=hit.frontFace?hit.geometricNormal:RayMath.mul(hit.geometricNormal,-1);
+5562:     return hit;
+5563:   }
+5564: });
+5565: 
+5566: const AABBIntersector=Object.freeze({
+5567:   entry(ray,min,max,tLimit=Infinity){
+5568:     let t0=ray.tMin,t1=Math.min(ray.tMax,tLimit);
+5569:     for(let axis=0;axis<3;axis++){
+5570:       const d=ray.direction[axis];
+5571:       if(Math.abs(d)<RayMath.EPSILON){
+5572:         if(ray.origin[axis]<min[axis]||ray.origin[axis]>max[axis])return Infinity;
+5573:         continue;
+5574:       }
+5575:       let a=(min[axis]-ray.origin[axis])*ray.invDirection[axis];
+5576:       let b=(max[axis]-ray.origin[axis])*ray.invDirection[axis];
+5577:       if(a>b){const tmp=a;a=b;b=tmp}
+5578:       t0=Math.max(t0,a);t1=Math.min(t1,b);
+5579:       if(t1<t0)return Infinity;
+5580:     }
+5581:     return t0;
+5582:   },
+5583:   intersect(ray,min,max,tLimit=Infinity){return Number.isFinite(this.entry(ray,min,max,tLimit))}
+5584: });
+5585: 
+5586: var RenderTriangleStore = class RenderTriangleStore{
+5587:   constructor(){
+5588:     this.positions=[];
+5589:     this.normals=[];
+5590:     this.uvs=[];
+5591:     this.triangles=[];
+5592:     this.materialIndices=[];
+5593:     this.objectIndices=[];
+5594:     this.objectIds=[];
+5595:     this.stats={inputTriangles:0,acceptedTriangles:0,rejectedInvalidIndex:0,rejectedNonFinite:0,rejectedDegenerate:0};
+5596:   }
+5597:   addPacket(packet,objectIndex){
+5598:     const baseVertex=this.positions.length/3;
+5599:     for(let i=0;i<packet.positions.length;i++)this.positions.push(packet.positions[i]);
+5600: 
+5601:     // Startup-safe cross-generation compatibility.
+5602:     // Geometry packets created by earlier diagnostic/self-test paths may not
+5603:     // contain shading normals or UVs. Missing optional attributes must not
+5604:     // abort editor initialization.
+5605:     const packetVertexCount=packet.positions.length/3;
+5606:     const srcNormals=(packet.normals&&packet.normals.length===packet.positions.length)
+5607:       ? packet.normals
+5608:       : new Float32Array(packet.positions.length);
+5609:     const srcUVs=(packet.uvs&&packet.uvs.length===packetVertexCount*2)
+5610:       ? packet.uvs
+5611:       : new Float32Array(packetVertexCount*2);
+5612: 
+5613:     for(let i=0;i<srcNormals.length;i++)this.normals.push(srcNormals[i]);
+5614:     for(let i=0;i<srcUVs.length;i++)this.uvs.push(srcUVs[i]);
+5615:     const idx=packet.indices;
+5616:     for(let t=0;t<idx.length;t+=3){
+5617:       this.stats.inputTriangles++;
+5618:       const ia=idx[t],ib=idx[t+1],ic=idx[t+2];
+5619:       if(!Number.isInteger(ia)||!Number.isInteger(ib)||!Number.isInteger(ic)||ia<0||ib<0||ic<0||ia>=packetVertexCount||ib>=packetVertexCount||ic>=packetVertexCount){this.stats.rejectedInvalidIndex++;continue;}
+5620:       const ax=packet.positions[ia*3],ay=packet.positions[ia*3+1],az=packet.positions[ia*3+2];
+5621:       const bx=packet.positions[ib*3],by=packet.positions[ib*3+1],bz=packet.positions[ib*3+2];
+5622:       const cx=packet.positions[ic*3],cy=packet.positions[ic*3+1],cz=packet.positions[ic*3+2];
+5623:       if(!Number.isFinite(ax+ay+az+bx+by+bz+cx+cy+cz)){this.stats.rejectedNonFinite++;continue;}
+5624:       const abx=bx-ax,aby=by-ay,abz=bz-az,acx=cx-ax,acy=cy-ay,acz=cz-az;
+5625:       const nx=aby*acz-abz*acy,ny=abz*acx-abx*acz,nz=abx*acy-aby*acx;
+5626:       if(nx*nx+ny*ny+nz*nz<1e-20){this.stats.rejectedDegenerate++;continue;}
+5627:       this.triangles.push(baseVertex+ia,baseVertex+ib,baseVertex+ic);
+5628:       this.materialIndices.push(packet.materialIndices?.[t/3]||0);
+5629:       this.objectIndices.push(objectIndex);
+5630:       this.stats.acceptedTriangles++;
+5631:     }
+5632:     this.objectIds[objectIndex]=packet.objectId;
+
+===== PathIntegrator= @ 8290 =====
+8260:       }else{
+8261:         li=PathIntegrator.safeColor(Group9DirectMIS.evaluate(job,acceleration,compiled,probeRay,ph,seed^Math.imul(i+3,0x9E3779B9)));
+8262:       }
+8263:       incoming=RenderColor.add(incoming,li);
+8264:     }
+8265:     incoming=RenderColor.mul(incoming,1/Math.max(1,count));
+8266:     const diffuse=RenderColor.mul(material.baseColor,Math.max(0,1-material.metalness));
+8267:     return RenderColor.mul(diffuse,incoming);
+8268:   },
+8269: 
+8270:   estimate(job,acceleration,compiled,hit,n,material,seed,bounce){
+8271:     const cache=job.lightCache;if(!cache||!this.cacheable(material))return null;
+8272:     const found=cache.query(hit.position,n);
+8273:     if(found){
+8274:       const cadence=LightCachePolicy.retraceEvery(job);
+8275:       if(cadence>0&&cache.hits%cadence===0){
+8276:         cache.retraces++;
+8277:         const fresh=this.probe(job,acceleration,compiled,hit,n,material,seed^0xB5297A4D,bounce);
+8278:         cache.refreshNearest(hit.position,n,fresh);
+8279:         return RenderColor.mul(RenderColor.add(RenderColor.mul(found,.75),RenderColor.mul(fresh,.25)),1);
+8280:       }
+8281:       return found;
+8282:     }
+8283: 
+8284:     const outgoing=this.probe(job,acceleration,compiled,hit,n,material,seed,bounce);
+8285:     cache.insert(hit.position,n,outgoing);
+8286:     return outgoing;
+8287:   }
+8288: });
+8289: 
+8290: var PathIntegrator=Object.freeze({
+8291:   maxDepth(job){
+8292:     return Math.max(1,Math.min(16,Number(job?.settings?.maxBounces)||5));
+8293:   },
+8294: 
+8295:   finiteColor(c){
+8296:     return Array.isArray(c)&&c.length===3&&c.every(v=>Number.isFinite(v)&&v>=0);
+8297:   },
+8298: 
+8299:   safeColor(c){
+8300:     return this.finiteColor(c)?c:[0,0,0];
+8301:   },
+8302: 
+8303:   offsetOrigin(hit,n,direction){
+8304:     const sign=RayMath.dot(direction,n)>=0?1:-1;
+8305:     const eps=RenderRayPolicy.epsilonForPoint(hit.position);
+8306:     return RayMath.add(hit.position,RayMath.mul(n,eps*sign));
+8307:   },
+8308: 
+8309:   trace(job,acceleration,compiled,primaryRay,pixelSeed,initialHit=null){
+8310:     let radiance=[0,0,0];
+8311:     let throughput=[1,1,1];
+8312:     let ray=primaryRay;
+8313:     let previousGuide=null;
+8314:     const maxDepth=this.maxDepth(job);
+8315:     const maxPathRays=Math.max(1,Math.min(4096,Number(job?.settings?.maxPathRays)||64));
+8316:     let pathRays=1;
+8317: 
+8318:     for(let bounce=0;bounce<maxDepth;bounce++){
+8319:       const hit=(bounce===0&&initialHit)?initialHit:acceleration.trace(ray);
+8320: 
+8321:       if(!hit.hit){
+8322:         const env=this.safeColor(RenderCoreD.evaluateEnvironment(job,compiled,ray.direction));
+8323:         radiance=RenderColor.add(radiance,RenderColor.mul(throughput,env));
+8324:         if(previousGuide&&job.pathGuide){
+8325:           const w=Math.max(0,.2126*env[0]+.7152*env[1]+.0722*env[2]);
+8326:           job.pathGuide.record(previousGuide.position,previousGuide.normal,previousGuide.direction,w);
+8327:         }
+8328:         break;
+8329:       }
+8330: 
+8331:       const material=RenderMaterialLibrary.resolveHit(job.renderScene,compiled.materials,hit);
+8332:       const n=SurfaceInterpolator.normal(acceleration,hit);
+8333:       const v=RayMath.mul(ray.direction,-1);
+8334: 
+8335:       // Next-event direct lighting at each hit. Dome is excluded here because
+8336:       // environment energy is accounted for by path miss evaluation.
+8337:       const direct=Group9DirectMIS.evaluate(
+8338:         job,acceleration,compiled,ray,hit,pixelSeed^(bounce*0x9E3779B9)
+8339:       );
+8340:       const safeDirect=this.safeColor(direct);
+8341:       radiance=RenderColor.add(radiance,RenderColor.mul(throughput,safeDirect));
+8342: 
+8343:       if(previousGuide&&job.pathGuide){
+8344:         const w=Math.max(0,.2126*safeDirect[0]+.7152*safeDirect[1]+.0722*safeDirect[2]);
+8345:         job.pathGuide.record(previousGuide.position,previousGuide.normal,previousGuide.direction,w);
+8346:       }
+8347: 
+8348:       if(bounce>=1){
+8349:         if(job?.settings?.secondaryGI==='None')break;
+8350:         if(LightCacheEstimator.enabled(job)){
+8351:           const cachedTail=LightCacheEstimator.estimate(job,acceleration,compiled,hit,n,material,pixelSeed,bounce);
+8352:           if(cachedTail){
+8353:             radiance=RenderColor.add(radiance,RenderColor.mul(throughput,cachedTail));
+8354:             break;
+8355:           }
+8356:         }
+8357:       }
+8358: 
+8359:       if(material.shading==='unlit')break;
+8360: 
+8361:       const sample=GuidedBSDFSampler.sample(job,material,n,v,hit.position,pixelSeed,bounce);
+8362:       if(!sample)break;
+8363: 
+8364:       throughput=RenderColor.mul(throughput,sample.weight);
+8365: 
+8366:       if(!this.finiteColor(throughput))break;
+8367:       if(Math.max(throughput[0],throughput[1],throughput[2])<1e-6)break;
+8368: 
+8369:       // Russian roulette after the first few bounces. Survival probability tracks path throughput.
+8370:       if(bounce>=2){
+8371:         const survive=Math.max(.08,Math.min(.95,Math.max(throughput[0],throughput[1],throughput[2])));
+8372:         if(PathSampler.scalar(pixelSeed,bounce,15)>survive)break;
+8373:         throughput=RenderColor.mul(throughput,1/survive);
+8374:       }
+8375: 
+8376:       if(sample.transmission&&material.thickness>0){
+8377:         throughput=RenderColor.mul(
+8378:           throughput,
+8379:           DielectricTransport.beerLambert(material.attenuationColor,material.thickness,material.attenuationDistance)
+
+===== RenderTriangle @ 5410 =====
+5380: 
+5381: /* ============================================================
+5382:    3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — CORE B
+5383:    CLEAN GROUP 3 + GROUP 4 CONSOLIDATION
+5384:    ============================================================ */
+5385: class RenderExecutionGeometry{
+5386:   constructor(renderScene){
+5387:     this.accelerationPackets=RenderGeometryCompiler.compileScene(renderScene);
+5388:     this.workerPackets=this.accelerationPackets.map(p=>new RenderGeometryPacket({
+5389:       objectId:p.objectId,name:p.name,
+5390:       positions:new Float32Array(p.positions),
+5391:       normals:new Float32Array(p.normals),
+5392:       uvs:new Float32Array(p.uvs),
+5393:       indices:new Uint32Array(p.indices),
+5394:       materialIndices:new Uint16Array(p.materialIndices),
+5395:       bounds:{min:[...p.bounds.min],max:[...p.bounds.max]}
+5396:     }));
+5397:     Object.freeze(this.accelerationPackets);
+5398:     Object.freeze(this.workerPackets);
+5399:   }
+5400: }
+5401: 
+5402: var RenderCoreB=Object.freeze({
+5403:   version:'3.79.16-core-b-part2',
+5404: 
+5405:   createExecutionGeometry(renderScene){
+5406:     return new RenderExecutionGeometry(renderScene);
+5407:   },
+5408: 
+5409:   buildAccelerationFromPackets(packets){
+5410:     const store=new RenderTriangleStore();
+5411:     packets.forEach((p,i)=>store.addPacket(p,i));
+5412:     store.finalize();
+5413:     return new RenderAccelerationSet(store,new RenderBVH(store,4));
+5414:   },
+5415: 
+5416:   async prepareWorkerGeometry(job,pool,executionGeometry,onProgress=()=>{}){
+5417:     const items=[],packets=executionGeometry.workerPackets,total=packets.length;
+5418:     for(let i=0;i<packets.length;i++){
+5419:       if(job.cancelled)throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
+5420:       while(job.paused&&!job.cancelled)await new Promise(r=>setTimeout(r,25));
+5421: 
+5422:       const packet=packets[i];
+5423:       let result;
+5424:       try{
+5425:         result=await pool.run(
+5426:           {type:'prepareGeometry',jobId:job.id,packet},
+5427:           RenderGeometryCompiler.transferables(packet)
+5428:         );
+5429:       }catch(err){
+5430:         if(err?.workerUnavailable){job.progress.workerFallback=true;result=RenderGeometryPreparation.mainThread(job,packet);}
+5431:         else throw err;
+5432:       }
+5433: 
+5434:       items.push(Object.freeze({
+5435:         objectId:result.objectId,
+5436:         vertexCount:result.vertexCount,
+5437:         triangleCount:result.triangleCount,
+5438:         bounds:Object.freeze(Array.from(result.bounds||[])),
+5439:         triangleIndices:result.triangleIndices
+5440:       }));
+5441:       onProgress((i+1)/Math.max(1,total),items[items.length-1]);
+5442:     }
+5443:     return new PreparedGeometrySet(items);
+5444:   },
+5445: 
+5446:   validate(){
+5447:     const errors=[];
+5448:     const g3=validateRenderGroup3();if(!g3.ok)errors.push(...g3.errors);
+5449:     const g4=validateRenderGroup4();if(!g4.ok)errors.push(...g4.errors);
+5450:     if(typeof this.createExecutionGeometry!=='function')errors.push('Core B execution geometry missing');
+5451:     if(typeof this.buildAccelerationFromPackets!=='function')errors.push('Core B acceleration builder missing');
+5452:     return {ok:errors.length===0,errors};
+5453:   }
+5454: });
+5455: window.RenderCoreB=RenderCoreB;
+5456: 
+5457: const RenderGroup3Contract=Object.freeze({
+5458:   owns:Object.freeze([
+5459:     'worker pool',
+5460:     'render execution queue',
+5461:     'worker-safe geometry packets',
+5462:     'render geometry preparation',
+5463:     'prepared triangle-index payloads'
+5464:   ]),
+5465:   consumes:Object.freeze([
+5466:     'RenderCoreA render jobs',
+5467:     'immutable RenderSceneSnapshot'
+5468:   ]),
+5469:   doesNotOwn:Object.freeze([
+5470:     'editor objects',
+5471:     'editor geometry buffers',
+5472:     'MNMesh',
+5473:     'viewport renderer',
+5474:     'selection',
+5475:     'transforms',
+5476:     'editor undo'
+5477:   ])
+5478: });
+5479: 
+5480: function validateRenderGroup3(){
+5481:   const errors=[];
+5482:   if(typeof RenderWorkerPool!=='function')errors.push('RenderWorkerPool missing');
+5483:   if(typeof RenderGeometryCompiler.compileScene!=='function')errors.push('RenderGeometryCompiler missing');
+5484:   if(typeof RenderGeometryValidation.validatePacket!=='function')errors.push('RenderGeometryValidation missing');
+5485:   if(typeof RenderGeometryPreparation.prepare!=='function')errors.push('RenderGeometryPreparation missing');
+5486:   if(typeof PreparedGeometrySet!=='function')errors.push('PreparedGeometrySet missing');
+5487:   return {ok:errors.length===0,errors};
+5488: }
+5489: 
+5490: Object.assign(window,{
+5491:   RenderGeometryPacket,
+5492:   RenderGeometryCompiler,RenderGeometryValidation,
+5493:   RenderWorkerPool,
+5494:   PreparedGeometrySet,
+5495:   RenderGeometryPreparation,
+5496:   RenderGroup3Contract
+5497: });
+5498: 
+5499: /* ============================================================
