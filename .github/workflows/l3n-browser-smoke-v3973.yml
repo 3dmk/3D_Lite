@@ -1,0 +1,79 @@
+name: L3N v3.97.3 Browser Smoke
+on:
+  push:
+    branches: [l3n-dev]
+    paths:
+      - '.l3n-browser-smoke-v3973-trigger'
+permissions:
+  contents: read
+jobs:
+  browser-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: l3n-dev
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null
+      - name: Start server
+        run: |
+          python3 -m http.server 8000 >/tmp/3dlite-http.log 2>&1 &
+          sleep 2
+      - name: Runtime smoke
+        run: |
+          node <<'JS'
+          const { chromium } = require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--use-angle=swiftshader','--enable-webgl','--ignore-gpu-blocklist']});
+            const page=await browser.newPage();
+            const pageErrors=[];
+            const rendererErrors=[];
+            page.on('pageerror',e=>pageErrors.push(String(e)));
+            page.on('console',m=>{const t=m.text(); if(t.includes('[3DLite Renderer] validation')) rendererErrors.push(t);});
+            const r=await page.goto('http://127.0.0.1:8000/index.html',{waitUntil:'domcontentloaded',timeout:60000});
+            if(!r || !r.ok()) throw new Error('HTTP load failed');
+            await page.waitForTimeout(5000);
+            const result=await page.evaluate(()=>{
+              const reg=window.ThreeDLiteL3NDebugRegistry;
+              if(!reg) throw new Error('missing L3N Debug Registry');
+              const cats=Object.keys(reg.categories||{});
+              const needed=['model','viewport','lighting','rendering','materials','rays','performance','ui','editing','history','runtime','io','l3n'];
+              for(const c of needed) if(!cats.includes(c)) throw new Error('missing category '+c);
+              const issue=reg.register({message:'shadow sampling noise test',severity:'low',source:'browser-smoke'});
+              if(issue.category!=='lighting') throw new Error('classification failed: '+issue.category);
+              if(!reg.resolve(issue.id,'smoke resolved')) throw new Error('resolve failed');
+              reg.ingestRuntimeReport({version:'3.97.3',passed:true,tests:[],frame:{slowFrames:0,severeFrames:0},comparison:{comparisons:{}}});
+              const snap=reg.snapshot();
+              return {
+                title:document.title,
+                publicVersion:window.ThreeDLiteVersion?.version,
+                apiVersion:window.ThreeDLiteBrowserTestAPI?.version,
+                liveVersion:window.__3DLiteLiveBuild?.version,
+                buildVersion:window.ThreeDLiteBuildIdentity?.version,
+                registryVersion:reg.version,
+                categories:cats.length,
+                total:snap.total,
+                viewport:!!document.querySelector('#viewport'),
+                canvas:!!document.querySelector('#viewport canvas'),
+                rendered:document.querySelector('#viewport canvas')?.dataset?.viewportRendered||null,
+                three:!!window.THREE,
+                regression:window.ThreeDLiteL3NIntegration?.regression?.()
+              };
+            });
+            console.log(JSON.stringify(result,null,2));
+            if(!result.title.includes('3DLite v3.97.3')) throw new Error('wrong title '+result.title);
+            for(const [k,v] of Object.entries({publicVersion:result.publicVersion,apiVersion:result.apiVersion,liveVersion:result.liveVersion,buildVersion:result.buildVersion,registryVersion:result.registryVersion})) if(v!=='3.97.3') throw new Error(k+' wrong: '+v);
+            if(!result.viewport||!result.canvas||!result.three) throw new Error('viewport dependency missing');
+            if(result.rendered!=='true') throw new Error('viewport not rendered');
+            if(pageErrors.length) throw new Error('page errors: '+pageErrors.join(' | '));
+            if(rendererErrors.length) throw new Error('renderer validation errors: '+rendererErrors.join(' | '));
+            if(result.regression && result.regression.passed===false) throw new Error('L3N regression failed: '+JSON.stringify(result.regression));
+            await browser.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          JS
