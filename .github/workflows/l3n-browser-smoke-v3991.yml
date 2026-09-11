@@ -1,0 +1,25 @@
+name: L3N v3.99.1 Render Data Browser Smoke
+on:
+  push:
+    branches: [l3n-dev]
+    paths: ['.l3n-browser-smoke-v3991-trigger']
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: npm install --no-save playwright@1.55.0
+      - run: npx playwright install --with-deps chromium
+      - run: python3 -m http.server 8000 >/tmp/3dlite.log 2>&1 &
+      - name: Validate render data code viewer
+        run: |
+          node <<'JS'
+          const { chromium }=require('playwright');
+          (async()=>{const b=await chromium.launch({headless:true,args:['--use-angle=swiftshader','--enable-webgl','--ignore-gpu-blocklist']});const p=await b.newPage();const errors=[];p.on('pageerror',e=>errors.push(String(e)));await p.goto('http://127.0.0.1:8000',{waitUntil:'load',timeout:60000});await p.waitForTimeout(1500);
+          const r=await p.evaluate(()=>{const A=window.ThreeDLiteAdaptiveRender3990;if(!A)throw Error('adaptive API missing');A.observe({currentSamples:1,maximumSamples:64,noise:.12,elapsedMs:100,totalRays:1000,shadowRays:200,secondaryRays:300});A.observe({currentSamples:2,maximumSamples:64,noise:.08,elapsedMs:180,totalRays:1600,shadowRays:280,secondaryRays:420});A.learnLight('L1',1,true,1);A.learnBounce(1,.5,true);A.learnNoise('reflection',.2);A.updateConvergence('tile0',.001,1,'tile');const btn=document.getElementById('l3nRenderDataCodeBtn3991');if(!btn)throw Error('Render Data Code button missing');btn.click();const ta=document.getElementById('l3nRenderDataCodeText3991');const snap=A.renderDataSnapshot();return {marker:!!window.__3DLiteRenderDataCode3991,version:snap.version,passes:snap.passes?.length||0,hasLights:!!snap.lights,hasBounces:!!snap.bounces,hasNoise:!!snap.noise,hasMetrics:!!snap.metrics,viewer:!!document.getElementById('l3nRenderDataCodeWindow3991'),code:ta?.value||''};});
+          if(!r.marker||r.version!=='3.99.1')throw Error('marker/version failed '+JSON.stringify(r));if(r.passes<2||!r.hasLights||!r.hasBounces||!r.hasNoise||!r.hasMetrics)throw Error('render data incomplete '+JSON.stringify(r));if(!r.viewer||!r.code.includes('RenderDataProfile')||!r.code.includes('Compiled Render Data'))throw Error('viewer/export failed');if(errors.some(e=>/ReferenceError|TypeError|SyntaxError|Renderer.*validation/i.test(e)))throw Error('browser errors '+errors.join('\n'));console.log(JSON.stringify(r));await b.close();})();
+          JS
