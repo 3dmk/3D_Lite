@@ -1,0 +1,56 @@
+const PhysicalBSDF=Object.freeze({
+  fresnelSchlick(cosTheta,f0){
+    const m=Math.pow(1-Math.max(0,Math.min(1,cosTheta)),5);
+    return [
+      f0[0]+(1-f0[0])*m,
+      f0[1]+(1-f0[1])*m,
+      f0[2]+(1-f0[2])*m
+    ];
+  },
+  distributionGGX(nDotH,roughness){
+    const a=roughness*roughness,a2=a*a;
+    const d=nDotH*nDotH*(a2-1)+1;
+    return a2/Math.max(Math.PI*d*d,1e-7);
+  },
+  geometrySchlickGGX(nDotV,roughness){
+    const r=roughness+1,k=(r*r)/8;
+    return nDotV/Math.max(nDotV*(1-k)+k,1e-7);
+  },
+  geometrySmith(nDotV,nDotL,roughness){
+    return this.geometrySchlickGGX(nDotV,roughness)*this.geometrySchlickGGX(nDotL,roughness);
+  },
+  evaluate(material,n,v,l){
+    if(material.shading==='unlit')return material.baseColor;
+    if(!material||![...n,...v,...l].every(Number.isFinite))return [0,0,0];
+
+    const h=RayMath.normalize(RayMath.add(v,l));
+    if(!h.every(Number.isFinite))return [0,0,0];
+    const nDotL=Math.max(0,RayMath.dot(n,l));
+    const nDotV=Math.max(0,RayMath.dot(n,v));
+    const nDotH=Math.max(0,RayMath.dot(n,h));
+    const vDotH=Math.max(0,RayMath.dot(v,h));
+    if(nDotL<=0||nDotV<=0)return [0,0,0];
+
+    const dielectricF0=[.04,.04,.04];
+    const f0=RenderColor.mix(dielectricF0,material.baseColor,material.metalness);
+    const F=this.fresnelSchlick(vDotH,f0);
+    const D=this.distributionGGX(nDotH,material.roughness);
+    const G=this.geometrySmith(nDotV,nDotL,material.roughness);
+
+    const specScale=D*G/Math.max(4*nDotV*nDotL,1e-6);
+    const spec=RenderColor.mul(F,specScale);
+
+    const kD=[
+      (1-F[0])*(1-material.metalness),
+      (1-F[1])*(1-material.metalness),
+      (1-F[2])*(1-material.metalness)
+    ];
+    const diffuse=[
+      kD[0]*material.baseColor[0]/Math.PI,
+      kD[1]*material.baseColor[1]/Math.PI,
+      kD[2]*material.baseColor[2]/Math.PI
+    ];
+    const out=RenderColor.mul(RenderColor.add(diffuse,spec),nDotL);
+    return out.map(x=>Number.isFinite(x)&&x>=0?x:0);
+  }
+}

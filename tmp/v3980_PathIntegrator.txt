@@ -1,0 +1,118 @@
+var PathIntegrator=Object.freeze({
+  maxDepth(job){
+    return Math.max(1,Math.min(16,Number(job?.settings?.maxBounces)||5));
+  },
+
+  finiteColor(c){
+    return Array.isArray(c)&&c.length===3&&c.every(v=>Number.isFinite(v)&&v>=0);
+  },
+
+  safeColor(c){
+    return this.finiteColor(c)?c:[0,0,0];
+  },
+
+  offsetOrigin(hit,n,direction){
+    const sign=RayMath.dot(direction,n)>=0?1:-1;
+    const eps=RenderRayPolicy.epsilonForPoint(hit.position);
+    return RayMath.add(hit.position,RayMath.mul(n,eps*sign));
+  },
+
+  trace(job,acceleration,compiled,primaryRay,pixelSeed,initialHit=null){
+    let radiance=[0,0,0];
+    let throughput=[1,1,1];
+    let ray=primaryRay;
+    let previousGuide=null;
+    const maxDepth=this.maxDepth(job);
+
+    for(let bounce=0;bounce<maxDepth;bounce++){
+      const hit=(bounce===0&&initialHit)?initialHit:acceleration.trace(ray);
+
+      if(!hit.hit){
+        const env=this.safeColor(RenderCoreD.evaluateEnvironment(job,compiled,ray.direction));
+        radiance=RenderColor.add(radiance,RenderColor.mul(throughput,env));
+        if(previousGuide&&job.pathGuide){
+          const w=Math.max(0,.2126*env[0]+.7152*env[1]+.0722*env[2]);
+          job.pathGuide.record(previousGuide.position,previousGuide.normal,previousGuide.direction,w);
+        }
+        break;
+      }
+
+      const material=RenderMaterialLibrary.resolveHit(job.renderScene,compiled.materials,hit);
+      const n=SurfaceInterpolator.normal(acceleration,hit);
+      const v=RayMath.mul(ray.direction,-1);
+
+      // Next-event direct lighting at each hit. Dome is excluded here because
+      // environment energy is accounted for by path miss evaluation.
+      const direct=Group9DirectMIS.evaluate(
+        job,acceleration,compiled,ray,hit,pixelSeed^(bounce*0x9E3779B9)
+      );
+      const safeDirect=this.safeColor(direct);
+      radiance=RenderColor.add(radiance,RenderColor.mul(throughput,safeDirect));
+
+      if(previousGuide&&job.pathGuide){
+        const w=Math.max(0,.2126*safeDirect[0]+.7152*safeDirect[1]+.0722*safeDirect[2]);
+        job.pathGuide.record(previousGuide.position,previousGuide.normal,previousGuide.direction,w);
+      }
+
+      if(bounce>=1){
+        if(job?.settings?.secondaryGI==='None')break;
+        if(LightCacheEstimator.enabled(job)){
+          const cachedTail=LightCacheEstimator.estimate(job,acceleration,compiled,hit,n,material,pixelSeed,bounce);
+          if(cachedTail){
+            radiance=RenderColor.add(radiance,RenderColor.mul(throughput,cachedTail));
+            break;
+          }
+        }
+      }
+
+      if(material.shading==='unlit')break;
+
+      const sample=GuidedBSDFSampler.sample(job,material,n,v,hit.position,pixelSeed,bounce);
+      if(!sample)break;
+
+      throughput=RenderColor.mul(throughput,sample.weight);
+
+      if(!this.finiteColor(throughput))break;
+      if(Math.max(throughput[0],throughput[1],throughput[2])<1e-6)break;
+
+      // Russian roulette after the first few bounces. Survival probability tracks path throughput.
+      if(bounce>=2){
+        const survive=Math.max(.08,Math.min(.95,Math.max(throughput[0],throughput[1],throughput[2])));
+        if(PathSampler.scalar(pixelSeed,bounce,15)>survive)break;
+        throughput=RenderColor.mul(throughput,1/survive);
+      }
+
+      if(sample.transmission&&material.thickness>0){
+        throughput=RenderColor.mul(
+          throughput,
+          DielectricTransport.beerLambert(material.attenuationColor,material.thickness,material.attenuationDistance)
+        );
+      }
+
+      previousGuide=(!sample.transmission&&job.pathGuide&&RayMath.dot(n,sample.direction)>0)
+        ? {position:hit.position.slice(),normal:n.slice(),direction:sample.direction.slice()}
+        : null;
+
+      const origin=this.offsetOrigin(hit,n,sample.direction);
+      const eps=RenderRayPolicy.epsilonForPoint(origin);
+      const rayType=sample.transmission?RenderRayType.TRANSMISSION:(sample.lobe==='ggx'?RenderRayType.GLOSSY:RenderRayType.DIFFUSE);
+      RenderCoreH.attachPerformance(job).addRay(rayType);
+      ray=new RenderRay(origin,sample.direction,eps,Infinity,rayType,bounce+1);
+    }
+
+    return radiance;
+  },
+
+  tracePixel(job,acceleration,compiled,primaryRay,pixelSeed){
+    const primaryHitRecord=acceleration.trace(primaryRay);
+    if(!primaryHitRecord.hit){
+      const env=this.safeColor(RenderCoreD.evaluateEnvironment(job,compiled,primaryRay.direction));
+      return {radiance:env,primaryHit:false,primaryHitRecord:null};
+    }
+    return {
+      radiance:this.trace(job,acceleration,compiled,primaryRay,pixelSeed,primaryHitRecord),
+      primaryHit:true,
+      primaryHitRecord
+    };
+  }
+}
