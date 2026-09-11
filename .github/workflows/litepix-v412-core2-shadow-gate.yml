@@ -1,0 +1,105 @@
+name: LitePix v4.12 Large Scene BVH Shadow Gate
+on:
+  push:
+    branches: [litepix-v4.12-large-scene-bvh-shadow]
+    paths:
+      - 'litepix/core2-path-v4.12.js'
+      - 'patches/litepix/v4.12/**'
+      - '.github/workflows/litepix-v412-core2-shadow-gate.yml'
+permissions:
+  contents: write
+jobs:
+  core2-shadow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: litepix-v4.12-large-scene-bvh-shadow
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Syntax gate
+        run: node --check litepix/core2-path-v4.12.js
+      - name: Apply v4.12 integration
+        run: python3 patches/litepix/v4.12/apply-core2-shadow.py
+      - name: Structural release gate
+        run: |
+          node <<'NODE'
+          const fs=require('fs'),h=fs.readFileSync('index.html','utf8'),f=[];
+          if(!h.includes('<title>LitePix v4.12.0 Large Scene BVH + Shadow</title>'))f.push('v4.12 title missing');
+          if(!/const\s+LitePixVersion\s*=\s*Object\.freeze\(\{[^;]*name:'LitePix'[^;]*version:'4\.12\.0'[^;]*\}\);/.test(h))f.push('v4.12 version missing');
+          for(const x of ['core2-path-v4.12.js','LitePixCore2PathAcceleration412.wrap(acceleration,job)','__LitePixCore2ShadowVisibility412'])if(!h.includes(x))f.push('missing '+x);
+          const ids=[...h.matchAll(/\bid\s*=\s*["']([^"']+)["']/gi)].map(m=>m[1]),seen=new Set(),dups=[];for(const id of ids){if(seen.has(id))dups.push(id);else seen.add(id)}if(dups.length)f.push('duplicate ids '+[...new Set(dups)].join(','));
+          const ext=[...h.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].filter(m=>/\bsrc\s*=/.test(m[1])&&(m[2]||'').trim());if(ext.length)f.push('external script inline bodies '+ext.length);
+          const loops=(h.match(/requestAnimationFrame\s*\(\s*animate\s*\)/g)||[]).length;if(loops!==1)f.push('animation loop owners '+loops);
+          if(f.length){console.error(f.join('\n'));process.exit(1)}
+          console.log('LitePix v4.12 structural gate passed');
+          NODE
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null
+      - name: Browser large-scene and shadow benchmark
+        run: |
+          set -o pipefail
+          python3 -m http.server 8000 >/tmp/lp412-http.log 2>&1 &
+          PID=$!
+          trap 'kill $PID || true' EXIT
+          node <<'NODE' | tee /tmp/lp412.json
+          const {chromium}=require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--use-gl=swiftshader','--enable-webgl','--ignore-gpu-blocklist']});
+            const page=await browser.newPage({viewport:{width:1280,height:900}}),pageErrors=[],consoleErrors=[];
+            page.on('pageerror',e=>pageErrors.push(String(e?.stack||e)));
+            page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
+            const response=await page.goto('http://127.0.0.1:8000/index.html',{waitUntil:'domcontentloaded',timeout:120000});
+            await page.waitForTimeout(3000);
+            const result=await page.evaluate(async()=>{
+              const now=()=>performance.now();
+              function makeGrid(cells){
+                const v=(cells+1)*(cells+1),pos=new Float32Array(v*3),idx=new Uint32Array(cells*cells*6);let p=0;
+                for(let y=0;y<=cells;y++)for(let x=0;x<=cells;x++){pos[p++]=x-cells*.5;pos[p++]=y-cells*.5;pos[p++]=0;}
+                let q=0;const row=cells+1;
+                for(let y=0;y<cells;y++)for(let x=0;x<cells;x++){const a=y*row+x,b=a+1,c=a+row,d=c+1;idx[q++]=a;idx[q++]=b;idx[q++]=d;idx[q++]=a;idx[q++]=d;idx[q++]=c;}
+                const store=new RenderTriangleStore();store.addPacket({objectId:'grid-'+cells,positions:pos,normals:new Float32Array(pos.length),uvs:new Float32Array(v*2),indices:idx,materialIndices:new Uint16Array(idx.length/3)},0);store.finalize();
+                const tb=now(),legacy=new RenderAccelerationSet(store,new RenderBVH(store,4)),legacyBuild=now()-tb;
+                const tc=now(),core=LitePixCore2PathAcceleration412.wrap(legacy,{id:'bench-'+cells}),coreBuild=now()-tc;
+                return{legacy,core,triangles:idx.length/3,legacyBuild,coreBuild,cells};
+              }
+              function raysFor(cells,count){const out=[];let s=123456789;const rnd=()=>((s=(1664525*s+1013904223)>>>0)/4294967296);for(let i=0;i<count;i++){const x=(rnd()-.5)*cells*.98,y=(rnd()-.5)*cells*.98;out.push(new RenderRay([x,y,25],[0,0,-1],1e-5,100,RenderRayType.CAMERA,0));}return out;}
+              function bench(acc,rays,shadow=false){const t=now();let hit=0;for(const r of rays){if(shadow?acc.occluded(r):acc.trace(r).hit)hit++;}return{ms:now()-t,hits:hit};}
+              const sizes=[64,224],large=[];
+              for(const cells of sizes){const g=makeGrid(cells),rays=raysFor(cells,cells===224?12000:6000);bench(g.legacy,rays.slice(0,200));bench(g.core,rays.slice(0,200));const lt=bench(g.legacy,rays),ct=bench(g.core,rays),ls=bench(g.legacy,rays,true),cs=bench(g.core,rays,true);large.push({cells,triangles:g.triangles,legacyBuildMs:g.legacyBuild,coreBuildMs:g.coreBuild,legacyTraceMs:lt.ms,coreTraceMs:ct.ms,traceSpeedup:lt.ms/ct.ms,legacyShadowMs:ls.ms,coreShadowMs:cs.ms,shadowSpeedup:ls.ms/cs.ms,traceHits:[lt.hits,ct.hits],shadowHits:[ls.hits,cs.hits],coreSnapshot:g.core.snapshot()});}
+              const shadowGrid=makeGrid(32);window.__LitePixCore2ShadowVisibility412=0;const visible=ShadowVisibility.visible(shadowGrid.core,[0,0,10],[0,0,-1],20),shadowCounter=window.__LitePixCore2ShadowVisibility412||0,shadowSnap=shadowGrid.core.snapshot();
+              const mesh=new THREE.Mesh(new THREE.BoxGeometry(80,80,80),new THREE.MeshStandardMaterial({color:0xb8b8b8,roughness:.7,metalness:0}));mesh.name='LitePix412ParityBox';mesh.userData.primitiveType='box';mesh.userData.baseColor=0xb8b8b8;scene.add(mesh);objects.push(mesh);camera.position.set(180,-180,140);camera.up.set(0,0,1);camera.lookAt(0,0,0);camera.updateMatrixWorld(true);camera.updateProjectionMatrix();window.__3DLiteGeometryRevision=(window.__3DLiteGeometryRevision||0)+1;window.__3DLiteSceneRevision=(window.__3DLiteSceneRevision||0)+1;RenderAccelerationCache16?.clear?.();
+              const sv=(id,v)=>{const e=document.getElementById(id);if(!e)return;e.value=String(v);e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));};sv('rsEngine','path');sv('rsWidth',120);sv('rsHeight',68);sv('rsBounces',3);sv('rsMinSamples',1);sv('rsMaxSamples',2);sv('rsNoise',.05);sv('rsExposure',0);
+              async function render(use){window.__LitePixCore2Path412Enabled=use;const prior=RenderFramework?.jobs?.lastJob?.id||0,t=Date.now();document.getElementById('renderNowBtn').click();while(true){await new Promise(r=>setTimeout(r,50));const j=RenderFramework.jobs.lastJob;if(j&&j.id!==prior&&j.finished&&j.performance){const rgba=j.beautyFrame?.rgba||j.beautyFrame?.data||null;return{wallMs:Date.now()-t,performance:j.performance,secondaryGI:j.beautyFrame?.metadata?.secondaryGI||null,core2:j.beautyFrame?.metadata?.litePixCore2BVH||j.litePixCore2Acceleration412?.snapshot?.()||null,rgba:rgba?Array.from(rgba):null};}}
+              }
+              const legacy=await render(false),core2=await render(true);let maxDiff=Infinity,meanDiff=Infinity;if(legacy.rgba&&core2.rgba&&legacy.rgba.length===core2.rgba.length){let mx=0,sum=0;for(let i=0;i<legacy.rgba.length;i++){const d=Math.abs(legacy.rgba[i]-core2.rgba[i]);if(d>mx)mx=d;sum+=d;}maxDiff=mx;meanDiff=sum/legacy.rgba.length;}delete legacy.rgba;delete core2.rgba;
+              return{identity:{title:document.title,version:window.LitePixVersion?.version||null,marker:window.__LitePixCore2Path412===true},large,shadowVisibility:{blocked:visible===false,counter:shadowCounter,snapshot:shadowSnap},parity:{legacy,core2,maxPixelDiff:maxDiff,meanPixelDiff:meanDiff}};
+            });
+            const f=[];if(response?.status()!==200)f.push('HTTP != 200');if(result.identity.version!=='4.12.0'||!result.identity.marker)f.push('v4.12 identity mismatch');
+            const large=result.large[result.large.length-1];if(!(large.triangles>=100000))f.push('100k triangle benchmark missing');if(large.traceHits[0]!==large.traceHits[1]||large.shadowHits[0]!==large.shadowHits[1])f.push('large scene hit mismatch');
+            if(!(large.traceSpeedup>1.05))f.push('large-scene trace speedup <= 1.05: '+large.traceSpeedup);if(!(large.shadowSpeedup>1.05))f.push('large-scene shadow speedup <= 1.05: '+large.shadowSpeedup);
+            if(!result.shadowVisibility.blocked||result.shadowVisibility.counter<1||result.shadowVisibility.snapshot.shadowRays<1||result.shadowVisibility.snapshot.anyHits<1)f.push('real ShadowVisibility ownership failed');
+            if(result.parity.core2.secondaryGI!=='Light Cache')f.push('Light Cache inactive');if(!(result.parity.maxPixelDiff<=1&&result.parity.meanPixelDiff<=0.02))f.push('Path parity failed');
+            if(pageErrors.length)f.push('page errors '+pageErrors.length);if(consoleErrors.length)f.push('console errors '+consoleErrors.length);
+            const out={passed:!f.length,...result,pageErrors,consoleErrors,failures:f};console.log(JSON.stringify(out,null,2));await browser.close();if(f.length)process.exit(1);
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+      - name: Save report
+        if: always()
+        run: |
+          mkdir -p reports/litepix
+          test -f /tmp/lp412.json && cp /tmp/lp412.json reports/litepix/v4.12-large-scene-shadow-report.json || true
+      - name: Commit gated build
+        if: success()
+        run: |
+          git config user.name 'LitePix v4.12 Gate'
+          git config user.email 'actions@users.noreply.github.com'
+          git add index.html reports/litepix/v4.12-large-scene-shadow-report.json
+          git commit -m 'Gate LitePix v4.12 large scene BVH shadow ownership' || exit 0
+          git push origin HEAD:litepix-v4.12-large-scene-bvh-shadow
