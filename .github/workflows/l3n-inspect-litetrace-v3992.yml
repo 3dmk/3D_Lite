@@ -1,0 +1,32 @@
+name: L3N Inspect LiteTrace v3.99.2
+on:
+  push:
+    branches: [l3n-dev]
+    paths: ['.l3n-inspect-litetrace-v3992-trigger']
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect LiteTrace telemetry context
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('index.html').read_text(errors='ignore')
+          pats=['LiteTrace','raysPerSecond','totalRays','shadowRays','secondaryRays','currentSamples','maximumSamples','RenderFramework','updateProgress','recordCompleted','progress.snapshot','PathGIRenderer','BasicDirectRenderer']
+          for pat in pats:
+              print('\n===== PATTERN',pat,'=====')
+              start=0;n=0
+              while True:
+                  i=s.find(pat,start)
+                  if i<0: break
+                  n+=1
+                  a=max(0,i-700);b=min(len(s),i+1700)
+                  print(f'--- hit {n} at {i} ---')
+                  print(s[a:b].replace('\n','\n'))
+                  start=i+len(pat)
+                  if n>=12: break
+              print('hits shown',n)
+          PY
