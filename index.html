@@ -4649,6 +4649,30 @@ var RenderSceneBoundary={
     }
     return new RenderMeshSnapshot({positions:p,normals:n,uvs:uv,indices:idx,materialIndices:mi,bounds:this.bounds(p)});
   },
+  localMesh(obj,materialCount=1){
+    obj.updateMatrixWorld(true);
+    const g=obj.geometry,pa=g?.getAttribute?.('position');if(!pa)return null;
+    const na=g.getAttribute?.('normal'),ua=g.getAttribute?.('uv');
+    const p=new Float32Array(pa.count*3),n=new Float32Array(pa.count*3),uv=new Float32Array(pa.count*2);
+    for(let i=0;i<pa.count;i++){
+      p[i*3]=pa.getX(i);p[i*3+1]=pa.getY(i);p[i*3+2]=pa.getZ(i);
+      if(na){n[i*3]=na.getX(i);n[i*3+1]=na.getY(i);n[i*3+2]=na.getZ(i);}
+      if(ua){uv[i*2]=ua.getX(i);uv[i*2+1]=ua.getY(i);}
+    }
+    const idx=g.index?new Uint32Array(g.index.array):Uint32Array.from({length:pa.count},(_,i)=>i);
+    const mi=new Uint16Array(Math.ceil(idx.length/3));
+    const validCount=Math.max(1,Number(materialCount)||1);
+    for(const gr of g.groups||[]){
+      const raw=Number(gr.materialIndex),safe=Number.isInteger(raw)&&raw>=0&&raw<validCount?raw:0;
+      for(let t=Math.floor(gr.start/3);t<Math.ceil((gr.start+gr.count)/3)&&t<mi.length;t++)mi[t]=safe;
+    }
+    return new RenderMeshSnapshot({positions:p,normals:n,uvs:uv,indices:idx,materialIndices:mi,bounds:this.bounds(p)});
+  },
+  transform(obj){
+    obj.updateMatrixWorld(true);
+    const e=obj.matrixWorld.elements;
+    return [e[0],e[4],e[8],e[1],e[5],e[9],e[2],e[6],e[10],e[12],e[13],e[14]];
+  },
   camera(){
     camera.updateMatrixWorld(true);
     return new RenderCameraSnapshot({
@@ -4674,10 +4698,13 @@ var RenderSceneBoundary={
       const src=Array.isArray(obj.material)?obj.material:[obj.material],ids=[];
       for(const m of src){const id=this.materialId(m);ids.push(id);if(!map.has(id)){const rm=this.material(m);map.set(id,rm);mats.push(rm)}}
       const mesh=this.mesh(obj,ids.length);if(!mesh)continue;
+      const localMesh=this.localMesh(obj,ids.length);if(!localMesh)continue;
       ros.push(new RenderObjectSnapshot({
         id:obj.userData?.id||obj.uuid,name:obj.name||'Object',
         sourceType:obj.userData?.primitiveType||obj.type||'Mesh',
-        materialIds:Object.freeze(ids.slice()),mesh
+        geometryId:obj.geometry?.uuid||obj.userData?.geometryId||obj.uuid,
+        transform:Object.freeze(this.transform(obj)),
+        materialIds:Object.freeze(ids.slice()),mesh,localMesh
       }));
     }
     const scene=new RenderSceneSnapshot({
@@ -6260,6 +6287,7 @@ const PhysicalBSDF=Object.freeze({
 
 const SurfaceInterpolator=Object.freeze({
   normal(acceleration,hit){
+    if(hit?.shadingNormal)return hit.shadingNormal;
     const s=acceleration.store,t=hit.triangleIndex,k=t*3;
     // v3.99.5: shading normals must follow the ray-oriented hit side, not raw triangle winding.
     // Otherwise valid back-face hits can force N.L to zero and make lit objects render black.
@@ -6279,6 +6307,7 @@ const SurfaceInterpolator=Object.freeze({
     return n;
   },
   uv(acceleration,hit){
+    if(hit?.uv)return hit.uv;
     const s=acceleration.store,t=hit.triangleIndex,k=t*3;
     if(!s.uvs||s.uvs.length!==(s.positions.length/3)*2)return [0,0];
     const ia=s.triangles[k],ib=s.triangles[k+1],ic=s.triangles[k+2],w=1-hit.u-hit.v;
@@ -8308,7 +8337,9 @@ var PathIntegrator=Object.freeze({
   },
 
   trace(job,acceleration,compiled,primaryRay,pixelSeed,initialHit=null){
-    if(window.__LitePixCore2Path412Enabled!==false&&typeof window.LitePixCore2PathAcceleration412==='function'){
+    if(window.__LitePixCore2Scene413Enabled!==false&&typeof window.LitePixSceneAcceleration413==='function'){
+      acceleration=window.LitePixSceneAcceleration413.wrap(acceleration,job);
+    }else if(window.__LitePixCore2Path412Enabled!==false&&typeof window.LitePixCore2PathAcceleration412==='function'){
       acceleration=window.LitePixCore2PathAcceleration412.wrap(acceleration,job);
     }
     let radiance=[0,0,0];
@@ -8401,7 +8432,9 @@ var PathIntegrator=Object.freeze({
   },
 
   tracePixel(job,acceleration,compiled,primaryRay,pixelSeed){
-    if(window.__LitePixCore2Path412Enabled!==false&&typeof window.LitePixCore2PathAcceleration412==='function'){
+    if(window.__LitePixCore2Scene413Enabled!==false&&typeof window.LitePixSceneAcceleration413==='function'){
+      acceleration=window.LitePixSceneAcceleration413.wrap(acceleration,job);
+    }else if(window.__LitePixCore2Path412Enabled!==false&&typeof window.LitePixCore2PathAcceleration412==='function'){
       acceleration=window.LitePixCore2PathAcceleration412.wrap(acceleration,job);
     }
     const primaryHitRecord=acceleration.trace(primaryRay);
@@ -8626,6 +8659,7 @@ var PathGIRenderer=Object.freeze({
         diagnostics:RenderPart5Core.diagnostics(job,compiled,acceleration),
         performance:RenderCoreH.performance(job),
         litePixNativePath:litePixPath410?.snapshot?.()||null,
+        litePixCore2Scene:job.litePixCore2Scene413?.snapshot?.()||null,
         litePixCore2BVH:job.litePixCore2Acceleration412?.snapshot?.()||null
       })
     };
