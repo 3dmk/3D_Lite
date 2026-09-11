@@ -1,213 +1,233 @@
 
-### BSDF
-6520:     return hits;
-6521:   }
-6522: }
-6523: window.RenderRayBatch16=RenderRayBatch16;
-6524: 
-6525: var RenderWorkQueue16 = class RenderWorkQueue16{
-6526:   constructor(chunks){
-6527:     this.queue=chunks.slice();
-6528:     this.completed=0;
-6529:     this.claimed=0;
-6530:     this.steals=0;
-6531:   }
-6532:   static fromIndices(indices,batchSize=128){
-6533:     const chunks=[];
-6534:     const n=indices.length;
-6535:     const adaptive=Math.max(16,Math.min(512,Math.round(batchSize*(n>250000?.5:n<10000?2:1))));
-6536:     for(let i=0;i<n;i+=adaptive){
-6537:       chunks.push(typeof indices.subarray==='function'?indices.subarray(i,Math.min(n,i+adaptive)):indices.slice(i,i+adaptive));
-6538:     }
-6539:     return new RenderWorkQueue16(chunks);
-6540:   }
-6541:   splitHeavy(maxChunk=128){
-6542:     const next=[];
-6543:     for(const chunk of this.queue){
-6544:       if(chunk.length>maxChunk){
-6545:         const mid=Math.ceil(chunk.length/2);
-6546:         next.push(chunk.slice(0,mid),chunk.slice(mid));
-6547:       }else next.push(chunk);
-6548:     }
-6549:     this.queue=next;
-6550:     return this;
-6551:   }
-6552:   claim(){
-6553:     const work=this.queue.shift()||null;
-6554:     if(work){if(this.claimed>0)this.steals++;this.claimed++;}
-6555:     return work;
-6556:   }
-6557:   async run(workerFn,concurrency=1){
-6558:     const runners=[];
-6559:     const n=Math.max(1,Math.min(8,Number(concurrency)||1));
-6560:     for(let w=0;w<n;w++)runners.push((async()=>{
-6561:       for(;;){
-6562:         const batch=this.claim();
-6563:         if(!batch)break;
-6564:         await workerFn(batch,w);
-6565:         this.completed++;
-6566:       }
-6567:     })());
-6568:     await Promise.all(runners);
-6569:     return this.completed;
-6570:   }
-6571: }
-6572: window.RenderWorkQueue16=RenderWorkQueue16;
-6573: 
-6574: var RenderTileScheduler16=Object.freeze({
-6575:   makeTiles(width,height,tileSize){
-6576:     const size=Math.max(4,Math.min(128,Number(tileSize)||16));
-6577:     const tiles=[];
-6578:     let id=0;
-6579:     for(let y=0;y<height;y+=size){
-6580:       for(let x=0;x<width;x+=size){
-6581:         tiles.push(Object.freeze({
-6582:           id:id++,x,y,
-6583:           width:Math.min(size,width-x),
-6584:           height:Math.min(size,height-y)
-6585:         }));
-6586:       }
-6587:     }
-6588:     return tiles;
-6589:   },
-6590:   async runLocal(job,tiles,runTile,onProgress=()=>{}){
-6591:     const total=Math.max(1,tiles.length);
-6592:     for(let i=0;i<tiles.length;i++){
-6593:       if(job.cancelled)throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
-6594:       while(job.paused&&!job.cancelled)await new Promise(r=>setTimeout(r,20));
-6595:       await runTile(tiles[i],i);
-6596:       onProgress((i+1)/total);
-6597:       if((i&1)===1)await new Promise(r=>setTimeout(r,0));
-6598:     }
-6599:   }
-6600: });
-6601: window.RenderTileScheduler16=RenderTileScheduler16;
-6602: 
-6603: /* 3DLite v3.99.1 — LiteTrace execution-context dependency repair */
-6604: var LiteTraceExecutionContext=(function(){
-6605:   const existing=window.LiteTraceExecutionContext;
-6606:   if(existing&&typeof existing==='object')return existing;
-6607:   const ctx={activeJob:null,performance:null};
-6608:   window.LiteTraceExecutionContext=ctx;
-6609:   return ctx;
-6610: })();
-6611: window.__3DLiteLiteTraceExecutionContext3978=true;
-6612: 
-6613: var BasicDirectRenderer=Object.freeze({
-6614:   shade(job,acceleration,materials,lights,ray,hit){
-6615:     const material=RenderMaterialLibrary.resolveHit(job.renderScene,materials,hit);
+### MATERIAL_BSDF
+6000:     if(!Number.isFinite(n))return [0.0144,0.0144,0.0144];
+6001:     return this.srgbToLinear([((n>>16)&255)/255,((n>>8)&255)/255,(n&255)/255]);
+6002:   },
+6003:   aces(c){
+6004:     const f=x=>{
+6005:       const a=2.51,b=.03,d=2.43,e=.59,g=.14;
+6006:       return this.clamp01((x*(a*x+b))/(x*(d*x+e)+g));
+6007:     };
+6008:     return [f(c[0]),f(c[1]),f(c[2])];
+6009:   }
+6010: });
+6011: 
+6012: const RenderMaterialPolicy=Object.freeze({
+6013:   finiteColor(c,fallback=[.54,.54,.54]){
+6014:     if(!Array.isArray(c)||c.length<3)return fallback.slice();
+6015:     return c.slice(0,3).map((v,i)=>{
+6016:       v=Number(v);
+6017:       return Number.isFinite(v)?Math.max(0,Math.min(1,v)):fallback[i];
+6018:     });
+6019:   },
+6020:   scalar(v,fallback,min,max){
+6021:     v=Number(v);
+6022:     if(!Number.isFinite(v))v=fallback;
+6023:     return Math.max(min,Math.min(max,v));
+6024:   },
+6025:   shading(v){
+6026:     return ['physical','lambert','unlit'].includes(v)?v:'physical';
+6027:   }
+6028: });
+6029: 
+6030: class RenderSurfaceMaterial{
+6031:   constructor(snapshot){
+6032:     snapshot=snapshot||{};
+6033:     this.id=String(snapshot.id||'__material__');
+6034:     this.name=String(snapshot.name||'Material');
+6035:     this.shading=RenderMaterialPolicy.shading(snapshot.shading);
+6036:     const srgb=RenderMaterialPolicy.finiteColor(snapshot.baseColor,[.54,.54,.54]);
+6037:     this.baseColor=Object.freeze(RenderColor.srgbToLinear(srgb));
+6038:     this.roughness=RenderMaterialPolicy.scalar(snapshot.roughness,.65,.045,1);
+6039:     this.metalness=RenderMaterialPolicy.scalar(snapshot.metalness,0,0,1);
+6040:     this.opacity=RenderMaterialPolicy.scalar(snapshot.opacity,1,0,1);
+6041:     this.transparent=!!snapshot.transparent;
+6042:     this.transmission=RenderMaterialPolicy.scalar(snapshot.transmission,0,0,1);
+6043:     this.ior=RenderMaterialPolicy.scalar(snapshot.ior,1.5,1.0001,3);
+6044:     this.thickness=RenderMaterialPolicy.scalar(snapshot.thickness,0,0,1e9);
+6045:     const attenSrgb=RenderMaterialPolicy.finiteColor(snapshot.attenuationColor,[1,1,1]);
+6046:     this.attenuationColor=Object.freeze(RenderColor.srgbToLinear(attenSrgb));
+6047:     this.attenuationDistance=(Number.isFinite(Number(snapshot.attenuationDistance))&&Number(snapshot.attenuationDistance)>0)?Number(snapshot.attenuationDistance):Infinity;
+6048:     const emissiveSrgb=RenderMaterialPolicy.finiteColor(snapshot.emissive,[0,0,0]);
+6049:     this.emissive=Object.freeze(RenderColor.srgbToLinear(emissiveSrgb));
+6050:     this.emissiveIntensity=RenderMaterialPolicy.scalar(snapshot.emissiveIntensity,0,0,1e8);
+6051:     Object.freeze(this);
+6052:   }
+6053: }
+6054: 
+6055: const RenderMaterialLibrary=Object.freeze({
+6056:   compile(renderScene){
+6057:     const byId=new Map(),list=[];
+6058:     for(const m of renderScene.materials){
+6059:       const material=new RenderSurfaceMaterial(m);
+6060:       byId.set(material.id,material);list.push(material);
+6061:     }
+6062:     const fallback=new RenderSurfaceMaterial({
+6063:       id:'__fallback__',name:'Fallback',baseColor:[.54,.54,.54],
+6064:       roughness:.65,metalness:0,opacity:1,emissive:[0,0,0],emissiveIntensity:0
+6065:     });
+6066:     return Object.freeze({
+6067:       list:Object.freeze(list),
+6068:       fallback,
+6069:       get(id){return byId.get(id)||fallback}
+6070:     });
+6071:   },
+6072:   resolveHit(renderScene,library,hit){
+6073:     const ro=renderScene.objects[hit.objectIndex];
+6074:     if(!ro)return library.fallback;
+6075:     const id=ro.materialIds[hit.materialIndex]??ro.materialIds[0];
+6076:     return library.get(id);
+6077:   }
+6078: });
+6079: 
+6080: class RenderDirectionalLight{
+6081:   constructor(direction,color=[1,1,1],intensity=1,name='Directional'){
+6082:     this.type='directional';
+6083:     this.name=name;
+6084:     this.direction=Object.freeze(RayMath.normalize(direction));
+6085:     this.color=Object.freeze(color.slice(0,3));
+6086:     this.intensity=Math.max(0,intensity);
+6087:     Object.freeze(this);
+6088:   }
+6089: }
+6090: 
+6091: class RenderAmbientLight{
+6092:   constructor(color=[1,1,1],intensity=.05,name='Environment Fill'){
+6093:     this.type='ambient';
+6094:     this.name=name;
+6095:     this.color=Object.freeze(color.slice(0,3));
+6096:     this.intensity=Math.max(0,intensity);
+6097:     Object.freeze(this);
+6098:   }
+6099: }
+6100: 
+6101: const BasicRenderLighting=Object.freeze({
+6102:   create(renderScene,settings){
+6103:     const sceneLights=SceneLightCompiler.compile(renderScene);
+6104:     if(sceneLights.length)return sceneLights;
+6105: 
+6106:     const q=renderScene.camera.quaternion;
+6107:     const keyDir=RenderCameraRayGenerator.rotateByQuaternion(
+6108:       RayMath.normalize([-.45,.65,.8]),q
+6109:     );
+6110:     const environment=RenderColor.hexToLinear(settings.background||'#202020');
+6111:     return Object.freeze([
+6112:       Object.freeze({type:'sun',name:'Default Key',direction:RayMath.mul(keyDir,-1),color:[1.0,.93,.82],intensity:2.4,enabled:true,castShadows:false}),
+6113:       Object.freeze({type:'dome',name:'Environment Fill',color:environment,intensity:Math.max(.025,.14*(settings.environmentStrength??1)),enabled:true,castShadows:false})
+6114:     ]);
+6115:   }
+6116: });
+6117: 
+6118: const PhysicalBSDF=Object.freeze({
+6119:   fresnelSchlick(cosTheta,f0){
+6120:     const m=Math.pow(1-Math.max(0,Math.min(1,cosTheta)),5);
+6121:     return [
+6122:       f0[0]+(1-f0[0])*m,
+6123:       f0[1]+(1-f0[1])*m,
+6124:       f0[2]+(1-f0[2])*m
+6125:     ];
+6126:   },
+6127:   distributionGGX(nDotH,roughness){
+6128:     const a=roughness*roughness,a2=a*a;
+6129:     const d=nDotH*nDotH*(a2-1)+1;
+6130:     return a2/Math.max(Math.PI*d*d,1e-7);
+6131:   },
+6132:   geometrySchlickGGX(nDotV,roughness){
+6133:     const r=roughness+1,k=(r*r)/8;
+6134:     return nDotV/Math.max(nDotV*(1-k)+k,1e-7);
+6135:   },
+6136:   geometrySmith(nDotV,nDotL,roughness){
+6137:     return this.geometrySchlickGGX(nDotV,roughness)*this.geometrySchlickGGX(nDotL,roughness);
+6138:   },
+6139:   evaluate(material,n,v,l){
+6140:     if(material.shading==='unlit')return material.baseColor;
+6141:     if(!material||![...n,...v,...l].every(Number.isFinite))return [0,0,0];
+6142: 
+6143:     const h=RayMath.normalize(RayMath.add(v,l));
+6144:     if(!h.every(Number.isFinite))return [0,0,0];
+6145:     const nDotL=Math.max(0,RayMath.dot(n,l));
+6146:     const nDotV=Math.max(0,RayMath.dot(n,v));
+6147:     const nDotH=Math.max(0,RayMath.dot(n,h));
+6148:     const vDotH=Math.max(0,RayMath.dot(v,h));
+6149:     if(nDotL<=0||nDotV<=0)return [0,0,0];
+6150: 
+6151:     const dielectricF0=[.04,.04,.04];
+6152:     const f0=RenderColor.mix(dielectricF0,material.baseColor,material.metalness);
+6153:     const F=this.fresnelSchlick(vDotH,f0);
+6154:     const D=this.distributionGGX(nDotH,material.roughness);
+6155:     const G=this.geometrySmith(nDotV,nDotL,material.roughness);
+6156: 
+6157:     const specScale=D*G/Math.max(4*nDotV*nDotL,1e-6);
+6158:     const spec=RenderColor.mul(F,specScale);
+6159: 
+6160:     const kD=[
+6161:       (1-F[0])*(1-material.metalness),
+6162:       (1-F[1])*(1-material.metalness),
+6163:       (1-F[2])*(1-material.metalness)
+6164:     ];
+6165:     const diffuse=[
+6166:       kD[0]*material.baseColor[0]/Math.PI,
+6167:       kD[1]*material.baseColor[1]/Math.PI,
+6168:       kD[2]*material.baseColor[2]/Math.PI
+6169:     ];
+6170:     const out=RenderColor.mul(RenderColor.add(diffuse,spec),nDotL);
+6171:     return out.map(x=>Number.isFinite(x)&&x>=0?x:0);
+6172:   }
+6173: });
+6174: 
+6175: const SurfaceInterpolator=Object.freeze({
+6176:   normal(acceleration,hit){
+6177:     const s=acceleration.store,t=hit.triangleIndex,k=t*3;
+6178:     // v3.99.5: shading normals must follow the ray-oriented hit side, not raw triangle winding.
+6179:     // Otherwise valid back-face hits can force N.L to zero and make lit objects render black.
+6180:     const faceNormal=hit.orientedGeometricNormal||hit.geometricNormal||[0,0,1];
+6181:     if(!s.normals||s.normals.length!==s.positions.length)return faceNormal;
+6182:     const ia=s.triangles[k],ib=s.triangles[k+1],ic=s.triangles[k+2];
+6183:     const w=1-hit.u-hit.v;
+6184:     const read=i=>[s.normals[i*3],s.normals[i*3+1],s.normals[i*3+2]];
+6185:     const a=read(ia),b=read(ib),c=read(ic);
+6186:     let n=RayMath.normalize([
+6187:       a[0]*w+b[0]*hit.u+c[0]*hit.v,
+6188:       a[1]*w+b[1]*hit.u+c[1]*hit.v,
+6189:       a[2]*w+b[2]*hit.u+c[2]*hit.v
+6190:     ]);
+6191:     if(!n.every(Number.isFinite)||RayMath.length(n)<1e-10)n=faceNormal;
+6192:     if(RayMath.dot(n,faceNormal)<0)n=RayMath.mul(n,-1);
+6193:     return n;
+6194:   },
+6195:   uv(acceleration,hit){
+6196:     const s=acceleration.store,t=hit.triangleIndex,k=t*3;
+6197:     if(!s.uvs||s.uvs.length!==(s.positions.length/3)*2)return [0,0];
+6198:     const ia=s.triangles[k],ib=s.triangles[k+1],ic=s.triangles[k+2],w=1-hit.u-hit.v;
+6199:     return [
+6200:       s.uvs[ia*2]*w+s.uvs[ib*2]*hit.u+s.uvs[ic*2]*hit.v,
+6201:       s.uvs[ia*2+1]*w+s.uvs[ib*2+1]*hit.u+s.uvs[ic*2+1]*hit.v
+6202:     ];
+6203:   }
+6204: });
+6205: 
+6206: const RenderAOVNames=Object.freeze([
+6207:   'Beauty','Alpha','Diffuse','Direct Lighting','Global Illumination',
+6208:   'Reflection','Refraction','Specular','Emission','Shadow',
+6209:   'Normal','Depth','Albedo','Object ID','Material ID','Noise'
+6210: ]);
+6211: 
+6212: class RenderAOVSet{
+6213:   constructor(width,height){
+6214:     this.width=width;this.height=height;
+6215:     this.channels=new Map();
+6216:     this.meta=new Map();
+6217:   }
+6218:   ensure(name,components=3){
+6219:     if(!this.channels.has(name)){
+6220:       this.channels.set(name,new Float32Array(this.width*this.height*components));
+6221:       this.meta.set(name,{components});
+6222:     }
+6223:     return this.channels.get(name);
+6224:   }
+6225:   set3(name,index,v){
 
-### LIGHTCACHE_PATH
-7890:       if(u<pa){pdf*=pa;node=a;}else{pdf*=1-pa;node=b;}
-7891:       depth++;
-7892:     }
-7893:     const entry=this.lights[node.lightIndex];
-7894:     const light=entry?.light||null;
-7895:     if(light?.direction&&light?.position){
-7896:       const toPoint=RayMath.normalize(RayMath.sub(point,light.position));
-7897:       const facing=Math.max(.05,Math.abs(RayMath.dot(RayMath.normalize(light.direction),toPoint)));
-7898:       pdf=Math.max(1e-8,pdf*facing);
-7899:     }
-7900:     return {light,sourceIndex:entry?.sourceIndex??node.lightIndex,pdf:Math.max(1e-8,Math.min(1,pdf)),depth};
-7901:   }
-7902:   stats(){
-7903:     return Object.freeze({lights:this.lights.length,nodes:this.nodes.length,depth:this.maxDepth(this.root)});
-7904:   }
-7905:   maxDepth(id){
-7906:     if(id<0)return 0;const n=this.nodes[id];if(n.leaf)return 1;
-7907:     return 1+Math.max(this.maxDepth(n.left),this.maxDepth(n.right));
-7908:   }
-7909: }
-7910: 
-7911: const PathGuidePolicy=Object.freeze({
-7912:   enabled(job){return !!job?.settings?.pathGuiding;},
-7913:   cellSize(job,acceleration){
-7914:     const scale=LightCachePolicy.sceneScale(acceleration);
-7915:     return Math.max(1e-4,scale/24);
-7916:   },
-7917:   minSamples:8,
-7918:   maxMix:.45,
-7919:   coneCos:.7071067811865476
-7920: });
-7921: 
-7922: class RenderPathGuideField{
-7923:   constructor(job,acceleration){
-7924:     this.cellSize=PathGuidePolicy.cellSize(job,acceleration);
-7925:     this.cells=new Map();
-7926:     this.updates=0;this.samples=0;this.guided=0;this.fallbacks=0;
-7927:   }
-7928:   key(p){return `${Math.floor(p[0]/this.cellSize)},${Math.floor(p[1]/this.cellSize)},${Math.floor(p[2]/this.cellSize)}`;}
-7929:   record(position,normal,direction,weight){
-7930:     if(!(weight>0)||!position?.every(Number.isFinite)||!direction?.every(Number.isFinite))return false;
-7931:     const d=RayMath.normalize(direction);if(RayMath.dot(normal,d)<=0)return false;
-7932:     const k=this.key(position),r=this.cells.get(k)||{sum:[0,0,0],weight:0,count:0,normal:[0,0,0]};
-7933:     r.sum=RayMath.add(r.sum,RayMath.mul(d,weight));
-7934:     r.normal=RayMath.add(r.normal,normal);
-7935:     r.weight+=weight;r.count++;this.cells.set(k,r);this.updates++;return true;
-7936:   }
-7937:   lookup(position,normal){
-7938:     const r=this.cells.get(this.key(position));
-7939:     if(!r||r.count<PathGuidePolicy.minSamples)return null;
-7940:     const dir=RayMath.normalize(r.sum);
-7941:     if(RayMath.dot(dir,normal)<=0)return null;
-7942:     return {direction:dir,count:r.count,confidence:Math.min(1,r.count/32)};
-7943:   }
-7944:   basis(n){
-7945:     const a=Math.abs(n[2])<.999?[0,0,1]:[0,1,0];
-7946:     const t=RayMath.normalize(RayMath.cross(a,n)),b=RayMath.cross(n,t);
-7947:     return {t,b};
-7948:   }
-7949:   sampleCone(axis,normal,seed,bounce){
-7950:     const u1=PathSampler.scalar(seed,bounce,40),u2=PathSampler.scalar(seed,bounce,41);
-7951:     const cosTheta=1-u1*(1-PathGuidePolicy.coneCos);
-7952:     const sinTheta=Math.sqrt(Math.max(0,1-cosTheta*cosTheta)),phi=2*Math.PI*u2;
-7953:     const {t,b}=this.basis(axis);
-7954:     let d=RayMath.add(RayMath.mul(axis,cosTheta),RayMath.add(RayMath.mul(t,Math.cos(phi)*sinTheta),RayMath.mul(b,Math.sin(phi)*sinTheta)));
-7955:     d=RayMath.normalize(d);
-7956:     if(RayMath.dot(d,normal)<=0){this.fallbacks++;return null;}
-7957:     return d;
-7958:   }
-7959:   pdf(position,normal,direction){
-7960:     const g=this.lookup(position,normal);if(!g)return 0;
-7961:     const c=RayMath.dot(g.direction,direction);
-7962:     if(c<PathGuidePolicy.coneCos||RayMath.dot(normal,direction)<=0)return 0;
-7963:     return 1/(2*Math.PI*(1-PathGuidePolicy.coneCos));
-7964:   }
-7965:   sample(position,normal,seed,bounce){
-7966:     const g=this.lookup(position,normal);if(!g)return null;
-7967:     const d=this.sampleCone(g.direction,normal,seed,bounce);if(!d)return null;
-7968:     this.samples++;this.guided++;
-7969:     return {direction:d,pdf:this.pdf(position,normal,d),confidence:g.confidence};
-7970:   }
-7971:   stats(){return Object.freeze({cells:this.cells.size,updates:this.updates,samples:this.samples,guided:this.guided,fallbacks:this.fallbacks,cellSize:this.cellSize});}
-7972: }
-7973: 
-7974: const GuidedBSDFSampler=Object.freeze({
-7975:   sample(job,material,n,v,position,seed,bounce){
-7976:     const field=job?.pathGuide;
-7977:     if(!PathGuidePolicy.enabled(job)||!field)return PathBSDFSampler.sample(material,n,v,seed,bounce);
-7978:     const guide=field.lookup(position,n);
-7979:     if(!guide)return PathBSDFSampler.sample(material,n,v,seed,bounce);
-7980: 
-7981:     const mix=Math.min(PathGuidePolicy.maxMix,.15+.3*guide.confidence);
-7982:     const choose=PathSampler.scalar(seed,bounce,42);
-7983:     let direction,lobe='guided';
-7984:     if(choose<mix){
-7985:       const gs=field.sample(position,n,seed,bounce);
-7986:       if(!gs)return PathBSDFSampler.sample(material,n,v,seed,bounce);
-7987:       direction=gs.direction;
-7988:     }else{
-7989:       const bs=PathBSDFSampler.sample(material,n,v,seed,bounce);
-7990:       if(!bs||bs.transmission)return bs;
-7991:       direction=bs.direction;lobe=bs.lobe;
-7992:     }
-7993:     const bsdfPdf=PathBSDFSampler.pdf(material,n,v,direction);
-7994:     const guidePdf=field.pdf(position,n,direction);
-7995:     const pdf=Math.max(1e-8,(1-mix)*bsdfPdf+mix*guidePdf);
-7996:     const value=PhysicalBSDF.evaluate(material,n,v,direction);
-7997:     return {direction,pdf,weight:RenderColor.mul(value,1/pdf),lobe,guided:true};
-7998:   }
-7999: });
+### DIRECT_MIS
 8000: 
 8001: 
 8002: const Group9DirectMIS=Object.freeze({
@@ -299,135 +319,8 @@
 8088:     return q==='Ultra'?12000:q==='High'?8000:q==='Draft'?1500:4000;
 8089:   },
 8090:   retraceEvery(job){
-8091:     const q=String(job?.settings?.quality||'Preview');
-8092:     return q==='Ultra'?8:q==='High'?12:q==='Draft'?32:16;
-8093:   },
-8094:   normalThreshold:.75
-8095: });
-8096: 
-8097: class RenderLightCache{
-8098:   constructor(job,acceleration){
-8099:     this.radius=LightCachePolicy.radius(job,acceleration);
-8100:     this.cellSize=this.radius;
-8101:     this.maxRecords=LightCachePolicy.maxRecords(job);
-8102:     this.records=[];
-8103:     this.grid=new Map();
-8104:     this.hits=0;this.misses=0;this.inserts=0;this.rejected=0;this.retraces=0;this.refreshes=0;
-8105:   }
-8106:   key(ix,iy,iz){return ix+','+iy+','+iz}
-8107:   cell(p){return [Math.floor(p[0]/this.cellSize),Math.floor(p[1]/this.cellSize),Math.floor(p[2]/this.cellSize)]}
-8108:   insert(position,normal,radiance){
-8109:     if(this.records.length>=this.maxRecords){this.rejected++;return false;}
-8110:     if(!position?.every(Number.isFinite)||!normal?.every(Number.isFinite)||!radiance?.every(v=>Number.isFinite(v)&&v>=0)){this.rejected++;return false;}
-8111:     const rec=Object.freeze({position:position.slice(),normal:RayMath.normalize(normal),radiance:radiance.slice()});
-8112:     const id=this.records.length;this.records.push(rec);this.inserts++;
-8113:     const c=this.cell(position),k=this.key(c[0],c[1],c[2]);
-8114:     let bucket=this.grid.get(k);if(!bucket)this.grid.set(k,bucket=[]);
-8115:     bucket.push(id);return true;
-8116:   }
-8117:   query(position,normal){
-8118:     const c=this.cell(position);let sum=[0,0,0],ws=0;
-8119:     for(let z=-1;z<=1;z++)for(let y=-1;y<=1;y++)for(let x=-1;x<=1;x++){
-8120:       const bucket=this.grid.get(this.key(c[0]+x,c[1]+y,c[2]+z));if(!bucket)continue;
-8121:       for(const id of bucket){
-8122:         const r=this.records[id];
-8123:         const delta=RayMath.sub(r.position,position),dist=RayMath.length(delta);
-8124:         if(dist>this.radius)continue;
-8125:         const nd=RayMath.dot(r.normal,normal);if(nd<LightCachePolicy.normalThreshold)continue;
-8126:         const w=(1-dist/this.radius)*Math.max(.05,nd);
-8127:         sum=RenderColor.add(sum,RenderColor.mul(r.radiance,w));ws+=w;
-8128:       }
-8129:     }
-8130:     if(ws>0){this.hits++;return RenderColor.mul(sum,1/ws);}
-8131:     this.misses++;return null;
-8132:   }
-8133:   refreshNearest(position,normal,radiance){
-8134:     const c=this.cell(position);let best=-1,bestD=Infinity;
-8135:     for(let z=-1;z<=1;z++)for(let y=-1;y<=1;y++)for(let x=-1;x<=1;x++){
-8136:       const bucket=this.grid.get(this.key(c[0]+x,c[1]+y,c[2]+z));if(!bucket)continue;
-8137:       for(const id of bucket){
-8138:         const r=this.records[id],d=RayMath.length(RayMath.sub(r.position,position));
-8139:         if(d<this.radius&&d<bestD&&RayMath.dot(r.normal,normal)>=LightCachePolicy.normalThreshold){best=id;bestD=d;}
-8140:       }
-8141:     }
-8142:     if(best<0)return this.insert(position,normal,radiance);
-8143:     const old=this.records[best];
-8144:     this.records[best]=Object.freeze({
-8145:       position:old.position,normal:old.normal,
-8146:       radiance:[
-8147:         old.radiance[0]*.75+radiance[0]*.25,
-8148:         old.radiance[1]*.75+radiance[1]*.25,
-8149:         old.radiance[2]*.75+radiance[2]*.25
-8150:       ]
-8151:     });
-8152:     this.refreshes++;return true;
-8153:   }
-8154:   stats(){return Object.freeze({records:this.records.length,hits:this.hits,misses:this.misses,inserts:this.inserts,rejected:this.rejected,retraces:this.retraces,refreshes:this.refreshes,radius:this.radius});}
-8155: }
-8156: 
-8157: const LightCacheEstimator=Object.freeze({
-8158:   enabled(job){return job?.settings?.globalIllumination!==false&&job?.settings?.secondaryGI==='Light Cache';},
-8159:   cacheable(material){return material&&material.shading!=='unlit'&&(material.transmission||0)<.05&&(material.metalness||0)<.95;},
-8160: 
-8161:   probe(job,acceleration,compiled,hit,n,material,seed,bounce){
-8162:     const count=LightCachePolicy.probes(job);
-8163:     let incoming=[0,0,0];
-8164:     for(let i=0;i<count;i++){
-8165:       const d=PathSampler.cosineHemisphere(n,seed^Math.imul(i+1,0x85EBCA77),bounce+17);
-8166:       const origin=PathIntegrator.offsetOrigin(hit,n,d);
-8167:       const eps=RenderRayPolicy.epsilonForPoint(origin);
-8168:       const probeRay=new RenderRay(origin,d,eps,Infinity,RenderRayType.DIFFUSE,bounce+1);
-8169:       try{LiteTraceExecutionContext.performance?.addProbe?.();}catch(_){}
-8170:       const ph=acceleration.trace(probeRay);
-8171:       let li;
-8172:       if(!ph.hit){
-8173:         li=PathIntegrator.safeColor(RenderCoreD.evaluateEnvironment(job,compiled,d));
-8174:       }else{
-8175:         li=PathIntegrator.safeColor(Group9DirectMIS.evaluate(job,acceleration,compiled,probeRay,ph,seed^Math.imul(i+3,0x9E3779B9)));
-8176:       }
-8177:       incoming=RenderColor.add(incoming,li);
-8178:     }
-8179:     incoming=RenderColor.mul(incoming,1/Math.max(1,count));
-8180:     const diffuse=RenderColor.mul(material.baseColor,Math.max(0,1-material.metalness));
-8181:     return RenderColor.mul(diffuse,incoming);
-8182:   },
-8183: 
-8184:   estimate(job,acceleration,compiled,hit,n,material,seed,bounce){
-8185:     const cache=job.lightCache;if(!cache||!this.cacheable(material))return null;
-8186:     const found=cache.query(hit.position,n);
-8187:     if(found){
-8188:       const cadence=LightCachePolicy.retraceEvery(job);
-8189:       if(cadence>0&&cache.hits%cadence===0){
-8190:         cache.retraces++;
-8191:         const fresh=this.probe(job,acceleration,compiled,hit,n,material,seed^0xB5297A4D,bounce);
-8192:         cache.refreshNearest(hit.position,n,fresh);
-8193:         return RenderColor.mul(RenderColor.add(RenderColor.mul(found,.75),RenderColor.mul(fresh,.25)),1);
-8194:       }
-8195:       return found;
-8196:     }
-8197: 
-8198:     const outgoing=this.probe(job,acceleration,compiled,hit,n,material,seed,bounce);
-8199:     cache.insert(hit.position,n,outgoing);
-8200:     return outgoing;
-8201:   }
-8202: });
-8203: 
-8204: var PathIntegrator=Object.freeze({
-8205:   maxDepth(job){
-8206:     return Math.max(1,Math.min(16,Number(job?.settings?.maxBounces)||5));
-8207:   },
-8208: 
-8209:   finiteColor(c){
-8210:     return Array.isArray(c)&&c.length===3&&c.every(v=>Number.isFinite(v)&&v>=0);
-8211:   },
-8212: 
-8213:   safeColor(c){
-8214:     return this.finiteColor(c)?c:[0,0,0];
-8215:   },
-8216: 
-8217:   offsetOrigin(hit,n,direction){
-8218:     const sign=RayMath.dot(direction,n)>=0?1:-1;
-8219:     const eps=RenderRayPolicy.epsilonForPoint(hit.position);
+
+### PATH_THROUGHPUT
 8220:     return RayMath.add(hit.position,RayMath.mul(n,eps*sign));
 8221:   },
 8222: 
@@ -504,48 +397,48 @@
 8293:           DielectricTransport.beerLambert(material.attenuationColor,material.thickness,material.attenuationDistance)
 8294:         );
 8295:       }
+8296: 
+8297:       previousGuide=(!sample.transmission&&job.pathGuide&&RayMath.dot(n,sample.direction)>0)
+8298:         ? {position:hit.position.slice(),normal:n.slice(),direction:sample.direction.slice()}
+8299:         : null;
+8300: 
+8301:       if(pathRays>=maxPathRays)break;
+8302:       pathRays++;
+8303:       const origin=this.offsetOrigin(hit,n,sample.direction);
+8304:       const eps=RenderRayPolicy.epsilonForPoint(origin);
+8305:       const rayType=sample.transmission?RenderRayType.TRANSMISSION:(sample.lobe==='ggx'?RenderRayType.GLOSSY:RenderRayType.DIFFUSE);
+8306:       RenderCoreH.attachPerformance(job).addRay(rayType);
+8307:       ray=new RenderRay(origin,sample.direction,eps,Infinity,rayType,bounce+1);
+8308:     }
+8309: 
+8310:     return radiance;
+8311:   },
+8312: 
+8313:   tracePixel(job,acceleration,compiled,primaryRay,pixelSeed){
+8314:     const primaryHitRecord=acceleration.trace(primaryRay);
+8315:     if(!primaryHitRecord.hit){
+8316:       const env=this.safeColor(RenderCoreD.evaluateEnvironment(job,compiled,primaryRay.direction));
+8317:       return {radiance:env,primaryHit:false,primaryHitRecord:null};
+8318:     }
+8319:     return {
+8320:       radiance:this.trace(job,acceleration,compiled,primaryRay,pixelSeed,primaryHitRecord),
+8321:       primaryHit:true,
+8322:       primaryHitRecord
+8323:     };
+8324:   }
+8325: });
+8326: 
+8327: class ProgressiveAccumulator{
+8328:   constructor(width,height){
+8329:     this.width=width;this.height=height;
+8330:     const n=width*height;
+8331:     this.sum=new Float64Array(n*3);
+8332:     this.mean=new Float64Array(n);
+8333:     this.m2=new Float64Array(n);
+8334:     this.samples=new Uint32Array(n);
+8335:     this.converged=new Uint8Array(n);
 
-### GI_INTEGRATION
-8380:     let total=0;for(let i=0;i<this.samples.length;i++)total+=this.samples[i];
-8381:     return total/Math.max(1,this.samples.length);
-8382:   }
-8383:   activeIndices(settings){
-8384:     const out=new Uint32Array(this.active||this.samples.length);
-8385:     let n=0;
-8386:     for(let i=0;i<this.samples.length;i++){
-8387:       if(this.shouldSample(i,settings))out[n++]=i;
-8388:       else this.markConverged(i);
-8389:     }
-8390:     return out.subarray(0,n);
-8391:   }
-8392:   compactActive(settings){
-8393:     return this.activeIndices(settings);
-8394:   }
-8395: 
-8396:   averageNoise(){
-8397:     let sum=0,count=0;
-8398:     for(let i=0;i<this.samples.length;i++){
-8399:       if(this.samples[i]>1&&Number.isFinite(this.noise(i))){sum+=this.noise(i);count++;}
-8400:     }
-8401:     return count?sum/count:null;
-8402:   }
-8403: }
-8404: 
-8405: var PathGIRenderer=Object.freeze({
-8406:   async render(job,acceleration,onProgress=()=>{}){
-8407:     const rr=RenderRegion14.resolve(job,640,360);
-8408:     const width=rr.width,height=rr.height;
-8409:     const compiled=RenderPart5Core.compile(job);
-8410:     const settings=job.settings;
-8411:     job.lightCache=LightCacheEstimator.enabled(job)?new RenderLightCache(job,acceleration):null;
-8412:     job.lightTree=RenderCoreH.createLightTree(job,compiled);
-8413:     job.pathGuide=RenderCoreH.createPathGuide(job,acceleration);
-8414:     job.progress.gi=settings.secondaryGI==='Light Cache'?'Brute Force + Light Cache':settings.secondaryGI;
-8415:     const accumulator=new ProgressiveAccumulator(width,height);
-8416:     const aovs=new RenderAOVSet(width,height);
-8417:     const primaryMask=new Uint8Array(width*height);
-8418:     const perf16=RenderCoreH.attachPerformance(job);
-8419:     const rowChunk16=RenderCoreH.yieldRows(job);
+### PATH_RENDER_LOOP
 8420:     const renderStart16=RenderProfiler16.begin();
 8421:     LiteTraceExecutionContext.activeJob=job;LiteTraceExecutionContext.performance=perf16;
 8422:     const maxSamples=Math.max(1,settings.maxSamples||1);
@@ -672,459 +565,3 @@
 8543:     'Core B ray/BVH tracing',
 8544:     'Core C physical materials and lights',
 8545:     'Group 7 shadow visibility and direct-light sampling'
-
-### PATH_RENDERER
-11200:   if(typeof RenderGroup11Core?.create!=='function')failures.push('Group 11 Light Cache factory missing');
-11201:   if(!/LightCacheEstimator/.test(PathIntegrator.trace.toString()))failures.push('Path Integrator does not consume Group 11 Light Cache');
-11202:   if(!/secondaryGI/.test(PathIntegrator.trace.toString()))failures.push('Secondary GI mode boundary missing');
-11203: return {ok:failures.length===0,failures};
-11204: }
-11205: window.runRendererConsolidationChecks=runRendererConsolidationChecks;
-11206: 
-11207: function runPart1RendererOwnershipTests(){
-11208:   const failures=[];
-11209:   try{
-11210:     const core1Source=RenderCore1.createRequest.toString();
-11211:     const masterSource=RendererMasterCore.createRequest.toString();
-11212:     const frameworkSource=RenderFramework.render.toString();
-11213:     if(!core1Source.includes('RenderCoreA.createRequest'))failures.push('Core 1 does not delegate snapshot request to Core A');
-11214:     if(core1Source.includes('RendererMasterCore.createRequest'))failures.push('Core 1 request recurses into Master Core');
-11215:     if(!masterSource.includes('RenderCore1.createRequest'))failures.push('Master Core does not route through Core 1');
-11216:     if(!frameworkSource.includes('RendererMasterCore.createRequest'))failures.push('RenderFramework bypasses Master Core');
-11217:     if(typeof RendererBootstrap.recover!=='function')failures.push('Renderer recovery API missing');
-11218:     if(typeof RendererRuntimeState.snapshot!=='function')failures.push('Renderer health snapshot missing');
-11219:   }catch(err){failures.push(String(err?.message||err));}
-11220:   return {ok:failures.length===0,failures};
-11221: }
-11222: window.runPart1RendererOwnershipTests=runPart1RendererOwnershipTests;
-11223: 
-11224: const RenderPart2Diagnostics=Object.freeze({
-11225:   snapshot(scene){return Object.freeze({objects:scene?.objects?.length||0,materials:scene?.materials?.length||0,lights:scene?.lights?.length||0,revisions:{...(scene?.metadata||{})}})},
-11226:   geometry(){return RenderGeometryCompiler.lastStats},
-11227:   acceleration(acceleration){return acceleration?.stats||null}
-11228: });
-11229: 
-11230: function runRenderPart2SelfTests(){
-11231:   const errors=[];
-11232:   try{
-11233:     const mat=new RenderMaterialSnapshot({id:'m',name:'m'});
-11234:     const mesh=new RenderMeshSnapshot({positions:new Float32Array([0,0,0,1,0,0,0,1,0]),normals:new Float32Array(9),uvs:new Float32Array(6),indices:new Uint32Array([0,1,2]),materialIndices:new Uint16Array([0]),bounds:{min:[0,0,0],max:[1,1,0]}});
-11235:     const obj=new RenderObjectSnapshot({id:'o',name:'o',materialIds:Object.freeze(['m']),mesh});
-11236:     const scene=new RenderSceneSnapshot({objects:[obj],materials:[mat],lights:[],camera:new RenderCameraSnapshot({position:[0,0,2],quaternion:[0,0,0,1],up:[0,0,1],fov:50,aspect:1,near:0.01,far:100}),metadata:{sceneRevision:1,geometryRevision:2,materialRevision:3,lightRevision:4,cameraRevision:5}});
-11237:     const sv=RenderSnapshotValidator.validate(scene);if(!sv.ok)errors.push('Valid snapshot rejected: '+sv.errors.join(','));
-11238:     const packets=RenderGeometryCompiler.compileScene(scene);if(packets.length!==1)errors.push('Geometry compile count failed');
-11239:     const pv=RenderGeometryValidation.validatePacket(packets[0]);if(!pv.ok)errors.push('Valid packet rejected');
-11240:     const acc=RenderCoreB.buildAccelerationFromPackets(packets);if(acc.triangleCount!==1)errors.push('Acceleration triangle count failed');
-11241:     const inv=RenderRevisionPolicy.invalidation(scene,new RenderSceneSnapshot({objects:[obj],materials:[mat],lights:[],camera:scene.camera,metadata:{sceneRevision:1,geometryRevision:2,materialRevision:4,lightRevision:4,cameraRevision:5}}));
-11242:     if(inv.rebuildAcceleration||!inv.rebuildMaterials)errors.push('Revision invalidation rules failed');
-11243:   }catch(err){errors.push('Part2 self-test exception: '+String(err?.message||err));}
-11244:   return {ok:errors.length===0,errors};
-11245: }
-11246: window.RenderPart2Diagnostics=RenderPart2Diagnostics;
-11247: window.runRenderPart2SelfTests=runRenderPart2SelfTests;
-11248: 
-11249: function runRendererRegressionSuite(){
-11250:   const failures=[];
-11251:   const test=(name,fn)=>{try{fn();}catch(err){failures.push(`${name}: ${String(err?.message||err)}`);}};
-11252:   const expect=(condition,message)=>{if(!condition)throw new Error(message);};
-11253:   const finite3=v=>Array.isArray(v)&&v.length===3&&v.every(Number.isFinite);
-11254: 
-11255:   test('empty scene acceleration',()=>{
-11256:     const store=new RenderTriangleStore();store.finalize();
-11257:     const acc=new RenderAccelerationSet(store,new RenderBVH(store,4));
-11258:     expect(!acc.trace(new RenderRay([0,0,0],[0,0,1])).hit,'empty acceleration should miss');
-11259:   });
-11260: 
-11261:   test('legacy minimal geometry packet',()=>{
-11262:     const store=new RenderTriangleStore();
-11263:     store.addPacket({objectId:'legacy',positions:new Float32Array([0,0,0,1,0,0,0,1,0]),indices:new Uint32Array([0,1,2]),materialIndices:new Uint16Array([0])},0);
-11264:     store.finalize();
-11265:     expect(store.triangleCount()===1,'legacy packet triangle missing');
-11266:   });
-11267: 
-11268:   test('degenerate triangle rejection',()=>{
-11269:     const store=new RenderTriangleStore();
-11270:     store.addPacket({objectId:'deg',positions:new Float32Array([0,0,0,0,0,0,0,0,0]),indices:new Uint32Array([0,1,2]),materialIndices:new Uint16Array([0])},0);
-11271:     store.finalize();
-11272:     expect(store.triangleCount()===0,'degenerate triangle accepted');
-11273:   });
-11274: 
-11275:   test('closest-hit any-hit finite shadow tMax',()=>{
-11276:     const store=new RenderTriangleStore();
-11277:     store.addPacket({
-11278:       objectId:'depth-test',
-11279:       positions:new Float32Array([-2,-2,2,2,-2,2,0,2,2,-2,-2,5,2,-2,5,0,2,5]),
-11280:       normals:new Float32Array(18),uvs:new Float32Array(12),
-11281:       indices:new Uint32Array([0,1,2,3,4,5]),materialIndices:new Uint16Array([0,0])
-11282:     },0);
-11283:     store.finalize();
-11284:     const acc=new RenderAccelerationSet(store,new RenderBVH(store,1));
-11285:     const hit=acc.trace(new RenderRay([0,0,0],[0,0,1],1e-5,100));
-11286:     expect(hit.hit&&Math.abs(hit.t-2)<1e-3,'closest hit is not nearest');
-11287:     expect(acc.occluded(new RenderRay([0,0,0],[0,0,1],1e-5,3,RenderRayType.SHADOW,0)),'any-hit missed blocker');
-11288:     expect(!acc.occluded(new RenderRay([0,0,0],[0,0,1],1e-5,1,RenderRayType.SHADOW,0)),'finite shadow tMax crossed light distance');
-11289:   });
-11290: 
-11291:   test('tiny huge epsilon',()=>{
-11292:     const a=RenderRayPolicy.epsilonForPoint([1e-9,0,0]);
-11293:     const b=RenderRayPolicy.epsilonForPoint([1e8,0,0]);
-11294:     expect(Number.isFinite(a)&&Number.isFinite(b)&&a>0&&b>=a,'scale-aware epsilon failed');
-11295:   });
-11296: 
-11297:   test('camera inside mesh finite ray',()=>{
-11298:     const ray=RenderCameraRayGenerator.ray({position:[0,0,0],quaternion:[0,0,0,1],up:[0,0,1],fov:60,near:1e-5,far:100},.5,.5,2,2);
-11299:     expect(finite3(ray.origin)&&finite3(ray.direction),'camera ray non-finite');
-11300:   });
-11301: 
-11302:   test('all current light types compile',()=>{
-11303:     const types=['point','spot','rectangle','disc','sphere','sun','dome','mesh'];
-11304:     const scene={lights:types.map((type,i)=>({
-11305:       id:`l${i}`,name:type,type,enabled:true,color:'#ffffff',intensity:1,range:10,size:1,width:1,height:1,
-11306:       coneAngle:45,penumbra:.1,castShadows:i%2===0,position:[0,0,5],direction:[0,0,-1]
-11307:     }))};
-11308:     const out=SceneLightCompiler.compile(scene);
-11309:     expect(out.length===types.length,'not all light types compiled');
-11310:     expect(out.every((l,i)=>l.type===types[i]),'light type mismatch');
-11311:   });
-11312: 
-11313:   test('castShadows on off',()=>{
-11314:     const make=v=>new RenderSceneLight({id:String(v),name:'L',type:'point',enabled:true,color:'#ffffff',intensity:1,range:0,size:1,width:1,height:1,coneAngle:45,penumbra:0,castShadows:v,position:[0,0,1],direction:[0,0,-1]});
-11315:     expect(make(true).castShadows===true&&make(false).castShadows===false,'castShadows state lost');
-11316:   });
-11317: 
-11318:   test('metal rough emissive material',()=>{
-11319:     const m=new RenderSurfaceMaterial({id:'m',name:'m',shading:'physical',baseColor:[.8,.4,.2],roughness:.2,metalness:1,opacity:1,emissive:[.1,.2,.3],emissiveIntensity:4});
-11320:     expect(m.metalness===1&&m.roughness>=.045&&m.emissiveIntensity===4,'material fields incorrect');
-11321:     expect(finite3(PhysicalBSDF.emission(m)),'emission non-finite');
-11322:   });
-11323: 
-11324:   test('transparent background setting',()=>{
-11325:     const s=RenderSettingsPolicy.sanitize({...new RenderSettingsModel().clone(),transparent:true});
-11326:     expect(s.transparent===true,'transparent setting lost');
-11327:   });
-11328: 
-11329:   test('Fast Path renderer selection',()=>{
-11330:     expect(RendererMasterCore.rendererFor({settings:{engine:'fast',globalIllumination:true}})===BasicDirectRenderer,'Fast renderer selection failed');
-11331:     expect(RendererMasterCore.rendererFor({settings:{engine:'path',globalIllumination:true}})===PathGIRenderer,'Path renderer selection failed');
-11332:   });
-11333: 
-11334:   test('Path environment escape',()=>{
-11335:     const job={settings:{background:'#202020',maxBounces:5},renderScene:{objects:[]}};
-11336:     const accel={trace(){return {hit:false};}};
-11337:     const ray=new RenderRay([0,0,0],[0,0,-1],1e-4,Infinity,RenderRayType.CAMERA,0);
-11338:     const out=PathIntegrator.tracePixel(job,accel,{lights:[]},ray,1);
-11339:     expect(out.primaryHit===false&&finite3(out.radiance),'path miss/environment failed');
-11340:   });
-11341: 
-11342:   test('worker lifecycle contract',()=>{
-11343:     expect(typeof RenderWorkerPool.prototype.cancelJob==='function','cancelJob missing');
-11344:     expect(typeof RenderWorkerPool.prototype.pause==='function','pause missing');
-11345:     expect(typeof RenderWorkerPool.prototype.resume==='function','resume missing');
-11346:     expect(typeof RenderWorkerPool.prototype.reset==='function','reset missing');
-11347:     expect(typeof RenderJobController.prototype.configureThreads==='function','thread config missing');
-11348:   });
-11349: 
-11350:   test('framebuffer valid stale lifecycle',()=>{
-11351:     const canvas=document.createElement('canvas');canvas.width=1;canvas.height=1;
-11352:     const fb=new RenderFrameBufferView(canvas);
-11353:     fb.present({width:1,height:1,rgba:new Uint8ClampedArray([0,0,0,255])});
-11354:     expect(fb.hasValidFrame,'valid frame not retained');
-11355:     fb.clear();
-11356:     expect(!fb.hasValidFrame&&fb.snapshot()===null,'stale frame not invalidated');
-11357:   });
-11358: 
-11359:   test('parts 3 through 6 validators',()=>{
-11360:     [validateRenderPart3,validateRenderPart4,validateRenderPart5,validateRenderPart6].forEach((fn,i)=>{
-11361:       const r=fn();expect(r?.ok,`Part ${i+3} failed: ${(r?.errors||[]).join(',')}`);
-11362:     });
-11363:   });
-11364: 
-11365:   return {ok:failures.length===0,failures,count:15};
-11366: }
-11367: window.runRendererRegressionSuite=runRendererRegressionSuite;
-11368: 
-11369: 
-11370: /* ============================================================
-11371:    3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — PART 3 GEN3
-11372:    WORKERS + CANCELLATION + RECOVERY
-11373:    ============================================================ */
-11374: const RenderPart3Contract=Object.freeze({
-11375:   owns:Object.freeze([
-11376:     'worker lifecycle','worker queue','worker cancellation',
-11377:     'worker timeout recovery','worker resizing','worker diagnostics'
-11378:   ]),
-11379:   consumes:Object.freeze(['immutable render packets','render job IDs','CPU thread setting']),
-11380:   doesNotOwn:Object.freeze(['editor scene','editor geometry','viewport','selection','undo','materials'])
-
-### PATH_PROGRESSIVE
-11620:   }
-11621: });
-11622: 
-11623: function runRenderPart5SelfTests(){
-11624:   const errors=[];
-11625:   const finite3=v=>Array.isArray(v)&&v.length===3&&v.every(Number.isFinite);
-11626: 
-11627:   try{
-11628:     const mat=new RenderSurfaceMaterial({
-11629:       id:'p5mat',name:'P5',shading:'physical',
-11630:       baseColor:[2,-1,NaN],roughness:-5,metalness:4,opacity:2,
-11631:       emissive:[NaN,.5,2],emissiveIntensity:-5
-11632:     });
-11633:     if(!finite3(mat.baseColor)||!finite3(mat.emissive))errors.push('Material finite-color sanitization failed');
-11634:     if(mat.roughness<.045||mat.roughness>1)errors.push('Roughness clamp failed');
-11635:     if(mat.metalness!==1||mat.opacity!==1||mat.emissiveIntensity!==0)errors.push('Material scalar clamp failed');
-11636:   }catch(err){errors.push('Material policy test: '+String(err?.message||err));}
-11637: 
-11638:   try{
-11639:     const mat=new RenderSurfaceMaterial({
-11640:       id:'ggx',name:'GGX',shading:'physical',baseColor:[.5,.5,.5],
-11641:       roughness:.045,metalness:1,opacity:1,emissive:[0,0,0],emissiveIntensity:0
-11642:     });
-11643:     const out=PhysicalBSDF.evaluate(mat,[0,0,1],[1,0,.000001],[1,0,.000001]);
-11644:     if(!finite3(out)||out.some(v=>v<0))errors.push('GGX grazing-angle finite test failed');
-11645:   }catch(err){errors.push('GGX finite test: '+String(err?.message||err));}
-11646: 
-11647:   try{
-11648:     const c=RenderCameraPolicy.sanitize({
-11649:       position:[NaN,0,0],quaternion:[0,0,0,0],up:[0,0,1],
-11650:       fov:999,aspect:0,near:-1,far:0
-11651:     });
-11652:     if(!finite3(c.position)||!finite3(c.quaternion.slice(0,3))||c.fov!==179||c.near<=0||c.far!==Infinity)
-11653:       errors.push('Camera sanitization failed');
-11654: 
-11655:     const center=RenderCameraRayGenerator.ray(
-11656:       {position:[0,0,0],quaternion:[0,0,0,1],up:[0,0,1],fov:50,near:.01,far:100},
-11657:       49.5,49.5,100,100
-11658:     );
-11659:     if(Math.abs(center.direction[0])>1e-6||Math.abs(center.direction[1])>1e-6||center.direction[2]>-.999)
-11660:       errors.push('Camera center-ray test failed');
-11661: 
-11662:     if(Math.abs(RenderCameraPolicy.outputAspect(1920,1080)-(16/9))>1e-9)
-11663:       errors.push('Camera output-aspect test failed');
-11664:   }catch(err){errors.push('Camera test: '+String(err?.message||err));}
-11665: 
-11666:   try{
-11667:     const fakeJob={settings:{maxBounces:999}};
-11668:     if(PathIntegrator.maxDepth(fakeJob)!==16)errors.push('Path upper bounce clamp failed');
-11669:     if(PathIntegrator.maxDepth({settings:{maxBounces:0}})!==5)errors.push('Path invalid bounce fallback failed');
-11670:   }catch(err){errors.push('Path depth test: '+String(err?.message||err));}
-11671: 
-11672:   try{
-11673:     const envCompiled={lights:[]};
-11674:     const envJob={settings:{background:'#202020',maxBounces:5},renderScene:{objects:[]}};
-11675:     const missAccel={trace(){return {hit:false};}};
-11676:     const ray=new RenderRay([0,0,0],[0,0,-1],1e-4,Infinity,RenderRayType.CAMERA,0);
-11677:     const miss=PathIntegrator.tracePixel(envJob,missAccel,envCompiled,ray,1);
-11678:     if(miss.primaryHit!==false||!finite3(miss.radiance))errors.push('Path environment escape failed');
-11679:   }catch(err){errors.push('Path environment test: '+String(err?.message||err));}
-11680: 
-11681:   try{
-11682:     const unlit=new RenderSurfaceMaterial({
-11683:       id:'unlit',name:'Unlit',shading:'unlit',baseColor:[.5,.5,.5],
-11684:       roughness:.5,metalness:0,opacity:1,emissive:[.1,0,0],emissiveIntensity:2
-11685:     });
-11686:     if(PathBSDFSampler.sample(unlit,[0,0,1],[0,0,1],1,0)!==null)
-11687:       errors.push('Unlit path termination failed');
-11688:   }catch(err){errors.push('Unlit termination test: '+String(err?.message||err));}
-11689: 
-11690:   return {ok:errors.length===0,errors};
-11691: }
-11692: 
-11693: function validateRenderPart5(){
-11694:   const errors=[];
-11695:   if(typeof RenderMaterialPolicy?.finiteColor!=='function')errors.push('RenderMaterialPolicy missing');
-11696:   if(typeof PhysicalBSDF?.evaluate!=='function')errors.push('PhysicalBSDF missing');
-11697:   if(typeof SurfaceInterpolator?.normal!=='function')errors.push('Surface normal interpolator missing');
-11698:   if(typeof RenderCameraPolicy?.sanitize!=='function')errors.push('RenderCameraPolicy missing');
-11699:   if(typeof RenderCameraRayGenerator?.ray!=='function')errors.push('Render camera ray generator missing');
-11700:   if(typeof PathIntegrator?.trace!=='function')errors.push('PathIntegrator missing');
-11701:   if(typeof PathGIRenderer?.render!=='function')errors.push('PathGIRenderer missing');
-11702:   const t=runRenderPart5SelfTests();if(!t.ok)errors.push(...t.errors);
-11703:   return {ok:errors.length===0,errors};
-11704: }
-11705: 
-11706: var RenderPart5Core=Object.freeze({
-11707:   version:'3.79.19-part5-gen3',
-11708:   compile(job){return job.shadingContext||RenderCoreC.compileScene(job.renderScene,job.settings);},
-11709:   ray(cameraSnapshot,x,y,width,height){return RenderCameraRayGenerator.ray(cameraSnapshot,x,y,width,height);},
-11710:   trace(job,acceleration,compiled,ray,pixelSeed){return PathIntegrator.tracePixel(job,acceleration,compiled,ray,pixelSeed);},
-11711:   diagnostics(job,compiled,acceleration){return PathRenderDiagnostics.summarize(job,compiled,acceleration);},
-11712:   validate:validateRenderPart5
-11713: });
-11714: Object.assign(window,{
-11715:   RenderMaterialPolicy,RenderCameraPolicy,RenderPart5Contract,PathRenderDiagnostics,
-11716:   runRenderPart5SelfTests,validateRenderPart5,RenderPart5Core
-11717: });
-11718: 
-11719: 
-11720: /* ============================================================
-11721:    3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — PART 6 GEN3
-11722:    FRAMEBUFFER + SETTINGS + PERFORMANCE CLEANUP
-11723:    ============================================================ */
-11724: const RenderPart6Contract=Object.freeze({
-11725:   owns:Object.freeze([
-11726:     'framebuffer validity and presentation',
-11727:     'framebuffer controls',
-11728:     'supported output settings',
-11729:     'render-setting sanitization',
-11730:     'quality/custom-setting behavior',
-11731:     'baseline renderer performance metrics'
-11732:   ]),
-11733:   consumes:Object.freeze([
-11734:     'RenderJob lifecycle',
-11735:     'Part 3 worker statistics',
-11736:     'Part 4 Fast renderer',
-11737:     'Part 5 Path renderer'
-11738:   ]),
-11739:   doesNotOwn:Object.freeze([
-11740:     'progressive sample accumulation','adaptive convergence','MIS',
-11741:     'denoising','EXR/float channel export','region pixel selection',
-11742:     'advanced tile scheduler'
-11743:   ])
-11744: });
-11745: 
-11746: var RenderPart6Core=Object.freeze({
-11747:   version:'3.79.20-part6-gen3',
-11748:   sanitizeSettings(s){return RenderSettingsPolicy.sanitize(s);},
-11749:   frameValid(){return !!RenderFramework?.ui?.frameBuffer?.hasValidFrame;},
-11750:   workerStats(){return RenderFramework?.jobs?.workerStats?.()||null;},
-11751:   activeMetrics(){
-11752:     const j=RenderFramework?.jobs?.activeJob;
-11753:     return j?Object.freeze({
-11754:       status:j.status,
-11755:       elapsedMs:j.progress.elapsedMs||0,
-11756:       raysPerSecond:j.progress.raysPerSecond,
-11757:       performance:j.performance||null,
-11758:       workers:this.workerStats()
-11759:     }):null;
-11760:   },
-11761:   validate:validateRenderPart6
-11762: });
-11763: 
-11764: function runRenderPart6SelfTests(){
-11765:   const errors=[];
-11766:   try{
-11767:     const s=RenderSettingsPolicy.sanitize({
-11768:       engine:'bad',quality:'bad',width:-10,height:999999,percentage:999,
-11769:       maxBounces:99,background:'bad',environmentStrength:-1,cpuThreads:'999',
-11770:       progressive:true,adaptive:true,denoise:'Quality',format:'EXR',colorDepth:'32-bit Float'
-11771:     });
-11772:     if(s.engine!=='fast'||s.width!==16||s.height!==8192||s.percentage!==200)errors.push('Settings numeric sanitization failed');
-11773:     if(s.maxBounces!==16||!s.progressive||!s.adaptive||s.denoise!=='Quality')errors.push('Deferred setting sanitization failed');
-11774:     if(s.format!=='PNG'||s.colorDepth!=='8-bit'||s.cpuThreads!=='16')errors.push('Supported output/thread sanitization failed');
-11775:   }catch(err){errors.push('Settings policy test: '+String(err?.message||err));}
-11776: 
-11777:   try{
-11778:     const canvas=document.createElement('canvas');canvas.width=2;canvas.height=2;
-11779:     const fb=new RenderFrameBufferView(canvas);
-11780:     const rgba=new Uint8ClampedArray([255,0,0,255,0,255,0,255,0,0,255,255,255,255,255,255]);
-11781:     fb.present({width:2,height:2,rgba,metadata:{test:true}});
-11782:     if(!fb.hasValidFrame||fb.snapshot()?.rgba?.length!==16)errors.push('Framebuffer presentation/snapshot failed');
-11783:     fb.clear();
-11784:     if(fb.hasValidFrame||fb.snapshot()!==null)errors.push('Framebuffer stale-frame invalidation failed');
-11785:   }catch(err){errors.push('Framebuffer test: '+String(err?.message||err));}
-11786: 
-11787:   try{
-11788:     const j=new RenderJob(999,RenderSettingsPolicy.sanitize(new RenderSettingsModel().clone()));
-11789:     RenderPerformanceMetrics.begin(j);
-11790:     RenderPerformanceMetrics.beginTracing(j);
-11791:     j.beautyFrame={width:2,height:2};
-11792:     const m=RenderPerformanceMetrics.finish(j);
-11793:     if(!Number.isFinite(m.totalMs)||!Number.isFinite(m.raysPerSecond??m.estimatedRaysPerSecond))errors.push('Performance metric test failed');
-11794:   }catch(err){errors.push('Performance metric test: '+String(err?.message||err));}
-11795: 
-11796:   return {ok:errors.length===0,errors};
-11797: }
-11798: 
-11799: function validateRenderPart6(){
-11800:   const errors=[];
-11801:   if(typeof RenderSettingsPolicy?.sanitize!=='function')errors.push('RenderSettingsPolicy missing');
-11802:   if(typeof RenderFrameBufferView?.prototype?.present!=='function')errors.push('Framebuffer present API missing');
-11803:   if(typeof RenderFramework?.pause!=='function')errors.push('Framebuffer Pause command missing');
-11804:   if(typeof RenderFramework?.resume!=='function')errors.push('Framebuffer Resume command missing');
-11805:   if(typeof RenderFramework?.restart!=='function')errors.push('Framebuffer Restart command missing');
-11806:   if(typeof RenderFramework?.saveFrame!=='function')errors.push('Framebuffer Save command missing');
-11807:   if(typeof RenderPerformanceMetrics?.finish!=='function')errors.push('Performance metrics missing');
-11808:   if(!document.getElementById('rfPause'))errors.push('Pause button missing');
-11809:   const t=runRenderPart6SelfTests();if(!t.ok)errors.push(...t.errors);
-11810:   return {ok:errors.length===0,errors};
-11811: }
-11812: Object.assign(window,{RenderPart6Contract,RenderPart6Core,RenderSettingsPolicy,RenderPerformanceMetrics,runRenderPart6SelfTests,validateRenderPart6});
-11813: window.get3DLiteRenderMetrics=()=>RenderPart6Core.activeMetrics();
-11814: 
-11815: 
-11816: /* ============================================================
-11817:    3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — PART 7 GEN3
-11818:    FULL REGRESSION + CONSOLIDATION
-11819:    ============================================================ */
-11820: 
-11821: /* ============================================================
-11822:    3DLite / LiteTrace — RENDERER CONSOLIDATION / RELEASE CORE
-11823:    Groups 1–16 renderer release facade.
-11824:    IMPORTANT: this validation is intentionally NOT part of editor boot.
-11825:    ============================================================ */
-11826: 
-11827: var FinalRendererOwnership=Object.freeze({
-11828:   snapshot:Object.freeze({owner:'Core 1 / Core A',api:'RendererMasterCore.createRequest'}),
-11829:   geometry:Object.freeze({owner:'Core 1 / Core B',api:'RendererMasterCore.prepare'}),
-11830:   materialsLights:Object.freeze({owner:'Core 2 / Core C+D',api:'RenderCore2.compileShading'}),
-11831:   progressiveMIS:Object.freeze({owner:'Core E',api:'RenderCoreE'}),
-11832:   lightCacheAOV:Object.freeze({owner:'Groups 11+12',api:'RenderGroup11Core / RenderGroup12Core'}),
-11833:   denoiseToneMap:Object.freeze({owner:'Group 13',api:'RenderGroup13Core'}),
-11834:   regionLastSave:Object.freeze({owner:'Group 14',api:'RenderGroup14Core'}),
-11835:   advancedSamplingPerformance:Object.freeze({owner:'Core H',api:'RenderCoreH'}),
-11836:   orchestration:Object.freeze({owner:'RendererMasterCore',api:'RendererMasterCore'}),
-11837:   presentation:Object.freeze({owner:'RenderFramework + Group 13 presenter',api:'RenderFramework.showChannel'})
-11838: });
-11839: 
-11840: const LiteTraceServices=Object.freeze({
-11841:   scene:()=>RenderSceneBoundary,
-11842:   geometry:()=>RenderGeometryCompiler,
-11843:   acceleration:()=>RenderAccelerationHierarchy16,
-11844:   lighting:()=>SceneLightCompiler,
-11845:   direct:()=>DirectLightingIntegrator,
-11846:   path:()=>PathIntegrator,
-11847:   scheduling:()=>RenderTileScheduler16,
-11848:   performance:()=>RenderPerformanceArchitectureFinal
-11849: });
-11850: window.LiteTraceServices=LiteTraceServices;
-11851: 
-11852: /* ---------- Architecture Refactor Batch 06: LiteTrace/render boundary services ---------- */
-11853: const ThreeDLiteRenderSceneService=Object.freeze({
-11854:   owner:'RenderSceneBoundary',
-11855:   snapshot(){return RenderSceneBoundary.buildSnapshot()},
-11856:   verify(scene){return RenderSceneBoundary.verifyDetached(scene)},
-11857:   validatedSnapshot(){
-11858:     const scene=RenderSceneBoundary.buildSnapshot();
-11859:     const detached=RenderSceneBoundary.verifyDetached(scene);
-11860:     if(!detached.ok)throw new Error(detached.errors.join('; '));
-11861:     return scene;
-11862:   }
-11863: });
-11864: window.ThreeDLiteRenderSceneService=ThreeDLiteRenderSceneService;
-11865: 
-11866: const ThreeDLiteRenderRequestService=Object.freeze({
-11867:   owner:'RendererMasterCore',
-11868:   create(mode='full',region=null,settingsOverride=null){
-11869:     return RendererMasterCore.createRequest(mode,region,settingsOverride);
-11870:   },
-11871:   prepare(job,pool,onProgress=()=>{}){
-11872:     return RendererMasterCore.prepare(job,pool,onProgress);
-11873:   },
-11874:   rendererFor(job){return RendererMasterCore.rendererFor(job)}
-11875: });
-11876: window.ThreeDLiteRenderRequestService=ThreeDLiteRenderRequestService;
-11877: 
-11878: const ThreeDLiteRenderFrameworkService=Object.freeze({
-11879:   owner:'RenderFramework',
-11880:   render(...args){return RenderFramework.render(...args)},
-11881:   renderRegion(...args){return RenderFramework.renderRegion(...args)},
-11882:   renderLast(...args){return RenderFramework.renderLast(...args)},
-11883:   stop(...args){return RenderFramework.stop(...args)},
-11884:   pause(...args){return RenderFramework.pause(...args)},
-11885:   resume(...args){return RenderFramework.resume(...args)},
-11886:   restart(...args){return RenderFramework.restart(...args)},
-11887:   save(...args){return RenderFramework.saveFrame(...args)},
-11888:   showChannel(name){return RenderFramework.showChannel(name)}
-11889: });
-11890: window.ThreeDLiteRenderFrameworkService=ThreeDLiteRenderFrameworkService;
