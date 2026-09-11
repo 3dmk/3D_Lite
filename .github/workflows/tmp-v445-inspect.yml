@@ -1,0 +1,29 @@
+name: tmp v445 inspect
+on:
+  push:
+    branches: [litepix-v4.45-ray-budget]
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect renderer anchors
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('index.html').read_text(encoding='utf-8')
+          for term in ['ShadowVisibility','PathGIRenderer','DirectLight','sampleLight','LightSampler','occluded(','lightSamples','shadowRays']:
+              print('\n===== TERM',term,'=====')
+              start=0
+              count=0
+              while True:
+                  i=s.find(term,start)
+                  if i<0: break
+                  count+=1
+                  a=max(0,i-900);b=min(len(s),i+1800)
+                  print(f'--- hit {count} at {i} ---')
+                  print(s[a:b])
+                  start=i+len(term)
+                  if count>=8: break
+          PY
