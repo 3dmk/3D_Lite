@@ -1,4 +1,4 @@
-name: L3N v3.98.3 Spot Browser Smoke
+name: L3N v3.98.3 All Lights Browser Smoke
 on:
   push:
     branches: [l3n-dev]
@@ -16,69 +16,53 @@ jobs:
       - run: npm install --no-save playwright@1.55.0
       - run: npx playwright install --with-deps chromium
       - run: python3 -m http.server 8000 >/tmp/3dlite.log 2>&1 &
-      - name: Validate spot light creation sampling and render
+      - name: Validate normalized light defaults and renderer sampling
         run: |
           node <<'NODE'
-          const { chromium }=require('playwright');
+          const {chromium}=require('playwright');
           (async()=>{
             const browser=await chromium.launch({headless:true,args:['--use-angle=swiftshader','--enable-webgl','--ignore-gpu-blocklist']});
             const page=await browser.newPage({viewport:{width:1280,height:900}});
             const errors=[]; page.on('pageerror',e=>errors.push(String(e))); page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
             await page.goto('http://127.0.0.1:8000/',{waitUntil:'load',timeout:120000});
-            await page.waitForTimeout(2500);
-            const pre=await page.evaluate(()=>{
-              const v=window.ThreeDLiteVersion?.version||window.ThreeDLiteVersion;
-              const spot=EditorLightSystem.create('spot',{intensity:5000,range:100,coneAngle:60,penumbra:.15,castShadows:false});
-              spot.position.set(0,0,20); spot.rotation.set(0,0,0); spot.updateMatrixWorld(true);
-              const snap=EditorLightSystem.serialize(spot);
-              const compiled=new RenderSceneLight(snap);
-              const center=DirectLightSampler.sample(compiled,[0,0,0]);
-              const outside=DirectLightSampler.sample(compiled,[30,0,0]);
-              return {v,marker:!!window.__3DLiteSpotRenderFix3983,rotation:spot.rotation.toArray().slice(0,3),direction:snap.direction,center:center.radiance,outside:outside.radiance,self:window.runRenderGroup6SelfTests?.(),rf:!!window.RenderFramework};
+            await page.waitForTimeout(2200);
+            const result=await page.evaluate(()=>{
+              const types=['point','spot','rectangle','disc','sphere','sun','dome','mesh'];
+              const created=[];
+              for(const type of types){
+                const o=EditorLightSystem.create(type);
+                o.position.set(0,0,100); o.rotation.set(0,0,0); o.updateMatrixWorld(true);
+                const snap=EditorLightSystem.serialize(o);
+                created.push({type,intensity:snap.intensity,direction:snap.direction,rotation:o.rotation.toArray().slice(0,3)});
+              }
+              const mk=(type,extra={})=>new RenderSceneLight({id:type,name:type,type,enabled:true,color:'#ffffff',intensity:1,range:0,size:25,width:50,height:50,coneAngle:60,penumbra:.15,castShadows:false,position:[0,0,100],direction:[0,0,-1],...extra});
+              const lum=c=>c.reduce((a,b)=>a+b,0)/3;
+              const samples={};
+              samples.point=lum(DirectLightSampler.sample(mk('point'),[0,0,0]).radiance);
+              samples.spot=lum(DirectLightSampler.sample(mk('spot'),[0,0,0]).radiance);
+              samples.rectangle=lum(AreaLightSampler.sample(mk('rectangle'),[0,0,0],.5,.5).radiance);
+              samples.disc=lum(AreaLightSampler.sample(mk('disc'),[0,0,0],.5,.5).radiance);
+              samples.mesh=lum(AreaLightSampler.sample(mk('mesh'),[0,0,0],.5,.5).radiance);
+              const sph=mk('sphere'); let best=0;
+              for(let u=.05;u<1;u+=.1) for(let v=.05;v<1;v+=.1) best=Math.max(best,lum(AreaLightSampler.sample(sph,[0,0,0],u,v).radiance));
+              samples.sphere=best;
+              samples.sun=lum(DirectLightSampler.sample(mk('sun'),[0,0,0]).radiance);
+              samples.dome=lum(EnvironmentSampler.radiance(mk('dome'),[0,0,1]));
+              const scene={lights:types.map(type=>({id:type,name:type,type,enabled:true,color:'#ffffff',intensity:1,range:0,size:25,width:50,height:50,coneAngle:60,penumbra:.15,castShadows:false,position:[0,0,100],direction:[0,0,-1]}))};
+              const compiled=SceneLightCompiler.compile(scene);
+              return {version:window.ThreeDLiteVersion?.version||window.ThreeDLiteVersion,energy:window.ThreeDLiteLightEnergy3983,energyMarker:!!window.__3DLiteLightEnergy3983,directionMarker:!!window.__3DLiteLightDefaultDirection3983,created,samples,compiled:compiled.map(l=>({type:l.type,intensity:l.intensity}))};
             });
-            console.log('PRE',JSON.stringify(pre));
-            if(pre.v!=='3.98.3') throw new Error('version '+pre.v);
-            if(!pre.marker) throw new Error('spot fix marker missing');
-            if(Math.abs(pre.rotation[0])>1e-8) throw new Error('spot still created tilted');
-            if(!(pre.direction[2]<-.999)) throw new Error('spot direction not -Z '+JSON.stringify(pre.direction));
-            if(!pre.center.some(x=>x>0)) throw new Error('spot center sample is black '+JSON.stringify(pre.center));
-            if(pre.outside.some(x=>x!==0)) throw new Error('spot outside cone not black '+JSON.stringify(pre.outside));
-            if(pre.self && pre.self.ok===false) throw new Error('group6 self tests '+JSON.stringify(pre.self));
-            const render=await page.evaluate(async()=>{
-              try{
-                for(const o of objects.slice()){
-                  if(EditorLightSystem.isLightObject(o)) o.userData.renderLight.enabled=false;
-                }
-                const plane=new THREE.Mesh(new THREE.PlaneGeometry(40,40),new THREE.MeshStandardMaterial({color:0x808080,roughness:.7,metalness:0,side:THREE.DoubleSide}));
-                plane.name='SpotSmokePlane'; scene.add(plane); objects.push(plane);
-                const spot=EditorLightSystem.create('spot',{intensity:12000,range:100,coneAngle:70,penumbra:.2,castShadows:false});
-                spot.position.set(0,0,20); spot.rotation.set(0,0,0); spot.updateMatrixWorld(true);
-                if(typeof camera!=='undefined'){
-                  camera.position.set(0,-28,24); camera.up.set(0,0,1); camera.lookAt(0,0,0); camera.updateMatrixWorld(true);
-                }
-                const bg=document.getElementById('renderBackground'); if(bg) bg.value='#000000';
-                const w=document.getElementById('renderWidth'); if(w) w.value='96';
-                const h=document.getElementById('renderHeight'); if(h) h.value='96';
-                const progressive=document.getElementById('renderProgressive'); if(progressive) progressive.checked=false;
-                const samples=document.getElementById('renderSamples'); if(samples) samples.value='1';
-                const start=RenderFramework?.render?.();
-                if(start&&typeof start.then==='function') await start;
-                const deadline=Date.now()+30000;
-                while(RenderFramework?.jobs?.activeJob && Date.now()<deadline) await new Promise(r=>setTimeout(r,50));
-                await new Promise(r=>setTimeout(r,500));
-                const canvas=document.querySelector('#renderFrameWindow canvas')||document.getElementById('renderFrameCanvas')||document.querySelector('canvas[data-render-framebuffer]');
-                let lum=null,max=0,mean=0,count=0;
-                if(canvas){
-                  const ctx=canvas.getContext('2d',{willReadFrequently:true});
-                  if(ctx){const d=ctx.getImageData(0,0,canvas.width,canvas.height).data; for(let i=0;i<d.length;i+=4){const l=(d[i]+d[i+1]+d[i+2])/3; max=Math.max(max,l); mean+=l; count++;} mean=count?mean/count:0; lum={width:canvas.width,height:canvas.height,max,mean};}
-                }
-                const active=RenderFramework?.jobs?.activeJob||RenderFramework?.controller?.activeJob||null;
-                return {ok:true,lum,active:active?{status:active.status,progress:active.progress}:null};
-              }catch(e){return {ok:false,error:String(e?.stack||e)}}
-            });
-            console.log('RENDER',JSON.stringify(render));
-            if(!render.ok) throw new Error('render setup '+render.error);
-            if(render.lum && render.lum.max<=0) throw new Error('actual render framebuffer is black '+JSON.stringify(render.lum));
+            console.log(JSON.stringify(result));
+            if(result.version!=='3.98.3') throw new Error('version '+result.version);
+            if(!result.energyMarker||!result.directionMarker) throw new Error('v3.98.3 light markers missing');
+            if(result.created.length!==8||result.created.some(x=>x.intensity!==1)) throw new Error('not all created light defaults are intensity 1 '+JSON.stringify(result.created));
+            if(result.compiled.some(x=>x.intensity!==1)) throw new Error('compiled intensity changed '+JSON.stringify(result.compiled));
+            for(const [type,v] of Object.entries(result.samples)){
+              if(!(Number.isFinite(v)&&v>0.2&&v<=1.05)) throw new Error(type+' intensity=1 outside normalized range: '+v);
+            }
+            const locals=['point','spot','rectangle','disc','sphere','mesh'].map(k=>result.samples[k]);
+            const max=Math.max(...locals),min=Math.min(...locals);
+            if(max/min>3) throw new Error('local light intensity spread too large '+JSON.stringify(result.samples));
             if(errors.some(e=>/ReferenceError|TypeError|SyntaxError|3DLite Renderer.*validation/i.test(e))) throw new Error('browser errors '+errors.join('\n'));
             await browser.close();
           })().catch(e=>{console.error(e);process.exit(1)});
