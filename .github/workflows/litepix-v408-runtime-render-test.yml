@@ -1,0 +1,55 @@
+name: LitePix v4.08 Runtime Render Test
+on:
+  push:
+    branches: [litepix-v4.08-runtime-test]
+    paths: ['.github/workflows/litepix-v408-runtime-render-test.yml']
+permissions:
+  contents: write
+jobs:
+  runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null
+      - name: Browser render and core benchmark
+        run: |
+          python3 -m http.server 8000 >/tmp/litepix-http.log 2>&1 &
+          PID=$!; trap 'kill $PID || true' EXIT
+          node <<'NODE' | tee /tmp/result.json
+          const {chromium}=require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--use-gl=swiftshader','--enable-webgl','--ignore-gpu-blocklist']});
+            const page=await browser.newPage({viewport:{width:1280,height:900}});const pe=[],ce=[];
+            page.on('pageerror',e=>pe.push(String(e)));page.on('console',m=>{if(m.type()==='error')ce.push(m.text())});
+            const response=await page.goto('http://127.0.0.1:8000/index.html',{waitUntil:'domcontentloaded',timeout:120000});await page.waitForTimeout(4000);
+            const core=await page.evaluate(()=>{
+              const LP=window.LitePixNative,r=LP.runtime.initialize(64,64);const t0=performance.now();
+              const prim=[];for(let i=0;i<1000;i++){const x=i%100,y=(i/100|0);prim.push({bounds:{min:[x,y,0],max:[x+.8,y+.8,.8]}})}
+              const sc=new LP.Core2.SceneCompiler();sc.compile({meshes:[{id:'bench',primitives:prim}],instances:[]});const bvhMs=performance.now()-t0;
+              const g=new LP.Core3.GBuffer(256,256),t1=performance.now();for(let y=0;y<256;y++)for(let x=0;x<256;x++)g.write(x,y,{depth:1+x*.001,normal:[0,1,0],materialId:1});const gbufferMs=performance.now()-t1;
+              const gi=new LP.Core4.HierarchicalGI(256,256,{startBlock:32,maxLevel:6}),t2=performance.now();while(gi.active.length)gi.runPass(()=>({radiance:[1,1,1],variance:.1,error:.1,confidence:.2}),()=>1);const giMs=performance.now()-t2;
+              return{title:document.title,version:window.LitePixVersion?.version,legacy:window.ThreeDLiteVersion?.version,marker:window.__LitePixAllCores408===true,modules:LP.AllCores.modules,bvhMs,gbufferMs,giMs,bvh:sc.staticMeshes.get('bench').bvh.stats(),gi:gi.stats()};
+            });
+            const set=engine=>page.evaluate(engine=>{const s=(id,v)=>{const e=document.getElementById(id);if(!e)return;e.value=String(v);e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}))};s('rsEngine',engine);s('rsWidth',96);s('rsHeight',54);s('rsBounces',3);s('rsMinSamples',1);s('rsMaxSamples',2);s('rsNoise',.2);s('rsExposure',0)},engine);
+            const render=async engine=>{await set(engine);const prior=await page.evaluate(()=>window.RenderFramework?.jobs?.lastJob?.id||0);const t=Date.now();await page.evaluate(()=>document.getElementById('renderNowBtn').click());await page.waitForFunction(prior=>{const j=window.RenderFramework?.jobs?.lastJob;return j&&j.id!==prior&&j.finished&&j.performance},prior,{timeout:120000,polling:200});return page.evaluate(({engine,wall})=>{const j=window.RenderFramework.jobs.lastJob,t=window.ThreeDLiteLiteTraceTelemetry3994?.snapshot?.()||window.ThreeDLiteLiteTraceTelemetry3992?.snapshot?.()||null;return{engine,wallMs:Date.now()-wall,performance:j.performance,renderer:j.beautyFrame?.metadata?.renderer,telemetry:t}}, {engine,wall:t});};
+            const fast=await render('fast'),path=await render('path');const failures=[];
+            if(response.status()!=200)failures.push('HTTP');if(core.version!=='4.08.0'||!core.marker||core.modules.length!==7)failures.push('LitePix core');if(!String(fast.renderer).includes('Fast Direct'))failures.push('fast');if(!String(path.renderer).includes('Path GI'))failures.push('path');if(path.telemetry?.giDiagnostics?.secondaryGI!=='Light Cache')failures.push('light cache');if(pe.length)failures.push('page errors '+pe.length);if(ce.length)failures.push('console errors '+ce.length);
+            console.log(JSON.stringify({passed:!failures.length,core,fast,path,pageErrors:pe,consoleErrors:ce,failures},null,2));await browser.close();if(failures.length)process.exit(1);
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+      - name: Save test report
+        if: success()
+        run: |
+          mkdir -p reports/litepix
+          cp /tmp/result.json reports/litepix/v4.08-runtime-render-test.json
+          git config user.name 'LitePix Runtime Gate'; git config user.email 'actions@users.noreply.github.com'
+          git add reports/litepix/v4.08-runtime-render-test.json
+          git commit -m 'Record LitePix v4.08 runtime render test' || exit 0
+          git push origin HEAD:litepix-v4.08-runtime-test
