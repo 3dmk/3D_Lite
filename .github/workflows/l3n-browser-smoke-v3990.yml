@@ -1,0 +1,25 @@
+name: L3N v3.99.0 Adaptive Browser Smoke
+on:
+  push:
+    branches: [l3n-dev]
+    paths: ['.l3n-browser-smoke-v3990-trigger']
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - run: npm install --no-save playwright@1.55.0
+      - run: npx playwright install --with-deps chromium
+      - run: python3 -m http.server 8000 >/tmp/3dlite.log 2>&1 &
+      - name: Validate adaptive runtime
+        run: |
+          node <<'JS'
+          const { chromium }=require('playwright');
+          (async()=>{const b=await chromium.launch({headless:true,args:['--use-angle=swiftshader','--enable-webgl','--ignore-gpu-blocklist']});const p=await b.newPage();const errors=[];p.on('pageerror',e=>errors.push(String(e)));await p.goto('http://127.0.0.1:8000',{waitUntil:'load',timeout:60000});await p.waitForTimeout(1500);
+          const r=await p.evaluate(()=>{const A=window.ThreeDLiteAdaptiveRender3990;if(!A)throw Error('adaptive API missing');A.observe({currentSamples:1,maximumSamples:64,noise:.12,elapsedMs:100,totalRays:1000});A.observe({currentSamples:2,maximumSamples:64,noise:.08,elapsedMs:180,totalRays:1600});A.learnLight('L1',1,true,1);A.learnBounce(1,.5,true);A.learnNoise('reflection',.2);A.updateConvergence('tile0',.001,1,'tile');const btn=document.getElementById('l3nAdaptiveCodeBtn3990');if(!btn)throw Error('Adaptive Code button missing');btn.click();const ta=document.getElementById('l3nAdaptiveCodeText3990');return {version:window.ThreeDLiteVersion?.version,adaptive:A.version,strategy:A.state.strategy,code:ta?.value||'',viewer:!!document.getElementById('l3nAdaptiveCodeWindow3990')};});
+          if(r.version!=='3.99.0'||r.adaptive!=='3.99.0')throw Error('version mismatch '+JSON.stringify(r));if(!r.viewer||!r.code.includes('AdaptiveProfile'))throw Error('viewer/export failed');if(!r.strategy||!(r.strategy.rayBudget>0&&r.strategy.rayBudget<=1))throw Error('strategy failed');if(errors.some(e=>/ReferenceError|TypeError|SyntaxError|Renderer.*validation/i.test(e)))throw Error('browser errors '+errors.join('\n'));console.log(JSON.stringify(r));await b.close();})();
+          JS
