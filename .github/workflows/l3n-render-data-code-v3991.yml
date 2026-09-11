@@ -1,0 +1,34 @@
+name: L3N v3.99.1 Render Data Code
+on:
+  push:
+    branches: [l3n-dev]
+    paths: ['.l3n-render-data-code-v3991-trigger']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - name: Configure git
+        run: |
+          git config user.name 3dmk
+          git config user.email noneatall2026@gmail.com
+      - name: Patch and verify
+        run: |
+          set -euo pipefail
+          python3 tools/l3n_render_data_code_v3991.py
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('index.html').read_text(errors='ignore')
+          for x in ['__3DLiteRenderDataCode3991','Render Data Code','compiledRenderDataCode','renderDataSnapshot','Compiled Render Data Code']:
+              assert x in s,x
+          assert '3DLite v3.99.1' in s
+          assert s.count('id="l3n-render-data-code-3991"')==1
+          assert s.lower().count('</body>')==1
+          print('v3.99.1 static patch verification passed')
+          PY
+          git add index.html
+          git commit -m "3DLite v3.99.1 render data code viewer"
+          git push origin HEAD:l3n-dev
