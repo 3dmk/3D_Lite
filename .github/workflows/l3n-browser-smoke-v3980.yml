@@ -49,37 +49,30 @@ jobs:
               if(!window.ThreeDLiteMaterialIndexGuard)errs.push('Material Index Guard missing');
               const codes=window.ThreeDLiteL3NCompleteRenderDebugger?.codes||window.ThreeDLiteL3NRenderDebugger?.codes||{};
               const c1104=codes['RND-1104']; const c1194=codes['RND-1194'];
+              const text1104=JSON.stringify(c1104||{}).toLowerCase(), text1194=JSON.stringify(c1194||{}).toLowerCase();
+              if(!text1104.includes('render execution failure'))errs.push('RND-1104 meaning changed');
+              if(!(text1194.includes('unknown')&&text1194.includes('render')))errs.push('RND-1194 meaning changed');
               return {errs,k,c1104,c1194,title:document.title,three:!!window.THREE,canvas:!!document.querySelector('canvas')};
             });
             if(pre.errs.length||!pre.three||!pre.canvas)throw new Error('Preflight '+JSON.stringify(pre));
-            // Force a tiny real render without changing application architecture.
             await page.evaluate(()=>{
-              const ids=['rsWidth','renderWidth','renderW']; for(const id of ids){const e=document.getElementById(id);if(e){e.value='64';e.dispatchEvent(new Event('change',{bubbles:true}));}}
-              const idsH=['rsHeight','renderHeight','renderH']; for(const id of idsH){const e=document.getElementById(id);if(e){e.value='64';e.dispatchEvent(new Event('change',{bubbles:true}));}}
-              const samp=['rsSamples','renderSamples']; for(const id of samp){const e=document.getElementById(id);if(e){e.value='1';e.dispatchEvent(new Event('change',{bubbles:true}));}}
+              for(const id of ['rsWidth','renderWidth','renderW']){const e=document.getElementById(id);if(e){e.value='64';e.dispatchEvent(new Event('change',{bubbles:true}));}}
+              for(const id of ['rsHeight','renderHeight','renderH']){const e=document.getElementById(id);if(e){e.value='64';e.dispatchEvent(new Event('change',{bubbles:true}));}}
+              for(const id of ['rsSamples','renderSamples']){const e=document.getElementById(id);if(e){e.value='1';e.dispatchEvent(new Event('change',{bubbles:true}));}}
             });
             const btn=page.getByRole('button',{name:/^Render$/i}).first();
             if(await btn.count()===0)throw new Error('Render button not found');
             await btn.click();
             await page.waitForFunction(()=>{
-              const d=window.ThreeDLiteL3NCompleteRenderDebugger?.snapshot?.();
-              const txt=window.__3DLiteRenderDebugListText?.()||'';
               const frame=document.getElementById('renderFrameWindow');
               const canvas=document.getElementById('renderCanvas');
-              return !!frame && !!canvas && (d?.renders?.length||d?.events?.length||canvas.width>0||txt.includes('Render'));
+              return !!frame&&!!canvas&&canvas.width>0&&canvas.height>0;
             },{timeout:30000});
             await page.waitForTimeout(2500);
             const post=await page.evaluate(()=>{
               const text=window.__3DLiteRenderDebugListText?.()||'';
-              const snap=window.ThreeDLiteL3NCompleteRenderDebugger?.snapshot?.()||{};
               const canvas=document.getElementById('renderCanvas');
-              return {
-                text,snap,
-                canvas:[canvas?.width||0,canvas?.height||0],
-                ctx:!!window.LiteTraceExecutionContext,
-                telemetry:window.ThreeDLiteRuntimeTelemetry?.snapshot?.()||window.ThreeDLiteRuntimeTelemetry||null,
-                kernel:window.ThreeDLiteKernel3980
-              };
+              return {text,canvas:[canvas?.width||0,canvas?.height||0],ctx:!!window.LiteTraceExecutionContext,kernel:window.ThreeDLiteKernel3980};
             });
             const allErrors=[...pageErrors,...badConsole];
             if(allErrors.some(x=>/LiteTraceExecutionContext is not defined/i.test(x)))throw new Error('Execution context regression '+allErrors.join('\n'));
@@ -91,4 +84,4 @@ jobs:
             await browser.close();
           })().catch(e=>{console.error(e);process.exit(1)});
           NODE
-          node /tmp/smoke3980.js
+          NODE_PATH=$PWD/node_modules node /tmp/smoke3980.js
