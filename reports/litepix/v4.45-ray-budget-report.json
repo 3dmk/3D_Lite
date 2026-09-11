@@ -1,0 +1,369 @@
+{
+  "passed": true,
+  "identity": {
+    "title": "3D Lite — LitePix v4.45.0 Adaptive Ray Budget",
+    "version": "4.45.0",
+    "marker": true
+  },
+  "baseline": {
+    "budget": {
+      "version": "4.45.0",
+      "provider": "LitePix Core5 adaptive ray budget",
+      "enabled": false,
+      "quality": "Custom",
+      "requestedShadowTests": 32379,
+      "tracedShadowRays": 32379,
+      "reusedShadowTests": 0,
+      "cacheEntries": 0,
+      "cacheRejects": 0,
+      "cacheHitRate": 0,
+      "shadowReductionRatio": 1,
+      "requestedLightSamples": 32379,
+      "selectedLightSamples": 32379,
+      "lightSampleReductionRatio": 1,
+      "cellSize": 2.401623438195274,
+      "directionBins": 64
+    },
+    "performance": {
+      "cameraRays": 82944,
+      "pathRays": 27120,
+      "shadowRays": 32379,
+      "probeRays": 3040,
+      "totalRays": 145483,
+      "samples": 82944,
+      "yields": 656,
+      "raysPerSecond": 31020,
+      "stageMs": {
+        "snapshot": 2.1000000000058208,
+        "geometry": 0.09999999999126885,
+        "worker": 175.60000000000582,
+        "bvh": 0.7999999999883585,
+        "shading": 0.5,
+        "lightCache": 0,
+        "render": 3351.199999999997,
+        "denoise": 0,
+        "toneMap": 0,
+        "post": 0
+      }
+    },
+    "secondaryGI": "Light Cache",
+    "core2": {
+      "version": "4.19.0",
+      "provider": "LitePix Core2 production consolidated",
+      "architecture": "packed SAH BLAS + partial BLAS invalidation + selective TLAS + static/dynamic split + worker BVH prewarm",
+      "traceRays": 113104,
+      "shadowRays": 30684,
+      "elapsedMs": 3350,
+      "worker": {
+        "version": "4.18.0",
+        "provider": "LitePix Core2 worker BVH prewarm",
+        "supported": true,
+        "prewarmRuns": 1,
+        "workerBuilds": 2,
+        "cacheHits": 0,
+        "failures": 0,
+        "cachedBLAS": 2,
+        "lastPrewarmMs": 8.5,
+        "totalWorkerMs": 1.1
+      },
+      "tlas": {
+        "version": "4.16.0",
+        "provider": "LitePix Core2 selective TLAS",
+        "mode": "delegate-geometry",
+        "dirtyObjectIndices": [
+          0,
+          1
+        ],
+        "dirtyCount": 2,
+        "selectiveRefits": 0,
+        "nodesUpdated": 0,
+        "fullDelegates": 1,
+        "cleanReuses": 0,
+        "lastPrepareMs": 1.4
+      },
+      "dynamic": {
+        "version": "4.17.0",
+        "provider": "LitePix Core2 static/dynamic split",
+        "dynamicIds": [],
+        "staticInstances": 2,
+        "dynamicInstances": 0,
+        "splitBuilds": 1,
+        "staticRebuilds": 1,
+        "dynamicRebuilds": 1,
+        "lastDirty": [
+          0,
+          1
+        ]
+      },
+      "partial": {
+        "version": "4.15.0",
+        "provider": "LitePix Core2 partial BLAS cache",
+        "mode": "rebuild",
+        "dirtyTransforms": 2,
+        "dirtyGeometry": [
+          "5ADA8678-F493-487F-B715-0D9BDAD2BA89",
+          "63D7E721-988C-4E11-A65D-30A397085CFE"
+        ],
+        "builds": 1,
+        "refits": 0,
+        "cleanReuses": 0,
+        "partialBLASUpdates": 0,
+        "blasRebuilds": 0,
+        "invalidations": 0,
+        "lastPrepareMs": 1,
+        "totalPrepareMs": 1,
+        "instances": 2,
+        "uniqueBLAS": 2,
+        "tlasNodes": 1
+      },
+      "inner": {
+        "version": "4.17.0",
+        "provider": "LitePix Core2 static/dynamic split",
+        "instances": 2,
+        "uniqueBLAS": 2,
+        "tlasNodes": 1,
+        "buildMs": 0.7,
+        "rebuildCount": 1,
+        "refitCount": 0,
+        "traceRays": 0,
+        "shadowRays": 0,
+        "fallback": false,
+        "mode": "delegate-geometry",
+        "dirtyObjectIndices": [
+          0,
+          1
+        ],
+        "dirtyCount": 2,
+        "selectiveRefits": 0,
+        "nodesUpdated": 0,
+        "fullDelegates": 1,
+        "cleanReuses": 0,
+        "lastPrepareMs": 1.4,
+        "dynamicIds": [],
+        "staticInstances": 2,
+        "dynamicInstances": 0,
+        "splitBuilds": 1,
+        "staticRebuilds": 1,
+        "dynamicRebuilds": 1,
+        "lastDirty": [
+          0,
+          1
+        ],
+        "traceRays417": 113104,
+        "shadowRays417": 30684
+      }
+    },
+    "lights": [
+      {
+        "id": "light-mtxjjw4s-d9jvm",
+        "name": "LP445_Point",
+        "type": "point",
+        "enabled": true,
+        "color": "#ffffff",
+        "intensity": 1600,
+        "range": 260,
+        "size": 1,
+        "width": 2,
+        "height": 2,
+        "coneAngle": 45,
+        "penumbra": 0.15,
+        "castShadows": true,
+        "position": [
+          -38,
+          -35,
+          78
+        ],
+        "quaternion": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "direction": [
+          0,
+          0,
+          -1
+        ]
+      }
+    ]
+  },
+  "optimized": {
+    "budget": {
+      "version": "4.45.0",
+      "provider": "LitePix Core5 adaptive ray budget",
+      "enabled": true,
+      "quality": "Custom",
+      "requestedShadowTests": 32379,
+      "tracedShadowRays": 2504,
+      "reusedShadowTests": 29875,
+      "cacheEntries": 2504,
+      "cacheRejects": 0,
+      "cacheHitRate": 0.9226659254455049,
+      "shadowReductionRatio": 12.93091054313099,
+      "requestedLightSamples": 32379,
+      "selectedLightSamples": 32379,
+      "lightSampleReductionRatio": 1,
+      "cellSize": 2.401623438195274,
+      "directionBins": 64
+    },
+    "performance": {
+      "cameraRays": 82944,
+      "pathRays": 27120,
+      "shadowRays": 2504,
+      "probeRays": 3040,
+      "totalRays": 115608,
+      "samples": 82944,
+      "yields": 656,
+      "raysPerSecond": 33249,
+      "stageMs": {
+        "snapshot": 0.5,
+        "geometry": 0.10000000000582077,
+        "worker": 1.1999999999970896,
+        "bvh": 0.5,
+        "shading": 0.10000000000582077,
+        "lightCache": 0,
+        "render": 3305.5,
+        "denoise": 0,
+        "toneMap": 0,
+        "post": 0
+      }
+    },
+    "secondaryGI": "Light Cache",
+    "core2": {
+      "version": "4.19.0",
+      "provider": "LitePix Core2 production consolidated",
+      "architecture": "packed SAH BLAS + partial BLAS invalidation + selective TLAS + static/dynamic split + worker BVH prewarm",
+      "traceRays": 113104,
+      "shadowRays": 2504,
+      "elapsedMs": 3305.5,
+      "worker": {
+        "version": "4.18.0",
+        "provider": "LitePix Core2 worker BVH prewarm",
+        "supported": true,
+        "prewarmRuns": 2,
+        "workerBuilds": 2,
+        "cacheHits": 2,
+        "failures": 0,
+        "cachedBLAS": 2,
+        "lastPrewarmMs": 0.2,
+        "totalWorkerMs": 1.1
+      },
+      "tlas": {
+        "version": "4.16.0",
+        "provider": "LitePix Core2 selective TLAS",
+        "mode": "reuse-clean",
+        "dirtyObjectIndices": [],
+        "dirtyCount": 0,
+        "selectiveRefits": 0,
+        "nodesUpdated": 0,
+        "fullDelegates": 1,
+        "cleanReuses": 1,
+        "lastPrepareMs": 0.1
+      },
+      "dynamic": {
+        "version": "4.17.0",
+        "provider": "LitePix Core2 static/dynamic split",
+        "dynamicIds": [],
+        "staticInstances": 2,
+        "dynamicInstances": 0,
+        "splitBuilds": 1,
+        "staticRebuilds": 1,
+        "dynamicRebuilds": 1,
+        "lastDirty": []
+      },
+      "partial": {
+        "version": "4.15.0",
+        "provider": "LitePix Core2 partial BLAS cache",
+        "mode": "rebuild",
+        "dirtyTransforms": 2,
+        "dirtyGeometry": [
+          "5ADA8678-F493-487F-B715-0D9BDAD2BA89",
+          "63D7E721-988C-4E11-A65D-30A397085CFE"
+        ],
+        "builds": 1,
+        "refits": 0,
+        "cleanReuses": 0,
+        "partialBLASUpdates": 0,
+        "blasRebuilds": 0,
+        "invalidations": 0,
+        "lastPrepareMs": 1,
+        "totalPrepareMs": 1,
+        "instances": 2,
+        "uniqueBLAS": 2,
+        "tlasNodes": 1
+      },
+      "inner": {
+        "version": "4.17.0",
+        "provider": "LitePix Core2 static/dynamic split",
+        "instances": 2,
+        "uniqueBLAS": 2,
+        "tlasNodes": 1,
+        "buildMs": 0.7,
+        "rebuildCount": 1,
+        "refitCount": 0,
+        "traceRays": 0,
+        "shadowRays": 0,
+        "fallback": false,
+        "mode": "reuse-clean",
+        "dirtyObjectIndices": [],
+        "dirtyCount": 0,
+        "selectiveRefits": 0,
+        "nodesUpdated": 0,
+        "fullDelegates": 1,
+        "cleanReuses": 1,
+        "lastPrepareMs": 0.1,
+        "dynamicIds": [],
+        "staticInstances": 2,
+        "dynamicInstances": 0,
+        "splitBuilds": 1,
+        "staticRebuilds": 1,
+        "dynamicRebuilds": 1,
+        "lastDirty": [],
+        "traceRays417": 113104,
+        "shadowRays417": 2504
+      }
+    },
+    "lights": [
+      {
+        "id": "light-mtxjjw4s-d9jvm",
+        "name": "LP445_Point",
+        "type": "point",
+        "enabled": true,
+        "color": "#ffffff",
+        "intensity": 1600,
+        "range": 260,
+        "size": 1,
+        "width": 2,
+        "height": 2,
+        "coneAngle": 45,
+        "penumbra": 0.15,
+        "castShadows": true,
+        "position": [
+          -38,
+          -35,
+          78
+        ],
+        "quaternion": [
+          0,
+          0,
+          0,
+          0.9999999999999998
+        ],
+        "direction": [
+          0,
+          0,
+          -1
+        ]
+      }
+    ]
+  },
+  "quality": {
+    "rmse": 0.013161382753031425,
+    "meanAbs": 0.0002128217542160897,
+    "maxAbs": 0.9490196078431372,
+    "pixels": 5184
+  },
+  "pageErrors": [],
+  "consoleErrors": [],
+  "failures": []
+}
