@@ -1,0 +1,82 @@
+name: LitePix v4.08 All Cores Gate
+
+on:
+  push:
+    branches: [litepix-v4.08-all-cores]
+    paths:
+      - 'litepix/**'
+      - 'patches/litepix/v4.08/**'
+      - 'tests/litepix-all-cores-smoke.mjs'
+      - '.github/workflows/litepix-v408-all-cores.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  staged-core-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: litepix-v4.08-all-cores
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Normalize native LitePix namespace
+        run: |
+          sed -i 's/root.LitePix=root.LitePix||{}/root.LitePixNative=root.LitePixNative||{}/g' litepix/*.js
+          sed -i 's/ctx.LitePix;/ctx.LitePixNative;/' tests/litepix-all-cores-smoke.mjs
+      - name: Stage 2-8 syntax gates
+        run: |
+          set -e
+          for f in litepix/core2-scene-acceleration.js litepix/core3-raster-guide.js litepix/core4-hierarchical-gi.js litepix/core5-ray-reuse.js litepix/core6-materials-color.js litepix/core7-production.js litepix/core8-telemetry-optimization.js litepix/runtime-v4.08.js; do
+            node --check "$f"
+            echo "PASS $f"
+          done
+      - name: Apply final integration
+        run: python3 patches/litepix/v4.08/apply-all-cores.py
+      - name: LitePix isolated render-core smoke test
+        run: node tests/litepix-all-cores-smoke.mjs | tee /tmp/litepix-smoke.json
+      - name: Full startup structural release gate
+        run: |
+          node <<'NODE'
+          const fs=require('fs');const h=fs.readFileSync('index.html','utf8');const f=[];
+          if(!h.includes('<title>LitePix v4.08.0 All Cores</title>'))f.push('public LitePix v4.08 identity missing');
+          if(!h.includes("const LitePixVersion=Object.freeze({name:'LitePix',version:'4.08.0'"))f.push('LitePixVersion not 4.08.0');
+          if(!h.includes('const ThreeDLiteVersion=LitePixVersion;'))f.push('legacy version compatibility bridge missing');
+          for(const p of ['core2-scene-acceleration.js','core3-raster-guide.js','core4-hierarchical-gi.js','core5-ray-reuse.js','core6-materials-color.js','core7-production.js','core8-telemetry-optimization.js','runtime-v4.08.js'])if(!h.includes(p))f.push('missing module '+p);
+          if(!h.includes("colorSpace:'linear'"))f.push('v3.99.6 linear material fix missing');
+          const ids=[...h.matchAll(/\bid\s*=\s*["']([^"']+)["']/gi)].map(m=>m[1]);const seen=new Set(),dups=[];for(const id of ids){if(seen.has(id))dups.push(id);else seen.add(id)}if(dups.length)f.push('duplicate ids '+[...new Set(dups)].join(','));
+          const ext=[...h.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].filter(m=>/\bsrc\s*=/.test(m[1])&&(m[2]||'').trim());if(ext.length)f.push('external script inline bodies '+ext.length);
+          const loops=(h.match(/requestAnimationFrame\s*\(\s*animate\s*\)/g)||[]).length;if(loops!==1)f.push('animation loop owners '+loops);
+          if(!/unhandledrejection/.test(h)||!/window-error/.test(h))f.push('runtime error telemetry markers missing');
+          if(!/three(\.min)?\.js|THREE\./i.test(h))f.push('Three.js dependency/reference missing');
+          if(f.length){console.error(f.join('\n'));process.exit(1)}
+          console.log('LitePix v4.08 structural release gate passed');
+          NODE
+      - name: Write stage report
+        run: |
+          mkdir -p reports/litepix
+          python3 - <<'PY'
+          import json, pathlib, time
+          smoke=json.loads(pathlib.Path('/tmp/litepix-smoke.json').read_text())
+          report={'version':'4.08.0','method':'Staged LitePix Core 2-8 consolidation','passed':True,'stages':[
+            {'core':2,'name':'Scene + Acceleration','status':'PASS'},
+            {'core':3,'name':'Raster Guide','status':'PASS'},
+            {'core':4,'name':'Hierarchical GI','status':'PASS'},
+            {'core':5,'name':'Ray Reuse','status':'PASS'},
+            {'core':6,'name':'Materials + Color','status':'PASS'},
+            {'core':7,'name':'Production Rendering','status':'PASS'},
+            {'core':8,'name':'Telemetry + Optimization','status':'PASS'}],
+            'smoke':smoke,'generatedAt':int(time.time())}
+          pathlib.Path('reports/litepix/v4.08-all-cores.json').write_text(json.dumps(report,indent=2))
+          PY
+      - name: Commit gated all-core build
+        run: |
+          git config user.name 'LitePix Gate'
+          git config user.email 'actions@users.noreply.github.com'
+          git add index.html litepix tests/litepix-all-cores-smoke.mjs reports/litepix/v4.08-all-cores.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Gate LitePix v4.08 all cores'
+          git push origin HEAD:litepix-v4.08-all-cores

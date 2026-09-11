@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LitePix v4.00.0 Core Foundation</title>
+<title>LitePix v4.08.0 All Cores</title>
 <style>
 :root{
   --bg:#202020;--panel:#2a2a2a;--panel2:#303030;--line:#444;--line2:#555;
@@ -4185,7 +4185,7 @@ function validateArchitectureCore(){
   return {ok:errors.length===0,errors};
 }
 
-const LitePixVersion=Object.freeze({name:'LitePix',version:'4.00.0',legacyName:'3DLite',legacyVersion:'3.99.6',architecture:'Core Foundation'});
+const LitePixVersion=Object.freeze({name:'LitePix',version:'4.08.0',legacyName:'3DLite',legacyVersion:'3.99.6',architecture:'All Cores'});
 // Compatibility bridge: existing 3DLite services keep working while the renderer migrates to LitePix ownership.
 const ThreeDLiteVersion=LitePixVersion;
 
@@ -23598,5 +23598,15 @@ root.__3DLiteFastDirectLighting3995=true;
 root.__3DLiteMaterialLinearColor3996=true;
 })();
 </script>
+
+<!-- LITEPIX V4.08 ALL CORES -->
+<script src="./litepix/core2-scene-acceleration.js"></script>
+<script src="./litepix/core3-raster-guide.js"></script>
+<script src="./litepix/core4-hierarchical-gi.js"></script>
+<script src="./litepix/core5-ray-reuse.js"></script>
+<script src="./litepix/core6-materials-color.js"></script>
+<script src="./litepix/core7-production.js"></script>
+<script src="./litepix/core8-telemetry-optimization.js"></script>
+<script src="./litepix/runtime-v4.08.js"></script>
 </body>
 </html>

@@ -1,0 +1,80 @@
+{
+  "version": "4.08.0",
+  "method": "Staged LitePix Core 2-8 consolidation",
+  "passed": true,
+  "stages": [
+    {
+      "core": 2,
+      "name": "Scene + Acceleration",
+      "status": "PASS"
+    },
+    {
+      "core": 3,
+      "name": "Raster Guide",
+      "status": "PASS"
+    },
+    {
+      "core": 4,
+      "name": "Hierarchical GI",
+      "status": "PASS"
+    },
+    {
+      "core": 5,
+      "name": "Ray Reuse",
+      "status": "PASS"
+    },
+    {
+      "core": 6,
+      "name": "Materials + Color",
+      "status": "PASS"
+    },
+    {
+      "core": 7,
+      "name": "Production Rendering",
+      "status": "PASS"
+    },
+    {
+      "core": 8,
+      "name": "Telemetry + Optimization",
+      "status": "PASS"
+    }
+  ],
+  "smoke": {
+    "passed": true,
+    "modules": [
+      "Core2",
+      "Core3",
+      "Core4",
+      "Core5",
+      "Core6",
+      "Core7",
+      "Core8"
+    ],
+    "bvh": {
+      "nodes": 3,
+      "leaves": 2,
+      "primitives": 2,
+      "buildMs": 1,
+      "maxLeaf": 1,
+      "bins": 12
+    },
+    "gi": {
+      "activeBlocks": 16,
+      "finalizedBlocks": 0,
+      "refinedBlocks": 16,
+      "cache": {
+        "records": 0,
+        "hits": 0,
+        "misses": 0,
+        "hitRate": 0
+      }
+    },
+    "tiles": 4,
+    "runtime": {
+      "renderer": "LitePix",
+      "version": "4.08.0",
+      "architecture": "All Cores"
+    }
+  },
+  "generatedAt": 1789153481
+}
