@@ -1,0 +1,98 @@
+name: LitePix v4.19 Core2 Final Gate
+on:
+  push:
+    branches: [litepix-v4.16-v4.19-core2-final]
+permissions:
+  contents: write
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - name: Apply cumulative Core2 stages
+        run: python3 patches/litepix/v4.19/apply-core2-final.py
+      - name: Structural and syntax release gate
+        run: |
+          set -euo pipefail
+          node --check litepix/core2-instance-v4.13.js
+          node --check litepix/core2-cache-v4.15.js
+          node --check litepix/core2-tlas-v4.16.js
+          node --check litepix/core2-dynamic-v4.17.js
+          node --check litepix/core2-worker-v4.18.js
+          node --check litepix/core2-async-v4.18.js
+          node --check litepix/core2-production-v4.19.js
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          s=Path('index.html').read_text(encoding='utf-8')
+          req=['LitePix v4.19.0 Core2 Production Consolidated',"version:'4.19.0'",'core2-tlas-v4.16.js','core2-dynamic-v4.17.js','core2-async-v4.18.js','core2-production-v4.19.js','LitePixCore2Worker418.prewarm(job?.renderScene)','LitePixCore2Production419.wrap(acceleration,job)','litePixCore2Production:job.litePixCore2Production419?.snapshot?.()||null','root.__3DLiteMaterialLinearColor3996=true;']
+          miss=[x for x in req if x not in s]
+          if miss: raise SystemExit('missing '+repr(miss))
+          if s.count('LitePixCore2Production419.wrap(acceleration,job)') < 2: raise SystemExit('Path primary+bounce v4.19 routing incomplete')
+          js=Path('litepix/core2-instance-v4.13.js').read_text(encoding='utf-8')
+          if 'this.workerBuilt=!!pre' not in js: raise SystemExit('worker BLAS consumption hook missing')
+          ids=re.findall(r'\bid\s*=\s*["\']([^"\']+)["\']',s,re.I)
+          if len(ids)!=len(set(ids)): raise SystemExit('duplicate ids found')
+          scripts=re.findall(r'<script\b([^>]*)>([\s\S]*?)</script>',s,re.I)
+          if any(re.search(r'\bsrc\s*=',a) and b.strip() for a,b in scripts): raise SystemExit('external script inline body found')
+          if len(re.findall(r'requestAnimationFrame\s*\(\s*animate\s*\)',s))!=1: raise SystemExit('animation loop owner mismatch')
+          print('LitePix v4.19 structural gate passed')
+          PY
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null
+      - name: Browser Core2 production gate
+        run: |
+          set -euo pipefail
+          python3 -m http.server 8000 >/tmp/lp419-http.log 2>&1 &
+          PID=$!
+          trap 'kill $PID || true' EXIT
+          node <<'NODE' | tee /tmp/lp419.json
+          const {chromium}=require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--use-gl=swiftshader','--enable-webgl','--ignore-gpu-blocklist']});
+            const page=await browser.newPage({viewport:{width:1280,height:900}}),pageErrors=[],consoleErrors=[];
+            page.on('pageerror',e=>pageErrors.push(String(e?.stack||e)));page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
+            const response=await page.goto('http://127.0.0.1:8000/index.html',{waitUntil:'domcontentloaded',timeout:120000});await page.waitForTimeout(2500);
+            const result=await page.evaluate(async()=>{
+              const mat0=new THREE.MeshStandardMaterial({color:0xb8b8b8,roughness:.65,metalness:0}),mat1=new THREE.MeshStandardMaterial({color:0x8aa8c2,roughness:.5,metalness:.05});
+              const g0=new THREE.BoxGeometry(20,20,20),g1=new THREE.SphereGeometry(11,10,7),test=[];
+              for(let i=0;i<32;i++){const g=i<16?g0:g1,m=new THREE.Mesh(g,i<16?mat0:mat1),x=(i%8-3.5)*28,y=(Math.floor(i/8)-1.5)*28;m.name='LP419_'+i;m.position.set(x,y,15+(i>=16?2:0));scene.add(m);objects.push(m);test.push(m);}
+              camera.position.set(180,-230,150);camera.up.set(0,0,1);camera.lookAt(0,0,15);camera.updateMatrixWorld(true);camera.updateProjectionMatrix();
+              window.__3DLiteSceneRevision=(window.__3DLiteSceneRevision||0)+1;window.__3DLiteGeometryRevision=(window.__3DLiteGeometryRevision||0)+1;RenderAccelerationCache16?.reset?.();LitePixCore2PartialCache415.reset();LitePixCore2TLASCache416.reset();LitePixCore2DynamicCache417.reset();
+              const sv=(id,v)=>{const e=document.getElementById(id);if(!e)return;e.value=String(v);e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));};sv('rsEngine','path');sv('rsWidth',112);sv('rsHeight',64);sv('rsBounces',3);sv('rsMinSamples',1);sv('rsMaxSamples',2);sv('rsNoise',.05);sv('rsExposure',0);
+              async function render(mode){window.__LitePixCore2Production419Enabled=mode==='419';window.__LitePixCore2Partial415Enabled=mode==='415';window.__LitePixCore2Persistent414Enabled=false;window.__LitePixCore2Scene413Enabled=mode==='413'||mode==='415'||mode==='419';window.__LitePixCore2Path412Enabled=true;window.__LitePixCore2Worker418Enabled=mode!=='413';if(mode==='413'){LitePixCore2Worker418.cache.clear();RenderAccelerationCache16?.reset?.();}const prior=RenderFramework?.jobs?.lastJob?.id||0,t=Date.now();document.getElementById('renderNowBtn').click();while(true){await new Promise(r=>setTimeout(r,40));const j=RenderFramework.jobs.lastJob;if(j&&j.id!==prior&&j.finished&&j.performance){const rgba=j.beautyFrame?.rgba||j.beautyFrame?.data||null;return{wallMs:Date.now()-t,performance:j.performance,secondaryGI:j.beautyFrame?.metadata?.secondaryGI||null,prod:j.beautyFrame?.metadata?.litePixCore2Production||null,partial:j.beautyFrame?.metadata?.litePixCore2Partial||null,rgba:rgba?Array.from(rgba):null};}}}
+              const first=await render('419'),clean=await render('419');
+              test[0].position.x+=9;test[0].updateMatrixWorld(true);window.__3DLiteSceneRevision=(window.__3DLiteSceneRevision||0)+1;const move1=await render('419'),staticAfter1=LitePixCore2DynamicCache417.staticRebuilds,dynAfter1=LitePixCore2DynamicCache417.dynamicRebuilds;
+              test[0].position.x+=7;test[0].updateMatrixWorld(true);window.__3DLiteSceneRevision=(window.__3DLiteSceneRevision||0)+1;const move2=await render('419'),staticAfter2=LitePixCore2DynamicCache417.staticRebuilds,dynAfter2=LitePixCore2DynamicCache417.dynamicRebuilds;
+              const pos=g0.attributes.position;pos.setX(0,pos.getX(0)-4);pos.needsUpdate=true;g0.computeVertexNormals();g0.computeBoundingBox();g0.computeBoundingSphere();window.__3DLiteGeometryRevision=(window.__3DLiteGeometryRevision||0)+1;window.__3DLiteSceneRevision=(window.__3DLiteSceneRevision||0)+1;const geom=await render('419');
+              const fresh=await render('413');let maxPixelDiff=Infinity,meanPixelDiff=Infinity;if(geom.rgba&&fresh.rgba&&geom.rgba.length===fresh.rgba.length){let mx=0,sum=0;for(let i=0;i<geom.rgba.length;i++){const d=Math.abs(geom.rgba[i]-fresh.rgba[i]);if(d>mx)mx=d;sum+=d;}maxPixelDiff=mx;meanPixelDiff=sum/geom.rgba.length;}for(const x of [first,clean,move1,move2,geom,fresh])delete x.rgba;
+              return{identity:{title:document.title,version:window.LitePixVersion?.version,m419:window.__LitePixCore2Production419===true,m418:window.__LitePixCore2Worker418===true,m417:window.__LitePixCore2Dynamic417===true,m416:window.__LitePixCore2TLAS416===true},first,clean,move1,move2,geom,fresh,staticAfter1,staticAfter2,dynAfter1,dynAfter2,maxPixelDiff,meanPixelDiff,worker:LitePixCore2Worker418.snapshot(),tlas:LitePixCore2TLASCache416.snapshot(),dynamic:LitePixCore2DynamicCache417.snapshot(),partial:LitePixCore2PartialCache415.snapshot()};
+            });
+            const f=[];if(response?.status()!==200)f.push('HTTP != 200');if(result.identity.version!=='4.19.0'||!result.identity.m419||!result.identity.m418||!result.identity.m417||!result.identity.m416)f.push('v4.16-v4.19 identity mismatch');
+            if(!(result.first.worker?.workerBuilds>=2||result.worker.workerBuilds>=2))f.push('v4.18 worker did not build BLAS data');
+            if(result.clean.prod?.tlas?.mode!=='reuse-clean')f.push('clean render did not reuse TLAS');
+            if(result.move1.prod?.tlas?.mode!=='selective-refit'||result.move1.prod?.tlas?.dirtyCount!==1)f.push('v4.16 selective TLAS refit failed');
+            if(!(result.move1.prod?.tlas?.nodesUpdated>0&&result.move1.prod?.tlas?.nodesUpdated<(result.move1.prod?.inner?.tlasNodes||999999)))f.push('selective TLAS did not limit node updates');
+            if(!(result.move1.prod?.dynamic?.dynamicInstances>=1&&result.move1.prod?.dynamic?.staticInstances>=1))f.push('v4.17 static/dynamic split inactive');
+            if(result.staticAfter2!==result.staticAfter1)f.push('static TLAS rebuilt on repeated dynamic motion');if(!(result.dynAfter2>result.dynAfter1))f.push('dynamic TLAS did not update');
+            if(!(result.geom.prod?.partial?.partialBLASUpdates>=1&&result.geom.prod?.partial?.blasRebuilds>=1))f.push('v4.15 partial BLAS path lost during consolidation');
+            if(result.worker.failures)f.push('worker failures '+result.worker.failures);if(result.geom.secondaryGI!=='Light Cache'||result.fresh.secondaryGI!=='Light Cache')f.push('Light Cache inactive');if(!(result.maxPixelDiff<=1&&result.meanPixelDiff<=0.02))f.push('v4.19/fresh parity failed '+result.maxPixelDiff+'/'+result.meanPixelDiff);if(pageErrors.length)f.push('page errors '+pageErrors.length);if(consoleErrors.length)f.push('console errors '+consoleErrors.length);
+            const out={passed:!f.length,...result,pageErrors,consoleErrors,failures:f};console.log(JSON.stringify(out,null,2));await browser.close();if(f.length)process.exit(1);
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+      - name: Save report
+        run: mkdir -p reports/litepix && cp /tmp/lp419.json reports/litepix/v4.19-core2-final-report.json
+      - name: Commit gated build
+        run: |
+          git config user.name 'LitePix v4.19 Gate'
+          git config user.email 'actions@users.noreply.github.com'
+          git add index.html litepix/core2-instance-v4.13.js reports/litepix/v4.19-core2-final-report.json
+          git commit -m 'Gate LitePix v4.19 Core2 production consolidation' || exit 0
+          git push origin HEAD:litepix-v4.16-v4.19-core2-final
