@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LitePix v4.19.0 Core2 Production Consolidated</title>
+<title>LitePix v4.23.0 Core3 Production Raster Guide</title>
 <style>
 :root{
   --bg:#202020;--panel:#2a2a2a;--panel2:#303030;--line:#444;--line2:#555;
@@ -4185,7 +4185,7 @@ function validateArchitectureCore(){
   return {ok:errors.length===0,errors};
 }
 
-const LitePixVersion=Object.freeze({name:'LitePix',version:'4.19.0',legacyName:'3DLite',legacyVersion:'3.99.6',architecture:'All Cores Optimized'});
+const LitePixVersion=Object.freeze({name:'LitePix',version:'4.23.0',legacyName:'3DLite',legacyVersion:'3.99.6',architecture:'All Cores Optimized'});
 // Compatibility bridge: existing 3DLite services keep working while the renderer migrates to LitePix ownership.
 const ThreeDLiteVersion=LitePixVersion;
 
@@ -8555,6 +8555,9 @@ var PathGIRenderer=Object.freeze({
     const aovs=new RenderAOVSet(width,height);
     const primaryMask=new Uint8Array(width*height);
     const litePixPath410=(typeof LitePixPathExecution410==='function')?new LitePixPathExecution410(width,height,{startBlock:32,minBlock:1,maxLevel:6}):null;
+    const litePixCore3Production423=(window.__LitePixCore3Production423Enabled!==false&&typeof window.LitePixCore3Production423==='function')?new window.LitePixCore3Production423(width,height):null;
+    if(litePixCore3Production423)litePixCore3Production423.beginFrame();
+    job.litePixCore3Production423=litePixCore3Production423;
     job.litePixPath410=litePixPath410;
     const perf16=RenderCoreH.attachPerformance(job);
     const rowChunk16=RenderCoreH.yieldRows(job);
@@ -8595,6 +8598,7 @@ var PathGIRenderer=Object.freeze({
           accumulator.add(i,sample.radiance);
           const ph=sample.primaryHitRecord;
           if(litePixPath410)litePixPath410.record(i,x,y,sample,ph,accumulator);
+          if(litePixCore3Production423)litePixCore3Production423.recordPrimary(i,x,y,ray,sample,ph,job,compiled,acceleration);
           if(pass===0){
             if(ph?.hit)RenderAOVUtil.writePrimary(aovs,i,RenderAOVUtil.primary(job,acceleration,compiled,ray,ph,seed));
             else RenderAOVUtil.writePrimary(aovs,i,null);
@@ -8606,6 +8610,7 @@ var PathGIRenderer=Object.freeze({
       });
       completedPasses=pass+1;
       const litePixPass410=litePixPath410?litePixPath410.completePass(accumulator):null;
+      if(litePixCore3Production423)job.litePixCore3Pass423=litePixCore3Production423.completePass();
       job.litePixPathStats410=litePixPass410;
       const rgba=accumulator.resolveRGBA(settings,primaryMask);
       job.previewFrame={
@@ -8646,6 +8651,7 @@ var PathGIRenderer=Object.freeze({
       ]);
     }
     RenderCoreH.markStage(job,'render',renderStart16);
+    job.litePixCore3Stats423=litePixCore3Production423?.endFrame?.()||job.litePixCore3Pass423||null;
     job.litePixPathStats410=litePixPath410?.snapshot?.()||job.litePixPathStats410||null;
     if(litePixPath410)litePixPath410.dispose();
     if(LiteTraceExecutionContext.performance===perf16){LiteTraceExecutionContext.activeJob=null;LiteTraceExecutionContext.performance=null;}
@@ -8672,6 +8678,7 @@ var PathGIRenderer=Object.freeze({
         diagnostics:RenderPart5Core.diagnostics(job,compiled,acceleration),
         performance:RenderCoreH.performance(job),
         litePixNativePath:litePixPath410?.snapshot?.()||null,
+        litePixCore3Production:job.litePixCore3Stats423||litePixCore3Production423?.snapshot?.()||null,
         litePixCore2Production:job.litePixCore2Production419?.snapshot?.()||null,
         litePixCore2Partial:job.litePixCore2Partial415?.snapshot?.()||null,
         litePixCore2Persistent:job.litePixCore2Persistent414?.snapshot?.()||null,
@@ -23668,6 +23675,10 @@ root.__3DLiteMaterialLinearColor3996=true;
 <!-- LITEPIX V4.08 ALL CORES -->
 <script src="./litepix/core2-scene-acceleration.js"></script>
 <script src="./litepix/core3-raster-guide.js"></script>
+<script src="./litepix/core3-gbuffer-v4.20.js"></script>
+<script src="./litepix/core3-pyramid-v4.21.js"></script>
+<script src="./litepix/core3-temporal-v4.22.js"></script>
+<script src="./litepix/core3-production-v4.23.js"></script>
 <script src="./litepix/core4-hierarchical-gi.js"></script>
 <script src="./litepix/core5-ray-reuse.js"></script>
 <script src="./litepix/core6-materials-color.js"></script>
