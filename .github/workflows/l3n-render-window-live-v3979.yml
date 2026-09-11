@@ -1,0 +1,47 @@
+name: L3N v3.97.9 Render Window Live
+on:
+  push:
+    branches: [l3n-dev]
+    paths: ['.l3n-render-window-live-v3979-trigger']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: l3n-dev
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Apply patch
+        run: python tools/l3n_render_window_live_v3979.py
+      - name: Static sanity
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('index.html').read_text(encoding='utf-8')
+          checks=[
+            '3DLite 3.97.9',
+            '__3DLiteRenderWindowLive3979',
+            'ThreeDLiteRenderWindow3979',
+            'renderBucketMarker3979',
+            'renderProgressDot3979',
+            'rfResetView3979',
+            "?.tile?.(job,width,height,rgba,tile",
+            "stage?.(job,'BVH'",
+            "stage?.(job,'Rendering'"
+          ]
+          missing=[x for x in checks if x not in s]
+          assert not missing, missing
+          assert '3DLite 3.97.8' not in s
+          print('v3.97.9 static sanity passed')
+          PY
+      - name: Commit index only
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'L3N v3.97.9: live render window navigation and progress' || true
+          git push origin HEAD:l3n-dev
