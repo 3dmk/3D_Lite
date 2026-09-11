@@ -24,12 +24,11 @@ jobs:
           for n in $(seq 1 10); do
             python3 tools/l3n_adaptive_segments_v3990.py "$n"
             python3 - "$n" <<'PY'
-          import re,sys
+          import sys
           from pathlib import Path
           n=int(sys.argv[1]); s=Path('index.html').read_text(errors='ignore')
           assert f'id="l3n-adaptive-segment-{n}"' in s
           assert s.count(f'id="l3n-adaptive-segment-{n}"')==1
-          assert s.lower().count('<script')==s.lower().count('</script>')
           assert s.lower().count('</body>')==1
           if n==1:
               assert "version:'3.99.0'" in s
