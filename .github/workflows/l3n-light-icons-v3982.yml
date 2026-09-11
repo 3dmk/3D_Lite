@@ -1,0 +1,33 @@
+name: L3N v3.98.2 Themed Light Viewport Icons
+on:
+  push:
+    branches: [l3n-dev]
+    paths:
+      - '.l3n-light-icons-v3982-trigger'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply themed viewport icons
+        run: python tools/l3n_light_viewport_icons_v3982.py
+      - name: Verify static icon structure
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('index.html').read_text(encoding='utf-8')
+          for x in ['3.98.2','__3DLiteLightViewportIcons3982','minimal-ui-themed-viewport-icons','updateViewportIconScale',"theme:'#aeb4bc'",'lightViewportIcon']:
+              assert x in s,x
+          assert '__3DLiteLightGizmo3981' not in s
+          print('v3.98.2 static icon checks passed')
+          PY
+      - name: Commit patched index only
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git diff --cached --quiet && exit 0
+          git commit -m '3DLite v3.98.2 UI-themed viewport light icons'
+          git push
