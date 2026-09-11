@@ -7556,7 +7556,7 @@ var RenderMIS=Object.freeze({
 
 const GGXImportanceSampler=Object.freeze({
   sampleHalfVector(n,roughness,u1,u2){
-    const a=Math.max(.045,roughness);
+    const a=Math.max(.002025,roughness*roughness);
     const a2=a*a;
     const phi=2*Math.PI*u1;
     const cosTheta=Math.sqrt(Math.max(0,(1-u2)/(1+(a2-1)*u2)));
@@ -7570,7 +7570,7 @@ const GGXImportanceSampler=Object.freeze({
     );
   },
   sampleVisibleHalfVector(n,v,roughness,u1,u2){
-    const a=Math.max(.045,roughness);
+    const a=Math.max(.002025,roughness*roughness);
     const basis=LightBasis.fromDirection(n);
     const vl=[RayMath.dot(v,basis.tangent),RayMath.dot(v,basis.bitangent),Math.max(1e-6,RayMath.dot(v,basis.n))];
     const vh=RayMath.normalize([a*vl[0],a*vl[1],vl[2]]);
@@ -7589,7 +7589,7 @@ const GGXImportanceSampler=Object.freeze({
   },
   reflect(i,n){return RayMath.sub(i,RayMath.mul(n,2*RayMath.dot(i,n)));},
   distribution(nDotH,roughness){
-    const a=Math.max(.045,roughness),a2=a*a;
+    const a=Math.max(.002025,roughness*roughness),a2=a*a;
     const d=nDotH*nDotH*(a2-1)+1;
     return a2/(Math.PI*d*d+1e-8);
   }
@@ -7630,8 +7630,12 @@ var PathBSDFSampler=Object.freeze({
     if(!h.every(Number.isFinite))return (1-specProb)*diffusePdf;
     const nDotH=Math.max(0,RayMath.dot(n,h));
     const vDotH=Math.max(1e-7,RayMath.dot(v,h));
-    const D=GGXImportanceSampler.distribution(nDotH,material.roughness);
-    const specPdf=(D*nDotH)/(4*vDotH+1e-8);
+    const nDotV=Math.max(1e-7,RayMath.dot(n,v));
+    const D=PhysicalBSDF.distributionGGX(nDotH,material.roughness);
+    const G1=PhysicalBSDF.geometrySchlickGGX(nDotV,material.roughness);
+    // VNDF half-vector pdf: D(h)*G1(v)*|v.h|/|n.v|.
+    // Reflection Jacobian 1/(4|v.h|) cancels the v.h term.
+    const specPdf=(D*G1)/(4*nDotV+1e-8);
     return (1-specProb)*diffusePdf+specProb*specPdf;
   },
 
@@ -23065,7 +23069,7 @@ L.startup();window.__3DLiteL3NIntegrationSnapshot=L.regression();})();
     version:'3.98.0',
     architecture:'existing-renderer-in-place',
     bvh:'SAH-12bin-normalized-leafcost-nearfirst',
-    ggx:'visible-normal-sampling',
+    ggx:'visible-normal-sampling+matched-vndf-pdf',
     pathBudget:true,shadowBudget:true,
     parallelRenderer:false
   });
