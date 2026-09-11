@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>3DLite v3.98.3 Light Energy Normalization</title>
+<title>3DLite v3.99.0 Adaptive Render Code Export</title>
 <style>
 :root{
   --bg:#202020;--panel:#2a2a2a;--panel2:#303030;--line:#444;--line2:#555;
@@ -4185,7 +4185,7 @@ function validateArchitectureCore(){
   return {ok:errors.length===0,errors};
 }
 
-const ThreeDLiteVersion=Object.freeze({name:'3DLite',version:'3.98.3'});
+const ThreeDLiteVersion=Object.freeze({name:'3DLite',version:'3.99.0'});
 const LiteTraceVersion=Object.freeze({name:'LiteTrace Renderer',version:'1.1 RC1'});
 window.ThreeDLiteVersion=ThreeDLiteVersion;
 window.LiteTraceVersion=LiteTraceVersion;
@@ -6597,7 +6597,7 @@ var RenderTileScheduler16=Object.freeze({
 });
 window.RenderTileScheduler16=RenderTileScheduler16;
 
-/* 3DLite v3.98.3 — LiteTrace execution-context dependency repair */
+/* 3DLite v3.99.0 — LiteTrace execution-context dependency repair */
 var LiteTraceExecutionContext=(function(){
   const existing=window.LiteTraceExecutionContext;
   if(existing&&typeof existing==='object')return existing;
@@ -6847,7 +6847,7 @@ const LightEnergyPolicy=Object.freeze({
 window.LightEnergyPolicy=LightEnergyPolicy;
 window.__3DLiteLightEnergy3983=true;
 window.__3DLiteLightDefaultDirection3983=true;
-window.ThreeDLiteLightEnergy3983=Object.freeze({version:'3.98.3',baselineIntensity:1,referenceDistance:100});
+window.ThreeDLiteLightEnergy3983=Object.freeze({version:'3.99.0',baselineIntensity:1,referenceDistance:100});
 
 var EditorLightSystem={
   nextId:1,
@@ -22194,7 +22194,7 @@ document.documentElement.dataset.browserTestApi='1';
 
 
 /* ============================================================
-   3DLite v3.98.3 — Central Public Version Synchronizer
+   3DLite v3.99.0 — Central Public Version Synchronizer
    Public UI version is owned by ThreeDLiteVersion.
    Historical subsystem versions remain unchanged intentionally.
    ============================================================ */
@@ -23141,5 +23141,198 @@ L.startup();window.__3DLiteL3NIntegrationSnapshot=L.regression();})();
 window.__3DLiteSpotRenderFix3983=true;
 window.ThreeDLiteSpotRenderFix3983=Object.freeze({version:'3.98.3',defaultDirection:'-Z',issue:'spot-black-render'});
 </script>
+
+<script id="__3DLiteAdaptiveRenderCodeExport3984">
+(function(){
+  'use strict';
+  const VERSION='3.98.4';
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,Number.isFinite(v)?v:a));
+  const safe=(v,f=0)=>Number.isFinite(Number(v))?Number(v):f;
+
+  const AdaptiveRenderLearningController=Object.freeze({
+    version:VERSION,
+    score(sample={}){
+      const noise=clamp(safe(sample.noise,1),0,1);
+      const uncertainty=clamp(safe(sample.uncertainty,1),0,1);
+      const contribution=clamp(safe(sample.expectedContribution,1),0,1);
+      const success=clamp(safe(sample.historicalSuccess,1),0,1);
+      const visual=clamp(safe(sample.visualImportance,1),0,1);
+      const material=clamp(safe(sample.materialNeed,1),0,1);
+      const passNeed=clamp(safe(sample.passNeed,1),0,1);
+      const cost=Math.max(.001,safe(sample.estimatedCost,1));
+      return clamp((noise*uncertainty*contribution*success*visual*material*passNeed)/cost,0,1);
+    },
+    passDecay(pass=1,maxPasses=64){
+      const p=Math.max(1,safe(pass,1)),m=Math.max(1,safe(maxPasses,64));
+      const t=clamp((p-1)/Math.max(1,m-1),0,1);
+      return clamp(1-(.9*Math.pow(t,.72)),.10,1);
+    },
+    nextStrategy(feedback={}){
+      const pass=Math.max(1,safe(feedback.pass,1));
+      const maxPasses=Math.max(pass,safe(feedback.maxPasses,64));
+      const noise=clamp(safe(feedback.noise,1),0,1);
+      const stable=clamp(safe(feedback.stablePixelRatio,0),0,1);
+      const useful=clamp(safe(feedback.usefulRayRatio,1),0.05,1);
+      const efficiency=Math.max(0,safe(feedback.efficiency,1));
+      const decay=this.passDecay(pass,maxPasses);
+      const unresolved=clamp(1-stable,0.02,1);
+      const efficiencyScale=efficiency>0?clamp(.65+Math.min(.35,efficiency),.65,1):.65;
+      const rayBudget=clamp(decay*(.35+.65*noise)*unresolved*(.65+.35*useful)*efficiencyScale,.05,1);
+      return Object.freeze({
+        pass, maxPasses, rayBudget,
+        activePixelRatio:unresolved,
+        tilePriority:'noise-descending',
+        lightSampling:noise<.18?'importance-reservoir':'importance',
+        shadowBudget:clamp(rayBudget*(noise>.25?1:.65),.05,1),
+        bounceBudget:clamp(rayBudget*(useful<.35?.65:1),.05,1),
+        reflectionBudget:clamp(rayBudget*(safe(feedback.reflectionNoise,noise)>.15?1:.55),.05,1),
+        giBudget:clamp(rayBudget*(safe(feedback.giNoise,noise)>.15?1:.55),.05,1),
+        reusePrimaryHits:true,
+        reuseGBuffer:true,
+        reuseLightVisibility:true,
+        convergenceSkipThreshold:clamp(.0025+(pass/maxPasses)*.0125,.0025,.015),
+        denoiseAssist:pass>=Math.max(4,Math.floor(maxPasses*.25)),
+        learningMode:'quality-per-millisecond'
+      });
+    },
+    capture(job=null){
+      const j=job||window.RenderFramework?.jobs?.activeJob||window.RenderFramework?.jobs?.lastJob||null;
+      const p=j?.progress||{};
+      const perf=j?.performance||j?.metrics||{};
+      const pass=safe(p.currentSamples||p.currentPass||perf.samples,1);
+      const maxPasses=safe(p.maximumSamples||j?.settings?.samples,64);
+      return Object.freeze({
+        pass,maxPasses,
+        noise:clamp(safe(p.noise,1),0,1),
+        stablePixelRatio:clamp(safe(j?.adaptiveLearning?.stablePixelRatio,0),0,1),
+        usefulRayRatio:clamp(safe(j?.adaptiveLearning?.usefulRayRatio,1),0,1),
+        efficiency:safe(j?.adaptiveLearning?.efficiency,1),
+        reflectionNoise:safe(j?.adaptiveLearning?.reflectionNoise,p.noise),
+        giNoise:safe(j?.adaptiveLearning?.giNoise,p.noise)
+      });
+    },
+    preview(job=null){const f=this.capture(job);return Object.freeze({feedback:f,strategy:this.nextStrategy(f)});}
+  });
+  window.L3NAdaptiveRenderLearningController=AdaptiveRenderLearningController;
+
+  function compiledSource(){
+    return `/* 3DLite v${VERSION} — L3N Adaptive Render Learning Controller\n   Copyable reference implementation for progressive self-optimization. */\n\n`+
+`const L3NAdaptiveRenderLearningController = (() => {\n`+
+`  const clamp=(v,a,b)=>Math.max(a,Math.min(b,Number.isFinite(v)?v:a));\n`+
+`  const safe=(v,f=0)=>Number.isFinite(Number(v))?Number(v):f;\n\n`+
+`  function workScore(s={}) {\n`+
+`    const cost=Math.max(.001,safe(s.estimatedCost,1));\n`+
+`    return clamp((safe(s.noise,1)*safe(s.uncertainty,1)*safe(s.expectedContribution,1)*safe(s.historicalSuccess,1)*safe(s.visualImportance,1)*safe(s.materialNeed,1)*safe(s.passNeed,1))/cost,0,1);\n`+
+`  }\n\n`+
+`  function passDecay(pass=1,maxPasses=64) {\n`+
+`    const t=clamp((Math.max(1,pass)-1)/Math.max(1,maxPasses-1),0,1);\n`+
+`    return clamp(1-(.9*Math.pow(t,.72)),.10,1);\n`+
+`  }\n\n`+
+`  function analyzeConvergence(f){ return {noise:clamp(safe(f.noise,1),0,1), stable:clamp(safe(f.stablePixelRatio,0),0,1)}; }\n`+
+`  function analyzeLights(f){ return {useful:clamp(safe(f.usefulLightRatio,1),.05,1), visibilityReuse:true, reservoir:true}; }\n`+
+`  function analyzePaths(f){ return {useful:clamp(safe(f.usefulRayRatio,1),.05,1), reflectionNoise:safe(f.reflectionNoise,f.noise), giNoise:safe(f.giNoise,f.noise)}; }\n`+
+`  function analyzeMaterials(f){ return {need:clamp(safe(f.materialNeed,1),.05,1)}; }\n`+
+`  function analyzeEfficiency(f){ return {value:Math.max(0,safe(f.efficiency,1)), qualityPerMs:safe(f.qualityGain,0)/Math.max(1,safe(f.renderMs,1))}; }\n\n`+
+`  function buildNextRenderStrategy(feedback={}) {\n`+
+`    const pass=Math.max(1,safe(feedback.pass,1));\n`+
+`    const maxPasses=Math.max(pass,safe(feedback.maxPasses,64));\n`+
+`    const c=analyzeConvergence(feedback), l=analyzeLights(feedback), p=analyzePaths(feedback), m=analyzeMaterials(feedback), e=analyzeEfficiency(feedback);\n`+
+`    const unresolved=clamp(1-c.stable,.02,1);\n`+
+`    const decay=passDecay(pass,maxPasses);\n`+
+`    const rayBudget=clamp(decay*(.35+.65*c.noise)*unresolved*(.65+.35*p.useful)*(.65+.35*clamp(e.value,0,1)),.05,1);\n`+
+`    return {pass,maxPasses,rayBudget,activePixelRatio:unresolved,tilePriority:'noise-descending',lightSampling:c.noise<.18?'importance-reservoir':'importance',shadowBudget:clamp(rayBudget*(c.noise>.25?1:.65),.05,1),bounceBudget:clamp(rayBudget*(p.useful<.35?.65:1),.05,1),reflectionBudget:clamp(rayBudget*(p.reflectionNoise>.15?1:.55),.05,1),giBudget:clamp(rayBudget*(p.giNoise>.15?1:.55),.05,1),reusePrimaryHits:true,reuseGBuffer:true,reuseLightVisibility:true,convergenceSkipThreshold:clamp(.0025+(pass/maxPasses)*.0125,.0025,.015),denoiseAssist:pass>=Math.max(4,Math.floor(maxPasses*.25)),learningMode:'quality-per-millisecond'};\n`+
+`  }\n\n`+
+`  return Object.freeze({workScore,passDecay,analyzeConvergence,analyzeLights,analyzePaths,analyzeMaterials,analyzeEfficiency,buildNextRenderStrategy});\n`+
+`})();\n`;
+  }
+
+  const state={panel:null,textarea:null};
+  function ensureUI(){
+    const win=document.getElementById('renderFrameWindow');
+    if(!win)return false;
+    let btn=document.getElementById('l3nAdaptiveCodeBtn3984');
+    if(!btn){
+      const title=win.querySelector('.render-title');
+      btn=document.createElement('button');
+      btn.id='l3nAdaptiveCodeBtn3984';btn.type='button';btn.textContent='Adaptive Code';btn.title='Open copyable L3N adaptive render controller code';
+      btn.style.cssText='margin-left:4px;padding:2px 7px;font-size:11px;';
+      const close=title?.querySelector('[data-render-close="frame"]');
+      if(title)title.insertBefore(btn,close||null);
+      btn.addEventListener('click',open);
+    }
+    let panel=document.getElementById('l3nAdaptiveCodePanel3984');
+    if(!panel){
+      panel=document.createElement('div');panel.id='l3nAdaptiveCodePanel3984';
+      panel.style.cssText='display:none;position:absolute;left:12px;right:12px;top:44px;bottom:12px;z-index:45;background:#181818;border:1px solid #555;box-shadow:0 8px 28px rgba(0,0,0,.6);padding:8px;min-width:360px;min-height:180px;';
+      panel.innerHTML='<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;font:12px sans-serif;color:#ddd"><b style="margin-right:auto">L3N Adaptive Render Learning — Compiled Code v'+VERSION+'</b><button type="button" id="l3nAdaptiveCodeRefresh3984">Refresh</button><button type="button" id="l3nAdaptiveCodeSelect3984">Select All</button><button type="button" id="l3nAdaptiveCodeCopy3984">Copy All</button><button type="button" id="l3nAdaptiveCodeClose3984">Close</button></div><textarea id="l3nAdaptiveCodeText3984" spellcheck="false" readonly style="width:100%;height:calc(100% - 34px);resize:none;background:#101010;color:#d8d8d8;border:1px solid #444;padding:9px;font:11px/1.45 Consolas,monospace;user-select:text;white-space:pre;overflow:auto"></textarea>';
+      win.appendChild(panel);
+      document.getElementById('l3nAdaptiveCodeRefresh3984')?.addEventListener('click',refresh);
+      document.getElementById('l3nAdaptiveCodeSelect3984')?.addEventListener('click',selectAll);
+      document.getElementById('l3nAdaptiveCodeCopy3984')?.addEventListener('click',copyAll);
+      document.getElementById('l3nAdaptiveCodeClose3984')?.addEventListener('click',close);
+    }
+    state.panel=panel;state.textarea=document.getElementById('l3nAdaptiveCodeText3984');
+    if(state.textarea&&!state.textarea.value)state.textarea.value=compiledSource();
+    return true;
+  }
+  function refresh(){ensureUI();if(state.textarea)state.textarea.value=compiledSource();return state.textarea?.value||'';}
+  function open(){ensureUI();refresh();state.panel.style.display='block';state.textarea?.focus();return true;}
+  function close(){ensureUI();state.panel.style.display='none';return true;}
+  function selectAll(){ensureUI();state.textarea?.focus();state.textarea?.select();return state.textarea?.value||'';}
+  async function copyAll(){
+    const text=refresh();
+    try{await navigator.clipboard.writeText(text);return true;}catch(_){selectAll();try{return document.execCommand('copy');}catch(__){return false;}}
+  }
+  function toggle(){ensureUI();return state.panel.style.display==='none'?open():close();}
+  window.ThreeDLiteAdaptiveRenderCode3984=Object.freeze({version:VERSION,open,close,toggle,refresh,selectAll,copyAll,source:compiledSource,preview:(job=null)=>AdaptiveRenderLearningController.preview(job)});
+  window.__3DLiteAdaptiveRenderCodeExport3984=true;
+  const init=()=>{try{ensureUI();}catch(_){}};
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+})();
+</script>
+
+<script id="l3n-adaptive-segment-1">
+(()=>{const V='3.99.0';const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const state={version:V,renderCount:0,passCount:0,last:null,history:[],strategy:null,sceneRevision:0,learned:{},metrics:{}};
+const A={version:V,state,clamp,now:()=>performance.now(),safe:n=>Number.isFinite(Number(n))?Number(n):0,
+observe(sample={}){const x={at:Date.now(),renderId:sample.renderId??null,pass:this.safe(sample.currentSamples||sample.pass||0),max:this.safe(sample.maximumSamples||0),noise:this.safe(sample.noise),elapsedMs:this.safe(sample.elapsedMs),rays:this.safe(sample.totalRays||sample.raysCast),shadowRays:this.safe(sample.shadowRays),secondaryRays:this.safe(sample.secondaryRays),reflectionRays:this.safe(sample.reflectionRays),refractionRays:this.safe(sample.refractionRays),rps:this.safe(sample.raysPerSecond)};const prev=state.last;if(prev&&x.pass!==prev.pass)state.passCount++;state.last=x;state.history.push(x);if(state.history.length>512)state.history.splice(0,state.history.length-512);this.rebuild?.();return x;},
+rebuild(){const h=state.history,cur=h[h.length-1]||{};const prev=h.length>1?h[h.length-2]:null;const noiseGain=prev?Math.max(0,(prev.noise||0)-(cur.noise||0)):0;const dt=prev?Math.max(1,(cur.elapsedMs||0)-(prev.elapsedMs||0)):1;state.metrics={noiseGain,deltaMs:dt,efficiency:noiseGain/dt};state.strategy=this.buildNextRenderStrategy?.(cur,h)||state.strategy;return state.strategy;},
+buildNextRenderStrategy(cur,h){return {pass:cur.pass||0,rayBudget:1,activePixelRatio:1,activeTileRatio:1,lightBudget:1,bounceBudget:1,cacheReuse:0,guiding:0,efficiency:state.metrics.efficiency||0};},
+snapshot(){return JSON.parse(JSON.stringify({version:V,state}));},invalidate(reason='scene-change'){state.sceneRevision++;state.learned={};state.strategy=null;return reason;}};
+window.ThreeDLiteAdaptiveRender3990=A;window.__3DLiteAdaptiveRender3990=true;
+function bind(){const rf=window.RenderFramework;if(!rf)return false;if(rf.__adaptive3990)return true;rf.__adaptive3990=true;const old=rf.ui?.updateProgress?.bind(rf.ui);if(old)rf.ui.updateProgress=(p)=>{const r=old(p);try{A.observe(p||{});}catch(_){}return r;};const rec=rf.recordCompleted?.bind(rf);if(rec)rf.recordCompleted=(job)=>{const r=rec(job);try{A.state.renderCount++;A.observe(job?.progress?.snapshot?.()||job?.progress||{});}catch(_){}return r;};return true;}
+if(!bind())window.addEventListener('load',()=>bind(),{once:true});
+})();</script>
+<script id="l3n-adaptive-segment-2">
+(()=>{const A=window.ThreeDLiteAdaptiveRender3990;if(!A)return;const S=A.state;S.convergence={pixels:new Map(),tiles:new Map(),stableThreshold:.0025};
+A.updateConvergence=(key,variance,cost=1,type='pixel')=>{const m=type==='tile'?S.convergence.tiles:S.convergence.pixels;const old=m.get(key)||{variance:1,samples:0,cost:0,stable:false};old.variance=.75*old.variance+.25*Math.max(0,variance||0);old.samples++;old.cost+=cost;old.stable=old.samples>2&&old.variance<S.convergence.stableThreshold;m.set(key,old);return old;};
+A.convergenceSummary=()=>{const vals=[...S.convergence.tiles.values()];const stable=vals.filter(v=>v.stable).length;return {tiles:vals.length,stable,active:Math.max(0,vals.length-stable),ratio:vals.length?1-stable/vals.length:1};};
+const base=A.buildNextRenderStrategy.bind(A);A.buildNextRenderStrategy=(cur,h)=>{const x=base(cur,h),c=A.convergenceSummary();x.activeTileRatio=A.clamp(c.ratio,.05,1);x.activePixelRatio=A.clamp(c.ratio*.9+.1,.05,1);x.skipStablePixels=true;x.tilePriority='variance/cost';return x;};
+})();</script>
+<script id="l3n-adaptive-segment-3">
+(()=>{const A=window.ThreeDLiteAdaptiveRender3990;if(!A)return;A.passBudget=(pass,noise)=>{const p=Math.max(1,pass||1);let b=p<=2?1:p<=4?.8:p<=8?.6:p<=16?.4:p<=32?.25:p<=48?.15:.1;if((noise||0)>.08)b=Math.max(b,.5);return A.clamp(b,.08,1);};const base=A.buildNextRenderStrategy.bind(A);A.buildNextRenderStrategy=(cur,h)=>{const x=base(cur,h);x.rayBudget=A.passBudget(cur.pass,cur.noise);x.shadowBudget=A.clamp(.2+.8*x.rayBudget,.15,1);x.secondaryBudget=A.clamp(.15+.85*x.rayBudget,.1,1);return x;};
+})();</script>
+<script id="l3n-adaptive-segment-4">
+(()=>{const A=window.ThreeDLiteAdaptiveRender3990;if(!A)return;const S=A.state;S.lightLearning={lights:new Map(),minContribution:.002};A.learnLight=(id,contribution,visible=true,cost=1)=>{const m=S.lightLearning.lights,o=m.get(id)||{energy:0,visible:0,blocked:0,samples:0,cost:0};o.energy=.8*o.energy+.2*Math.max(0,contribution||0);visible?o.visible++:o.blocked++;o.samples++;o.cost+=cost;m.set(id,o);return o;};A.lightScore=id=>{const o=S.lightLearning.lights.get(id);if(!o)return 1;const vis=o.visible/Math.max(1,o.samples);return (o.energy+.001)*(vis+.05)/Math.max(.25,o.cost/o.samples);};A.shouldSampleLight=id=>A.lightScore(id)>=S.lightLearning.minContribution;const base=A.buildNextRenderStrategy.bind(A);A.buildNextRenderStrategy=(cur,h)=>{const x=base(cur,h);x.lightBudget=A.clamp(.2+.8*x.rayBudget,.15,1);x.lightPolicy='importance+visibility+contribution';x.lightCutoff=S.lightLearning.minContribution;return x;};
+})();</script>
+<script id="l3n-adaptive-segment-5">
+(()=>{const A=window.ThreeDLiteAdaptiveRender3990;if(!A)return;const S=A.state;S.pathLearning={depth:new Map(),energyCutoff:.01};A.learnBounce=(depth,energy,useful=true)=>{const o=S.pathLearning.depth.get(depth)||{energy:0,useful:0,total:0};o.energy=.8*o.energy+.2*Math.max(0,energy||0);o.total++;if(useful)o.useful++;S.pathLearning.depth.set(depth,o);return o;};A.bounceAllowed=(depth,throughput=1)=>{if(throughput<S.pathLearning.energyCutoff)return false;const o=S.pathLearning.depth.get(depth);return !o||o.energy>=S.pathLearning.energyCutoff||o.useful/Math.max(1,o.total)>.08;};A.learnedMaxDepth=()=>{let d=2;for(const [k,v] of S.pathLearning.depth)if(v.energy>=S.pathLearning.energyCutoff||v.useful/Math.max(1,v.total)>.08)d=Math.max(d,Number(k));return Math.min(12,d+1);};const base=A.buildNextRenderStrategy.bind(A);A.buildNextRenderStrategy=(cur,h)=>{const x=base(cur,h);x.bounceBudget=A.clamp(.25+.75*x.rayBudget,.2,1);x.maxUsefulDepth=A.learnedMaxDepth();x.energyCutoff=S.pathLearning.energyCutoff;return x;};
+})();</script>
+<script id="l3n-adaptive-segment-6">
+(()=>{const A=window.ThreeDLiteAdaptiveRender3990;if(!A)return;const S=A.state;S.noiseLearning={direct:0,shadow:0,gi:0,reflection:0,refraction:0};A.learnNoise=(type,value)=>{if(type in S.noiseLearning)S.noiseLearning[type]=.75*S.noiseLearning[type]+.25*Math.max(0,value||0);return S.noiseLearning;};A.materialProfile=(m={})=>{const r=Number(m.roughness??.5),metal=Number(m.metalness??0),trans=Number(m.transmission??0);return {direct:1,gi:A.clamp(.7+r*.3,.5,1),reflection:A.clamp(.2+metal*.5+(1-r)*.5,.15,1),refraction:A.clamp(trans,0,1)};};const base=A.buildNextRenderStrategy.bind(A);A.buildNextRenderStrategy=(cur,h)=>{const x=base(cur,h),n=S.noiseLearning,total=Object.values(n).reduce((a,b)=>a+b,0)||1;x.effectBudget={direct:.2+n.direct/total,shadow:.2+n.shadow/total,gi:.2+n.gi/total,reflection:.2+n.reflection/total,refraction:.2+n.refraction/total};x.noiseDirected=true;return x;};
+})();</script>
+<script id="l3n-adaptive-segment-7">
+(()=>{const A=window.ThreeDLiteAdaptiveRender3990;if(!A)return;const S=A.state;S.cache={primary:new Map(),visibility:new Map(),revision:0,hits:0,misses:0};A.cacheKey=(...v)=>v.join('|');A.cacheGet=(kind,key)=>{const m=S.cache[kind];if(!m)return null;const v=m.get(key);v?S.cache.hits++:S.cache.misses++;return v||null;};A.cacheSet=(kind,key,value)=>{const m=S.cache[kind];if(m)m.set(key,{revision:S.sceneRevision,value});return value;};const inv=A.invalidate.bind(A);A.invalidate=(reason)=>{S.cache.primary.clear();S.cache.visibility.clear();S.cache.revision++;return inv(reason);};const base=A.buildNextRenderStrategy.bind(A);A.buildNextRenderStrategy=(cur,h)=>{const x=base(cur,h),t=S.cache.hits+S.cache.misses;x.cacheReuse=t?S.cache.hits/t:0;x.reusePrimaryHits=true;x.reuseBVH=true;x.reuseVisibility=true;return x;};
+})();</script>
+<script id="l3n-adaptive-segment-8">
+(()=>{const A=window.ThreeDLiteAdaptiveRender3990;if(!A)return;const S=A.state;S.guiding={dirs:new Map(),reservoirs:new Map()};A.learnDirection=(bucket,dir,energy)=>{const a=S.guiding.dirs.get(bucket)||[];a.push({dir,energy:Math.max(0,energy||0)});a.sort((x,y)=>y.energy-x.energy);if(a.length>16)a.length=16;S.guiding.dirs.set(bucket,a);return a;};A.guideDirection=bucket=>S.guiding.dirs.get(bucket)?.[0]?.dir||null;A.updateReservoir=(key,candidate,weight)=>{const r=S.guiding.reservoirs.get(key)||{sum:0,sample:null,count:0};r.sum+=Math.max(0,weight||0);r.count++;if(!r.sample||Math.random()*r.sum<weight)r.sample=candidate;S.guiding.reservoirs.set(key,r);return r.sample;};const base=A.buildNextRenderStrategy.bind(A);A.buildNextRenderStrategy=(cur,h)=>{const x=base(cur,h);x.guiding=A.clamp((cur.pass||0)/16,0,1);x.usePathGuiding=(cur.pass||0)>=4;x.useLightReservoirs=(cur.pass||0)>=2;return x;};
+})();</script>
+<script id="l3n-adaptive-segment-9">
+(()=>{const A=window.ThreeDLiteAdaptiveRender3990;if(!A)return;A.efficiencyScore=(gain,cost)=>Math.max(0,gain||0)/Math.max(1,cost||1);A.chooseStrategy=(current,previous)=>{if(!current)return null;const next={...current};const e=current.efficiency||0,pe=previous?.efficiency||0;if(pe>0&&e<pe*.7){next.rayBudget=A.clamp(current.rayBudget*.8,.08,1);next.adaptation='reduce-low-yield-work';}else if(e>pe*1.1){next.rayBudget=A.clamp(current.rayBudget*1.05,.08,1);next.adaptation='keep-high-yield-work';}else next.adaptation='hold';return next;};const base=A.rebuild.bind(A);A.rebuild=()=>{const old=A.state.strategy;const r=base();A.state.strategy=A.chooseStrategy(r,old)||r;return A.state.strategy;};A.state.controllerMode='quality-gain-per-ms';
+})();</script>
+<script id="l3n-adaptive-segment-10">
+(()=>{const A=window.ThreeDLiteAdaptiveRender3990;if(!A)return;const $=id=>document.getElementById(id);A.compiledCode=()=>{const snap=A.snapshot(),st=snap.state.strategy||{};return `// 3DLite Adaptive Render Learned Profile v${A.version}\nconst AdaptiveProfile=${JSON.stringify({version:A.version,sceneRevision:snap.state.sceneRevision,renderCount:snap.state.renderCount,passCount:snap.state.passCount,strategy:st,metrics:snap.state.metrics,learned:snap.state.learned},null,2)};\n\n// Apply through window.ThreeDLiteAdaptiveRender3990 on next render.\n`;};A.openCodeViewer=()=>{let p=$('l3nAdaptiveCodeWindow3990');if(!p){p=document.createElement('div');p.id='l3nAdaptiveCodeWindow3990';p.style.cssText='display:none;position:absolute;left:16px;right:16px;top:48px;bottom:16px;z-index:80;background:#181818;border:1px solid #555;padding:8px;box-shadow:0 8px 28px #000b';p.innerHTML='<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px"><b style="margin-right:auto">Compiled Adaptive Render Code</b><button id="l3nAdaptiveRefresh3990">Refresh</button><button id="l3nAdaptiveCopy3990">Copy All</button><button id="l3nAdaptiveClose3990">Close</button></div><textarea id="l3nAdaptiveCodeText3990" spellcheck="false" style="width:100%;height:calc(100% - 34px);resize:none;background:#101010;color:#ddd;border:1px solid #444;font:11px/1.35 monospace;padding:8px"></textarea>';($('renderFrameWindow')||document.body).appendChild(p);$('l3nAdaptiveRefresh3990').onclick=()=>{$('l3nAdaptiveCodeText3990').value=A.compiledCode()};$('l3nAdaptiveCopy3990').onclick=async()=>{const t=$('l3nAdaptiveCodeText3990');t.select();try{await navigator.clipboard.writeText(t.value)}catch(_){document.execCommand('copy')}};$('l3nAdaptiveClose3990').onclick=()=>p.style.display='none';}p.style.display='block';$('l3nAdaptiveCodeText3990').value=A.compiledCode();return p;};
+function button(){const title=$('renderFrameWindow')?.querySelector('.render-title');if(!title||$('l3nAdaptiveCodeBtn3990'))return;const b=document.createElement('button');b.id='l3nAdaptiveCodeBtn3990';b.type='button';b.textContent='Adaptive Code';b.title='Open compiled adaptive render learning code';b.onclick=()=>A.openCodeViewer();title.insertBefore(b,title.querySelector('[data-render-close="frame"]'));}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',button,{once:true});else button();window.__3DLiteAdaptiveCodeViewer3990=true;
+})();</script>
 </body>
 </html>
