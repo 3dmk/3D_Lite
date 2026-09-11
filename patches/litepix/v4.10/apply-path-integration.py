@@ -38,10 +38,11 @@ if new3 not in s:
     if s.count(old3)!=1: raise SystemExit(f'release-blocking: pass hook anchor count={s.count(old3)}')
     s=s.replace(old3,new3,1)
 
-old4="""        performance:RenderCoreH.performance(job)\n      })\n    };"""
-new4="""        performance:RenderCoreH.performance(job),\n        litePixNativePath:litePixPath410?.snapshot?.()||null\n      })\n    };"""
+# Patch the Path GI metadata block using its path-specific neighboring fields so Fast metadata cannot match.
+old4="""        secondaryGI:settings.secondaryGI,\n        lightCache:job.lightCache?.stats?.()||null,\n        emissiveTriangleLights:compiled.emissiveTriangles?.triangles?.length||0,\n        diagnostics:RenderPart5Core.diagnostics(job,compiled,acceleration),\n        performance:RenderCoreH.performance(job)\n      })"""
+new4="""        secondaryGI:settings.secondaryGI,\n        lightCache:job.lightCache?.stats?.()||null,\n        emissiveTriangleLights:compiled.emissiveTriangles?.triangles?.length||0,\n        diagnostics:RenderPart5Core.diagnostics(job,compiled,acceleration),\n        performance:RenderCoreH.performance(job),\n        litePixNativePath:litePixPath410?.snapshot?.()||null\n      })"""
 if new4 not in s:
-    if s.count(old4)!=1: raise SystemExit(f'release-blocking: metadata hook anchor count={s.count(old4)}')
+    if s.count(old4)!=1: raise SystemExit(f'release-blocking: path metadata hook anchor count={s.count(old4)}')
     s=s.replace(old4,new4,1)
 
 old5="""    RenderCoreH.markStage(job,'render',renderStart16);\n    if(LiteTraceExecutionContext.performance===perf16){LiteTraceExecutionContext.activeJob=null;LiteTraceExecutionContext.performance=null;}"""
