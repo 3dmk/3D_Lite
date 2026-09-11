@@ -1,0 +1,85 @@
+name: L3N v3.98.3 Spot Browser Smoke
+on:
+  push:
+    branches: [l3n-dev]
+    paths:
+      - '.l3n-browser-smoke-v3983-trigger'
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: l3n-dev}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --no-save playwright@1.55.0
+      - run: npx playwright install --with-deps chromium
+      - run: python3 -m http.server 8000 >/tmp/3dlite.log 2>&1 &
+      - name: Validate spot light creation sampling and render
+        run: |
+          node <<'NODE'
+          const { chromium }=require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--use-angle=swiftshader','--enable-webgl','--ignore-gpu-blocklist']});
+            const page=await browser.newPage({viewport:{width:1280,height:900}});
+            const errors=[]; page.on('pageerror',e=>errors.push(String(e))); page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
+            await page.goto('http://127.0.0.1:8000/',{waitUntil:'load',timeout:120000});
+            await page.waitForTimeout(2500);
+            const pre=await page.evaluate(()=>{
+              const v=window.ThreeDLiteVersion?.version||window.ThreeDLiteVersion;
+              const spot=EditorLightSystem.create('spot',{intensity:5000,range:100,coneAngle:60,penumbra:.15,castShadows:false});
+              spot.position.set(0,0,20); spot.rotation.set(0,0,0); spot.updateMatrixWorld(true);
+              const snap=EditorLightSystem.serialize(spot);
+              const compiled=new RenderSceneLight(snap);
+              const center=DirectLightSampler.sample(compiled,[0,0,0]);
+              const outside=DirectLightSampler.sample(compiled,[30,0,0]);
+              return {v,marker:!!window.__3DLiteSpotRenderFix3983,rotation:spot.rotation.toArray().slice(0,3),direction:snap.direction,center:center.radiance,outside:outside.radiance,self:window.runRenderGroup6SelfTests?.(),rf:!!window.RenderFramework};
+            });
+            console.log('PRE',JSON.stringify(pre));
+            if(pre.v!=='3.98.3') throw new Error('version '+pre.v);
+            if(!pre.marker) throw new Error('spot fix marker missing');
+            if(Math.abs(pre.rotation[0])>1e-8) throw new Error('spot still created tilted');
+            if(!(pre.direction[2]<-.999)) throw new Error('spot direction not -Z '+JSON.stringify(pre.direction));
+            if(!pre.center.some(x=>x>0)) throw new Error('spot center sample is black '+JSON.stringify(pre.center));
+            if(pre.outside.some(x=>x!==0)) throw new Error('spot outside cone not black '+JSON.stringify(pre.outside));
+            if(pre.self && pre.self.ok===false) throw new Error('group6 self tests '+JSON.stringify(pre.self));
+            const render=await page.evaluate(async()=>{
+              try{
+                for(const o of objects.slice()){
+                  if(EditorLightSystem.isLightObject(o)) o.userData.renderLight.enabled=false;
+                }
+                const plane=new THREE.Mesh(new THREE.PlaneGeometry(40,40),new THREE.MeshStandardMaterial({color:0x808080,roughness:.7,metalness:0,side:THREE.DoubleSide}));
+                plane.name='SpotSmokePlane'; scene.add(plane); objects.push(plane);
+                const spot=EditorLightSystem.create('spot',{intensity:12000,range:100,coneAngle:70,penumbra:.2,castShadows:false});
+                spot.position.set(0,0,20); spot.rotation.set(0,0,0); spot.updateMatrixWorld(true);
+                if(typeof camera!=='undefined'){
+                  camera.position.set(0,-28,24); camera.up.set(0,0,1); camera.lookAt(0,0,0); camera.updateMatrixWorld(true);
+                }
+                const bg=document.getElementById('renderBackground'); if(bg) bg.value='#000000';
+                const w=document.getElementById('renderWidth'); if(w) w.value='96';
+                const h=document.getElementById('renderHeight'); if(h) h.value='96';
+                const progressive=document.getElementById('renderProgressive'); if(progressive) progressive.checked=false;
+                const samples=document.getElementById('renderSamples'); if(samples) samples.value='1';
+                const start=RenderFramework?.render?.();
+                if(start&&typeof start.then==='function') await start;
+                const deadline=Date.now()+30000;
+                while(RenderFramework?.jobs?.activeJob && Date.now()<deadline) await new Promise(r=>setTimeout(r,50));
+                await new Promise(r=>setTimeout(r,500));
+                const canvas=document.querySelector('#renderFrameWindow canvas')||document.getElementById('renderFrameCanvas')||document.querySelector('canvas[data-render-framebuffer]');
+                let lum=null,max=0,mean=0,count=0;
+                if(canvas){
+                  const ctx=canvas.getContext('2d',{willReadFrequently:true});
+                  if(ctx){const d=ctx.getImageData(0,0,canvas.width,canvas.height).data; for(let i=0;i<d.length;i+=4){const l=(d[i]+d[i+1]+d[i+2])/3; max=Math.max(max,l); mean+=l; count++;} mean=count?mean/count:0; lum={width:canvas.width,height:canvas.height,max,mean};}
+                }
+                const active=RenderFramework?.jobs?.activeJob||RenderFramework?.controller?.activeJob||null;
+                return {ok:true,lum,active:active?{status:active.status,progress:active.progress}:null};
+              }catch(e){return {ok:false,error:String(e?.stack||e)}}
+            });
+            console.log('RENDER',JSON.stringify(render));
+            if(!render.ok) throw new Error('render setup '+render.error);
+            if(render.lum && render.lum.max<=0) throw new Error('actual render framebuffer is black '+JSON.stringify(render.lum));
+            if(errors.some(e=>/ReferenceError|TypeError|SyntaxError|3DLite Renderer.*validation/i.test(e))) throw new Error('browser errors '+errors.join('\n'));
+            await browser.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
