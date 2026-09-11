@@ -1,0 +1,42 @@
+name: L3N v3.97.5 Rendering Debugger
+on:
+  push:
+    branches: [l3n-dev]
+    paths:
+      - '.l3n-render-debugger-v3975-trigger'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: l3n-dev
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Apply rendering debugger
+        run: python tools/l3n_render_debugger_v3975.py
+      - name: Static sanity
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('index.html').read_text(encoding='utf-8')
+          for x in ['3DLite v3.97.5','__3DLiteL3NRenderDebugger3975','ThreeDLiteL3NRenderDebugger','ThreeDLiteRenderErrorCodes','RND-0001','RND-0101','RND-0501','RND-1104','l3nRenderDebugPanel']:
+              assert x in s, x
+          assert s.count('id="__3DLiteL3NRenderDebugger3975"') == 1
+          assert s.lower().count('<script') == s.lower().count('</script>')
+          print('static sanity passed')
+          PY
+      - name: Commit updated index
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          if git diff --cached --quiet; then
+            echo 'No index changes'
+          else
+            git commit -m 'L3N v3.97.5: add rendering debugger and RND error codes'
+            git push origin HEAD:l3n-dev
+          fi
