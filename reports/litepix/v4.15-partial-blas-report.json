@@ -1,0 +1,155 @@
+{
+  "passed": true,
+  "identity": {
+    "title": "LitePix v4.15.0 Core Runtime",
+    "version": "4.15.0",
+    "marker": true
+  },
+  "first": {
+    "wallMs": 824,
+    "performance": {
+      "totalMs": 813.8999999999942,
+      "traceMs": 688.6999999999971,
+      "actualRays": 18416,
+      "raysPerSecond": 26740,
+      "samples": 16456,
+      "yields": 130,
+      "bvhBuildMs": null
+    },
+    "secondaryGI": "Light Cache",
+    "partial": {
+      "version": "4.15.0",
+      "provider": "LitePix Core2 partial BLAS cache",
+      "instances": 2,
+      "uniqueBLAS": 2,
+      "tlasNodes": 1,
+      "buildMs": 3.3,
+      "rebuildCount": 1,
+      "refitCount": 0,
+      "traceRays": 18416,
+      "shadowRays": 0,
+      "fallback": false,
+      "cacheMode": "rebuild",
+      "dirtyTransforms": 2,
+      "dirtyGeometry": [
+        "BC2DFEE4-8557-4A0E-812E-32AB11E14C2D",
+        "3A520A9B-B83D-4F6A-B627-776ACC2BD0E6"
+      ],
+      "prepareMs": 4.2,
+      "cache": {
+        "version": "4.15.0",
+        "provider": "LitePix Core2 partial BLAS cache",
+        "mode": "rebuild",
+        "dirtyTransforms": 2,
+        "dirtyGeometry": [
+          "BC2DFEE4-8557-4A0E-812E-32AB11E14C2D",
+          "3A520A9B-B83D-4F6A-B627-776ACC2BD0E6"
+        ],
+        "builds": 1,
+        "refits": 0,
+        "cleanReuses": 0,
+        "partialBLASUpdates": 0,
+        "blasRebuilds": 0,
+        "invalidations": 0,
+        "lastPrepareMs": 4.2,
+        "totalPrepareMs": 4.2,
+        "instances": 2,
+        "uniqueBLAS": 2,
+        "tlasNodes": 1
+      }
+    }
+  },
+  "partial": {
+    "wallMs": 686,
+    "performance": {
+      "totalMs": 670.6000000000058,
+      "traceMs": 662.6999999999971,
+      "actualRays": 18576,
+      "raysPerSecond": 28031,
+      "samples": 16456,
+      "yields": 130,
+      "bvhBuildMs": null
+    },
+    "secondaryGI": "Light Cache",
+    "partial": {
+      "version": "4.15.0",
+      "provider": "LitePix Core2 partial BLAS cache",
+      "instances": 2,
+      "uniqueBLAS": 2,
+      "tlasNodes": 1,
+      "buildMs": 3.3,
+      "rebuildCount": 1,
+      "refitCount": 1,
+      "traceRays": 18576,
+      "shadowRays": 0,
+      "fallback": false,
+      "cacheMode": "partial-blas",
+      "dirtyTransforms": 0,
+      "dirtyGeometry": [
+        "BC2DFEE4-8557-4A0E-812E-32AB11E14C2D"
+      ],
+      "prepareMs": 1,
+      "cache": {
+        "version": "4.15.0",
+        "provider": "LitePix Core2 partial BLAS cache",
+        "mode": "partial-blas",
+        "dirtyTransforms": 0,
+        "dirtyGeometry": [
+          "BC2DFEE4-8557-4A0E-812E-32AB11E14C2D"
+        ],
+        "builds": 1,
+        "refits": 1,
+        "cleanReuses": 0,
+        "partialBLASUpdates": 1,
+        "blasRebuilds": 1,
+        "invalidations": 0,
+        "lastPrepareMs": 1,
+        "totalPrepareMs": 5.2,
+        "instances": 2,
+        "uniqueBLAS": 2,
+        "tlasNodes": 1
+      }
+    }
+  },
+  "fresh": {
+    "wallMs": 691,
+    "performance": {
+      "totalMs": 682.3000000000029,
+      "traceMs": 678.0999999999913,
+      "actualRays": 18576,
+      "raysPerSecond": 27394,
+      "samples": 16456,
+      "yields": 130,
+      "bvhBuildMs": null
+    },
+    "secondaryGI": "Light Cache",
+    "partial": null
+  },
+  "changedRebuilt": true,
+  "unchangedReused": true,
+  "maxPixelDiff": 0,
+  "meanPixelDiff": 0,
+  "cache": {
+    "version": "4.15.0",
+    "provider": "LitePix Core2 partial BLAS cache",
+    "mode": "partial-blas",
+    "dirtyTransforms": 0,
+    "dirtyGeometry": [
+      "BC2DFEE4-8557-4A0E-812E-32AB11E14C2D"
+    ],
+    "builds": 1,
+    "refits": 1,
+    "cleanReuses": 0,
+    "partialBLASUpdates": 1,
+    "blasRebuilds": 1,
+    "invalidations": 0,
+    "lastPrepareMs": 1,
+    "totalPrepareMs": 5.2,
+    "instances": 2,
+    "uniqueBLAS": 2,
+    "tlasNodes": 1
+  },
+  "pageErrors": [],
+  "consoleErrors": [],
+  "failures": []
+}
