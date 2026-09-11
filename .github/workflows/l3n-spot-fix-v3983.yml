@@ -1,0 +1,46 @@
+name: L3N Spot Fix v3.98.3
+on:
+  push:
+    branches: [l3n-dev]
+    paths:
+      - '.l3n-spot-fix-v3983-trigger'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: l3n-dev
+      - name: Patch spot light renderer behavior
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text()
+          old="if(type==='sun'||type==='spot'||type==='rectangle'||type==='disc'||type==='mesh'){"
+          new="if(type==='sun'||type==='rectangle'||type==='disc'||type==='mesh'){"
+          if old not in s:
+            raise SystemExit('spot default-orientation pattern not found')
+          s=s.replace(old,new,1)
+          oldtest="if(sp.radiance.some(x=>!Number.isFinite(x)||x<0))errors.push('Spot light sample failed');"
+          newtest="if(sp.radiance.some(x=>!Number.isFinite(x)||x<0)||sp.radiance.every(x=>x<=0))errors.push('Spot light on-axis sample failed');\n  const spOutside=DirectLightSampler.sample(spot,[10,0,0]);\n  if(spOutside.radiance.some(x=>!Number.isFinite(x))||spOutside.radiance.some(x=>x!==0))errors.push('Spot light outside-cone cutoff failed');"
+          if oldtest not in s:
+            raise SystemExit('spot self-test pattern not found')
+          s=s.replace(oldtest,newtest,1)
+          s=s.replace('3.98.2','3.98.3')
+          marker="\n<script id=\"__3DLiteSpotRenderFix3983\">\nwindow.__3DLiteSpotRenderFix3983=true;\nwindow.ThreeDLiteSpotRenderFix3983=Object.freeze({version:'3.98.3',defaultDirection:'-Z',issue:'spot-black-render'});\n</script>\n"
+          if '__3DLiteSpotRenderFix3983' not in s:
+            s=s.replace('</body>',marker+'</body>',1)
+          p.write_text(s)
+          PY
+          git diff --check
+          git diff -- index.html | head -200
+      - name: Commit patch
+        run: |
+          git config user.name 3dmk
+          git config user.email noneatall2026@gmail.com
+          git add index.html
+          git commit -m 'L3N v3.98.3: fix spot light black render' || exit 0
+          git push origin HEAD:l3n-dev
