@@ -1,0 +1,47 @@
+name: LitePix v4.10 Path Integration Inspect
+
+on:
+  push:
+    branches: [litepix-v4.10-path-integration]
+    paths:
+      - '.github/workflows/litepix-v410-path-inspect.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: litepix-v4.10-path-integration
+          fetch-depth: 0
+      - name: Inspect current path renderer ownership
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import json,re
+          s=Path('index.html').read_text(encoding='utf-8')
+          patterns=['Group 9 Progressive Path GI','class Progressive','Path GI','class RenderPath','renderPath','PathTracer','tracePath','pathTrace','DirectLightSampler','LightCache','RenderSceneBoundary','RenderFramework','class RenderJobController']
+          hits={}
+          lines=s.splitlines()
+          for pat in patterns:
+            arr=[]
+            for i,line in enumerate(lines):
+              if pat.lower() in line.lower():
+                lo=max(0,i-3); hi=min(len(lines),i+5)
+                arr.append({'line':i+1,'excerpt':'\n'.join(f'{j+1}: {lines[j]}' for j in range(lo,hi))})
+                if len(arr)>=8: break
+            hits[pat]=arr
+          Path('reports/litepix').mkdir(parents=True,exist_ok=True)
+          Path('reports/litepix/v4.10-path-inspect.json').write_text(json.dumps(hits,indent=2),encoding='utf-8')
+          print(json.dumps({k:[x['line'] for x in v] for k,v in hits.items()},indent=2))
+          PY
+      - name: Commit inspection report
+        run: |
+          git config user.name 'LitePix Path Inspect'
+          git config user.email 'actions@users.noreply.github.com'
+          git add reports/litepix/v4.10-path-inspect.json
+          git commit -m 'Inspect LitePix v4.10 path renderer anchors' || exit 0
+          git push origin HEAD:litepix-v4.10-path-integration
