@@ -1,6 +1,6 @@
 from pathlib import Path
 s=Path('index.html').read_text(encoding='utf-8')
-needles=['const WorkerFastLightingCore','WorkerFastLightingCore=','class WorkerFastLightingCore','BVHAccelerator','class BVH','static intersect','GeometryCompiler','shadeHit(state','traceVisibility(accel','PhysicalLightingCore=','render(job,compiled,acceleration']
+needles=['workerBeauty','workerPool?.isAvailable','traceVisibility(accel','shadeHit(state','static intersect(','TriangleIntersector','class TriangleIntersector','shadowsOnly','excludeTransparent','compiled.lights','light.type===\'spot\'']
 out=[]
 for n in needles:
     out.append('\n### '+n)
@@ -11,8 +11,8 @@ for n in needles:
         hits+=1
         line=s.count('\n',0,i)+1
         out.append(f'-- hit {hits} line {line} --')
-        out.append(s[max(0,i-2200):min(len(s),i+len(n)+6500)])
+        out.append(s[max(0,i-1000):min(len(s),i+len(n)+2600)])
         start=i+len(n)
-        if hits>=8: break
+        if hits>=6: break
     out.append('hits '+str(hits))
 Path('patches/v3.99.5/fast-lighting-inspection.txt').write_text('\n'.join(out),encoding='utf-8')
