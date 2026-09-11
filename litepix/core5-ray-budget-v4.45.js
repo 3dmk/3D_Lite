@@ -57,8 +57,21 @@ class LitePixRayBudget445{
   }
 }
 try{root.__LitePixTitleObserver444?.disconnect?.();}catch(_){}
+try{root.__LitePixTitleObserver445?.disconnect?.();}catch(_){}
 const enforceTitle=()=>{try{if(typeof document!=='undefined'&&document.title!==TITLE)document.title=TITLE;}catch(_){}};
-if(typeof document!=='undefined'){enforceTitle();if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',enforceTitle,{once:true});setTimeout(enforceTitle,0);}
+if(typeof document!=='undefined'){
+  enforceTitle();
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',enforceTitle,{once:true});
+  setTimeout(enforceTitle,0);setTimeout(enforceTitle,1100);setTimeout(enforceTitle,2200);
+  try{
+    const target=document.querySelector('title')||document.head;
+    if(target&&typeof MutationObserver==='function'){
+      const observer=new MutationObserver(enforceTitle);
+      observer.observe(target,{childList:true,subtree:true,characterData:true});
+      root.__LitePixTitleObserver445=observer;
+    }
+  }catch(_){}
+}
 root.LitePixRayBudget445=LitePixRayBudget445;
 root.__LitePixRayBudget445=true;
 })(typeof globalThis!=='undefined'?globalThis:window);
