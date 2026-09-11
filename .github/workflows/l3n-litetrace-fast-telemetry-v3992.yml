@@ -1,0 +1,39 @@
+name: L3N v3.99.2 LiteTrace Fast Telemetry
+on:
+  push:
+    branches: [l3n-dev]
+    paths:
+      - '.l3n-litetrace-fast-telemetry-v3992-trigger'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: l3n-dev
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - run: python tools/l3n_litetrace_fast_telemetry_v3992.py
+      - name: Static assertions
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('index.html').read_text(encoding='utf-8')
+          assert "window.ThreeDLiteVersion='3.99.2';" in s
+          assert 'ThreeDLiteLiteTraceFastTelemetry3992' in s
+          assert '__3DLiteLiteTraceFastTelemetry3992=true' in s
+          assert "renderer:'litetrace-fast'" in s
+          assert 'finishJob(job)' in s
+          assert 'raysPerMs' in s and 'samplesPerMs' in s
+          print('v3.99.2 telemetry static assertions passed')
+          PY
+      - name: Commit patched index
+        run: |
+          git config user.name '3DLite L3N Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add index.html
+          git commit -m '3DLite v3.99.2 wire LiteTrace Fast telemetry' || exit 0
+          git push origin HEAD:l3n-dev
