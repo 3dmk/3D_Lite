@@ -1,0 +1,58 @@
+name: L3N v3.99.0 Adaptive Segments
+on:
+  push:
+    branches: [l3n-dev]
+    paths:
+      - '.l3n-adaptive-v3990-trigger'
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Configure git
+        run: |
+          git config user.name 3dmk
+          git config user.email noneatall2026@gmail.com
+      - name: Apply and verify 10 adaptive segments separately
+        shell: bash
+        run: |
+          set -euo pipefail
+          for n in $(seq 1 10); do
+            python3 tools/l3n_adaptive_segments_v3990.py "$n"
+            python3 - "$n" <<'PY'
+          import re,sys
+          from pathlib import Path
+          n=int(sys.argv[1]); s=Path('index.html').read_text(errors='ignore')
+          assert f'id="l3n-adaptive-segment-{n}"' in s
+          assert s.count(f'id="l3n-adaptive-segment-{n}"')==1
+          assert s.lower().count('<script')==s.lower().count('</script>')
+          assert s.lower().count('</body>')==1
+          if n==1:
+              assert "version:'3.99.0'" in s
+              assert '__3DLiteAdaptiveRender3990' in s
+          if n==10:
+              for k in range(1,11): assert f'id="l3n-adaptive-segment-{k}"' in s
+              for key in ['updateConvergence','passBudget','learnLight','learnBounce','learnNoise','cacheGet','learnDirection','efficiencyScore','compiledCode','openCodeViewer']:
+                  assert key in s,key
+          print('segment',n,'static verification passed')
+          PY
+            git add index.html
+            git commit -m "3DLite v3.99.0 adaptive render segment ${n}/10"
+          done
+          git push origin HEAD:l3n-dev
+      - name: Verify cumulative merge
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('index.html').read_text(errors='ignore')
+          assert all(f'l3n-adaptive-segment-{n}' in s for n in range(1,11))
+          assert '__3DLiteAdaptiveRender3990' in s
+          assert '__3DLiteAdaptiveCodeViewer3990' in s
+          assert 'Adaptive Code' in s
+          assert 'quality-gain-per-ms' in s
+          print('cumulative merge verification passed')
+          PY
