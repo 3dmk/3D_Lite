@@ -1,0 +1,61 @@
+name: tmp DCAMP inspect
+on:
+  push:
+    branches: [3dlite-dcamp-full-migration]
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null
+      - name: Inspect runtime globals and source anchors
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m http.server 8000 >/tmp/dcamp-http.log 2>&1 &
+          PID=$!
+          trap 'kill $PID || true' EXIT
+          node <<'NODE'
+          const {chromium}=require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--use-gl=swiftshader','--enable-webgl','--ignore-gpu-blocklist']});
+            const page=await browser.newPage({viewport:{width:1280,height:900}});
+            await page.goto('http://127.0.0.1:8000/index.html',{waitUntil:'domcontentloaded',timeout:120000});
+            await page.waitForTimeout(2200);
+            const out=await page.evaluate(()=>{
+              const keys=Object.keys(window).filter(k=>/(undo|redo|select|scene|object|material|modifier|command|tool|history|asset|render|geometry|mesh|transform)/i.test(k)).sort();
+              const picked={};
+              for(const k of keys){
+                let v; try{v=window[k]}catch(_){continue}
+                const t=typeof v;
+                if(t==='function')picked[k]={type:'function',name:v.name||'',length:v.length};
+                else if(Array.isArray(v))picked[k]={type:'array',length:v.length};
+                else if(v&&t==='object')picked[k]={type:'object',ctor:v.constructor?.name||'',keys:Object.keys(v).slice(0,40)};
+                else picked[k]={type:t,value:(t==='string'||t==='number'||t==='boolean')?v:undefined};
+              }
+              return {keys,picked,mainCore:window.ThreeDLiteMainCore?.status?.()||null};
+            });
+            console.log(JSON.stringify(out,null,2));
+            await browser.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('index.html').read_text(encoding='utf-8')
+          terms=['undo','redo','selected','selection','history','objects','scene','RenderSceneBoundary','material','modifier','targetWeld','Target Weld','transformControls']
+          for term in terms:
+              print('\n===== '+term+' =====')
+              start=0
+              for n in range(8):
+                  i=s.lower().find(term.lower(),start)
+                  if i<0: break
+                  print(s[max(0,i-500):min(len(s),i+1800)])
+                  start=i+len(term)
+          PY
+NODE
