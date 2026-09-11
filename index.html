@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LitePix v4.13.0 BLAS TLAS + Transform Refit</title>
+<title>LitePix v4.14.0 Persistent Core2 Cache</title>
 <style>
 :root{
   --bg:#202020;--panel:#2a2a2a;--panel2:#303030;--line:#444;--line2:#555;
@@ -4185,7 +4185,7 @@ function validateArchitectureCore(){
   return {ok:errors.length===0,errors};
 }
 
-const LitePixVersion=Object.freeze({name:'LitePix',version:'4.13.0',legacyName:'3DLite',legacyVersion:'3.99.6',architecture:'All Cores Optimized'});
+const LitePixVersion=Object.freeze({name:'LitePix',version:'4.14.0',legacyName:'3DLite',legacyVersion:'3.99.6',architecture:'All Cores Optimized'});
 // Compatibility bridge: existing 3DLite services keep working while the renderer migrates to LitePix ownership.
 const ThreeDLiteVersion=LitePixVersion;
 
@@ -8337,7 +8337,9 @@ var PathIntegrator=Object.freeze({
   },
 
   trace(job,acceleration,compiled,primaryRay,pixelSeed,initialHit=null){
-    if(window.__LitePixCore2Scene413Enabled!==false&&typeof window.LitePixSceneAcceleration413==='function'){
+    if(window.__LitePixCore2Persistent414Enabled!==false&&typeof window.LitePixCore2PersistentAcceleration414==='function'){
+      acceleration=window.LitePixCore2PersistentAcceleration414.wrap(acceleration,job);
+    }else if(window.__LitePixCore2Scene413Enabled!==false&&typeof window.LitePixSceneAcceleration413==='function'){
       acceleration=window.LitePixSceneAcceleration413.wrap(acceleration,job);
     }else if(window.__LitePixCore2Path412Enabled!==false&&typeof window.LitePixCore2PathAcceleration412==='function'){
       acceleration=window.LitePixCore2PathAcceleration412.wrap(acceleration,job);
@@ -8432,7 +8434,9 @@ var PathIntegrator=Object.freeze({
   },
 
   tracePixel(job,acceleration,compiled,primaryRay,pixelSeed){
-    if(window.__LitePixCore2Scene413Enabled!==false&&typeof window.LitePixSceneAcceleration413==='function'){
+    if(window.__LitePixCore2Persistent414Enabled!==false&&typeof window.LitePixCore2PersistentAcceleration414==='function'){
+      acceleration=window.LitePixCore2PersistentAcceleration414.wrap(acceleration,job);
+    }else if(window.__LitePixCore2Scene413Enabled!==false&&typeof window.LitePixSceneAcceleration413==='function'){
       acceleration=window.LitePixSceneAcceleration413.wrap(acceleration,job);
     }else if(window.__LitePixCore2Path412Enabled!==false&&typeof window.LitePixCore2PathAcceleration412==='function'){
       acceleration=window.LitePixCore2PathAcceleration412.wrap(acceleration,job);
@@ -8659,6 +8663,7 @@ var PathGIRenderer=Object.freeze({
         diagnostics:RenderPart5Core.diagnostics(job,compiled,acceleration),
         performance:RenderCoreH.performance(job),
         litePixNativePath:litePixPath410?.snapshot?.()||null,
+        litePixCore2Persistent:job.litePixCore2Persistent414?.snapshot?.()||null,
         litePixCore2Scene:job.litePixCore2Scene413?.snapshot?.()||null,
         litePixCore2BVH:job.litePixCore2Acceleration412?.snapshot?.()||null
       })
@@ -23661,5 +23666,6 @@ root.__3DLiteMaterialLinearColor3996=true;
 <script src="./litepix/path-integration-v4.10.js"></script>
 <script src="./litepix/core2-path-v4.12.js"></script>
 <script src="./litepix/core2-instance-v4.13.js"></script>
+<script src="./litepix/core2-cache-v4.14.js"></script>
 </body>
 </html>
