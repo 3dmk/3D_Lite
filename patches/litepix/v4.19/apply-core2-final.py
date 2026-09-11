@@ -24,12 +24,12 @@ if 'core2-production-v4.19.js' not in s:
     if anchor not in s: raise SystemExit('release-blocking: v4.15 loader missing')
     s=s.replace(anchor,loaders,1)
 # Prewarm worker BVHs once at Path-render entry before any LocalBLAS can be requested.
-sig="async render(job,sceneSnapshot,compiled,acceleration,settings){"
-prewarm=sig+"\n    if(window.__LitePixCore2Worker418Enabled!==false&&window.LitePixCore2Worker418?.prewarm)await window.LitePixCore2Worker418.prewarm(job?.renderScene);"
 if 'LitePixCore2Worker418.prewarm(job?.renderScene)' not in s:
-    c=s.count(sig)
-    if c!=1: raise SystemExit(f'release-blocking: expected one Path render signature, found {c}')
-    s=s.replace(sig,prewarm,1)
+    pat=r"(const\s+PathGIRenderer\s*=\s*Object\.freeze\(\{[\s\S]{0,400}?async\s+render\([^)]*\)\s*\{)"
+    m=re.search(pat,s)
+    if not m: raise SystemExit('release-blocking: PathGIRenderer async render anchor missing')
+    ins=m.group(1)+"\n    if(window.__LitePixCore2Worker418Enabled!==false&&window.LitePixCore2Worker418?.prewarm)await window.LitePixCore2Worker418.prewarm(job?.renderScene);"
+    s=s[:m.start()]+ins+s[m.end():]
 # Path primary+bounce routing prefers consolidated Core2.
 oldroute="if(window.__LitePixCore2Partial415Enabled!==false&&typeof window.LitePixCore2PartialAcceleration415==='function'){\n      acceleration=window.LitePixCore2PartialAcceleration415.wrap(acceleration,job);"
 newroute="if(window.__LitePixCore2Production419Enabled!==false&&typeof window.LitePixCore2Production419==='function'){\n      acceleration=window.LitePixCore2Production419.wrap(acceleration,job);\n    }else if(window.__LitePixCore2Partial415Enabled!==false&&typeof window.LitePixCore2PartialAcceleration415==='function'){\n      acceleration=window.LitePixCore2PartialAcceleration415.wrap(acceleration,job);"
