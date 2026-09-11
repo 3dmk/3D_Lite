@@ -1,0 +1,79 @@
+name: LitePix v4.09 Optimization Gate
+on:
+  push:
+    branches: [litepix-v4.09-optimization]
+    paths:
+      - 'litepix/**'
+      - 'patches/litepix/v4.09/**'
+      - 'tests/litepix-v409-compare.mjs'
+      - '.github/workflows/litepix-v409-optimization-gate.yml'
+permissions:
+  contents: write
+jobs:
+  optimize-and-render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: litepix-v4.09-optimization, fetch-depth: 0}
+      - uses: actions/setup-node@v4
+        with: {node-version: '24'}
+      - name: Syntax gates
+        run: |
+          node --check litepix/core2-scene-acceleration.js
+          node --check litepix/core3-raster-guide.js
+          node --check litepix/core4-hierarchical-gi.js
+          node --check litepix/runtime-v4.09.js
+      - name: Prepare v4.08 baseline
+        run: |
+          git fetch origin main
+          mkdir -p /tmp/v408
+          for f in core2-scene-acceleration.js core3-raster-guide.js core4-hierarchical-gi.js; do git show origin/main:litepix/$f > /tmp/v408/$f; done
+      - name: Compare core performance
+        run: node tests/litepix-v409-compare.mjs | tee /tmp/compare.json
+      - name: Apply v4.09 integration
+        run: python3 patches/litepix/v4.09/apply-optimization.py
+      - name: Structural gate
+        run: |
+          node <<'NODE'
+          const fs=require('fs'),h=fs.readFileSync('index.html','utf8'),f=[];
+          if(!h.includes('<title>LitePix v4.09.0 Optimized All Cores</title>'))f.push('title');
+          if(!h.includes("const LitePixVersion=Object.freeze({name:'LitePix',version:'4.09.0'"))f.push('version');
+          if(!h.includes('./litepix/runtime-v4.09.js'))f.push('runtime');
+          if(h.includes('./litepix/runtime-v4.08.js'))f.push('stale v4.08 runtime still loaded');
+          if(!h.includes("colorSpace:'linear'"))f.push('linear material fix');
+          const ids=[...h.matchAll(/\bid\s*=\s*["']([^"']+)["']/gi)].map(x=>x[1]),seen=new Set(),dup=[];for(const id of ids){if(seen.has(id))dup.push(id);else seen.add(id)}if(dup.length)f.push('duplicate ids');
+          const ext=[...h.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].filter(m=>/\bsrc\s*=/.test(m[1])&&(m[2]||'').trim());if(ext.length)f.push('external script bodies');
+          if((h.match(/requestAnimationFrame\s*\(\s*animate\s*\)/g)||[]).length!==1)f.push('animation loop');
+          if(f.length){console.error(f);process.exit(1)}
+          NODE
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null
+      - name: Browser render regression
+        run: |
+          python3 -m http.server 8000 >/tmp/litepix409-http.log 2>&1 & PID=$!; trap 'kill $PID || true' EXIT
+          node <<'NODE' | tee /tmp/browser.json
+          const {chromium}=require('playwright');
+          (async()=>{const browser=await chromium.launch({headless:true,args:['--use-gl=swiftshader','--enable-webgl','--ignore-gpu-blocklist']});const page=await browser.newPage({viewport:{width:1280,height:900}});const pe=[],ce=[];page.on('pageerror',e=>pe.push(String(e)));page.on('console',m=>{if(m.type()==='error')ce.push(m.text())});const response=await page.goto('http://127.0.0.1:8000/index.html',{waitUntil:'domcontentloaded',timeout:120000});await page.waitForTimeout(4000);
+          const core=await page.evaluate(()=>({version:window.LitePixVersion?.version,legacy:window.ThreeDLiteVersion?.version,marker:window.__LitePixAllCores409===true,nativeVersion:window.LitePixNative?.AllCores?.version,core2:window.LitePixNative?.Core2?.version,core3:window.LitePixNative?.Core3?.version,core4:window.LitePixNative?.Core4?.version}));
+          const set=engine=>page.evaluate(engine=>{const s=(id,v)=>{const e=document.getElementById(id);if(!e)return;e.value=String(v);e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}))};s('rsEngine',engine);s('rsWidth',96);s('rsHeight',54);s('rsBounces',3);s('rsMinSamples',1);s('rsMaxSamples',2);s('rsNoise',.2);s('rsExposure',0)},engine);
+          const render=async engine=>{await set(engine);const prior=await page.evaluate(()=>window.RenderFramework?.jobs?.lastJob?.id||0),wall=Date.now();await page.evaluate(()=>document.getElementById('renderNowBtn').click());await page.waitForFunction(prior=>{const j=window.RenderFramework?.jobs?.lastJob;return j&&j.id!==prior&&j.finished&&j.performance},prior,{timeout:120000,polling:200});return page.evaluate(({engine,wall})=>{const j=window.RenderFramework.jobs.lastJob,t=window.ThreeDLiteLiteTraceTelemetry3994?.snapshot?.()||window.ThreeDLiteLiteTraceTelemetry3992?.snapshot?.()||null;return{engine,wallMs:Date.now()-wall,performance:j.performance,renderer:j.beautyFrame?.metadata?.renderer,telemetry:t}}, {engine,wall});};
+          const fast=await render('fast'),path=await render('path'),failures=[];if(response.status()!=200)failures.push('HTTP');if(core.version!=='4.09.0'||core.nativeVersion!=='4.09.0'||!core.marker)failures.push('version');if(core.core2!=='4.09.0'||core.core3!=='4.09.0'||core.core4!=='4.09.0')failures.push('optimized core versions');if(!String(fast.renderer).includes('Fast Direct'))failures.push('fast');if(!String(path.renderer).includes('Path GI'))failures.push('path');if(path.telemetry?.giDiagnostics?.secondaryGI!=='Light Cache')failures.push('light cache');if(pe.length)failures.push('page errors '+pe.length);if(ce.length)failures.push('console errors '+ce.length);console.log(JSON.stringify({passed:!failures.length,core,fast,path,pageErrors:pe,consoleErrors:ce,failures},null,2));await browser.close();if(failures.length)process.exit(1)})().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+      - name: Record v4.09 comparison report
+        run: |
+          mkdir -p reports/litepix
+          python3 - <<'PY'
+          import json,pathlib,time
+          compare=json.loads(pathlib.Path('/tmp/compare.json').read_text()); browser=json.loads(pathlib.Path('/tmp/browser.json').read_text())
+          old=json.loads(pathlib.Path('reports/litepix/v4.08-all-cores.json').read_text()) if pathlib.Path('reports/litepix/v4.08-all-cores.json').exists() else None
+          report={'version':'4.09.0','passed':bool(compare['passed'] and browser['passed']),'basis':'v4.08 runtime render test + deterministic A/B core benchmark','v408Observed':{'bvhMs':26.5,'gbufferMs':9.8,'giMs':40.9,'fastWallMs':261,'pathWallMs':409,'pathTraceMs':382.6,'pathRaysPerSecond':27099},'benchmark':compare,'browserRender':browser,'generatedAt':int(time.time())}
+          pathlib.Path('reports/litepix/v4.09-optimization-report.json').write_text(json.dumps(report,indent=2))
+          PY
+          git config user.name 'LitePix Optimization Gate'; git config user.email 'actions@users.noreply.github.com'
+          git add index.html reports/litepix/v4.09-optimization-report.json
+          git commit -m 'Gate LitePix v4.09 optimized all cores' || exit 0
+          git push origin HEAD:litepix-v4.09-optimization
