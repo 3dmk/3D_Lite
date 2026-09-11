@@ -1,0 +1,38 @@
+name: L3N v3.97.8 LiteTrace Context Fix
+on:
+  push:
+    branches: [l3n-dev]
+    paths: ['.l3n-fix-litetrace-v3978-trigger']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: l3n-dev
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Apply v3.97.8 fix
+        run: python tools/l3n_fix_litetrace_context_v3978.py
+      - name: Static sanity
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('index.html').read_text(encoding='utf-8')
+          assert '3DLite v3.97.8' in s
+          assert 'var LiteTraceExecutionContext=(function(){' in s
+          assert s.find('var LiteTraceExecutionContext=(function(){') < s.find('LiteTraceExecutionContext.activeJob')
+          assert 'RND-1104' in s and 'RND-1194' in s
+          assert s.count('var LiteTraceExecutionContext=(function(){')==1
+          print('static sanity passed')
+          PY
+      - name: Commit index only
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html
+          git commit -m 'L3N v3.97.8: fix LiteTrace execution context' || true
+          git push origin HEAD:l3n-dev
