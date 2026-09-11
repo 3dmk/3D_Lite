@@ -17,7 +17,9 @@ jobs:
         with:
           python-version: '3.x'
       - name: Apply patch
-        run: python tools/l3n_debug_registry_v3973.py
+        run: |
+          python tools/l3n_debug_registry_v3973.py
+          python tools/l3n_debug_newline_fix_v3973.py
       - name: Static sanity
         run: |
           python - <<'PY'
@@ -29,6 +31,10 @@ jobs:
           assert s.count('id="__3DLiteL3NDebugRegistry3973"') == 1
           assert "version:'3.97.3'" in s
           assert 'ingestRuntimeReport' in s
+          start=s.find('<script id="__3DLiteL3NDebugRegistry3973">')
+          end=s.find('</script>',start)
+          assert start >= 0 and end > start
+          assert r'\n' not in s[start:end]
           print('static sanity passed')
           PY
       - name: Commit patched index
@@ -39,6 +45,6 @@ jobs:
           if git diff --cached --quiet; then
             echo 'No index changes'
           else
-            git commit -m 'L3N v3.97.3: add categorized debug learning registry'
+            git commit -m 'L3N v3.97.3: repair categorized debug learning registry'
             git push origin HEAD:l3n-dev
           fi
