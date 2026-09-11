@@ -18,7 +18,7 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Validate 3DLite startup structure
+      - name: Validate LitePix/3DLite startup structure
         shell: bash
         run: |
           node <<'NODE'
@@ -66,13 +66,15 @@ jobs:
           if (!/if\s*\(\s*ts===lastFrame\s*\)\s*return false/.test(html)) failures.push('RAF telemetry timestamp deduplication missing');
           if (!/if\s*\(\s*dt>0\s*\)/.test(html)) failures.push('Positive frame-time guard missing');
 
-          const serviceNames = [...html.matchAll(/\bconst\s+(ThreeDLite[A-Za-z0-9_$]+)\s*=/g)].map(x=>x[1]);
+          const serviceNames = [...html.matchAll(/\bconst\s+((?:ThreeDLite|LitePix)[A-Za-z0-9_$]+)\s*=/g)].map(x=>x[1]);
           const seenServices = new Set(), duplicateServices = new Set();
           for (const name of serviceNames) { if (seenServices.has(name)) duplicateServices.add(name); else seenServices.add(name); }
-          if (duplicateServices.size) failures.push('Duplicate 3DLite service declarations: ' + [...duplicateServices].join(', '));
+          if (duplicateServices.size) failures.push('Duplicate project service declarations: ' + [...duplicateServices].join(', '));
 
-          const titleMatch = html.match(/<title>3DLite\s+v(\d+\.\d+\.\d+)[^<]*<\/title>/i);
-          if (!titleMatch) failures.push('3DLite semantic version missing from document title');
+          const titleMatch = html.match(/<title>(?:LitePix|3DLite)\s+v(\d+\.\d+\.\d+)[^<]*<\/title>/i);
+          if (!titleMatch) failures.push('LitePix/3DLite semantic version missing from document title');
+          const litePix = /const LitePixVersion=Object\.freeze\(\{name:'LitePix',version:'4\.00\.0'/.test(html);
+          if (/<title>LitePix\b/i.test(html) && !litePix) failures.push('LitePix title present without central LitePixVersion owner');
           if (/3DLite v3\.93\.0 — L3N Runtime Learning/.test(html)) warnings.push('Stale v3.93.0 Runtime Learning section comment remains; non-blocking documentation debt.');
 
           console.log(`Checked ${ids.length} ids, ${scriptCount} parsed script blocks, and ${serviceNames.length} project service declarations.`);
@@ -90,9 +92,9 @@ jobs:
         shell: bash
         run: |
           {
-            echo '## 3DLite L3N Release Gate'
+            echo '## LitePix / 3DLite L3N Release Gate'
             echo ''
             echo '- Branch: `${{ github.ref_name }}`'
             echo '- Commit: `${{ github.sha }}`'
-            echo '- Gate checks startup structure, duplicate IDs, script integrity, single-loop ownership, runtime telemetry correctness, project service duplication, version identity, and Three.js dependency markers.'
+            echo '- Gate checks startup structure, duplicate IDs, script integrity, single-loop ownership, runtime telemetry correctness, service duplication, version identity, and Three.js dependency markers.'
           } >> "$GITHUB_STEP_SUMMARY"
