@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>3DLite v3.99.3 L3N GitHub Runtime</title>
+<title>3DLite v3.99.4 L3N GitHub Runtime</title>
 <style>
 :root{
   --bg:#202020;--panel:#2a2a2a;--panel2:#303030;--line:#444;--line2:#555;
@@ -4185,7 +4185,7 @@ function validateArchitectureCore(){
   return {ok:errors.length===0,errors};
 }
 
-const ThreeDLiteVersion=Object.freeze({name:'3DLite',version:'3.99.3'});
+const ThreeDLiteVersion=Object.freeze({name:'3DLite',version:'3.99.4'});
 const LiteTraceVersion=Object.freeze({name:'LiteTrace Renderer',version:'1.1 RC1'});
 window.ThreeDLiteVersion=ThreeDLiteVersion;
 window.LiteTraceVersion=LiteTraceVersion;
@@ -23420,7 +23420,7 @@ window.ThreeDLiteRenderDataCode3991={version:'3.99.1',snapshot:()=>A.renderDataS
 <script id="l3n-litetrace-telemetry-3992">
 (()=>{
 'use strict';
-const VERSION='3.99.2';
+const VERSION='3.99.4';
 const root=window;
 const A=root.ThreeDLiteAdaptiveRender3990||null;
 const jobs=()=>root.RenderFramework?.jobs||null;
@@ -23433,6 +23433,41 @@ const snapshot=()=>{
   const fastDiagnostics=job?.settings?.engine==='fast' ? (metadata?.diagnostics||null) : null;
   const rendererPerformance=metadata?.performance||null;
   const finalPerformance=job?.performance||null;
+  const giDiagnostics=job?.settings?.engine==='path' ? Object.freeze({
+    renderer:metadata?.renderer||null,
+    engine:'path',
+    globalIllumination:job?.settings?.globalIllumination!==false,
+    primaryGI:job?.settings?.primaryGI||null,
+    secondaryGI:metadata?.secondaryGI||job?.settings?.secondaryGI||null,
+    samplesPerPixel:Number(metadata?.samplesPerPixel)||0,
+    passes:Number(metadata?.passes)||0,
+    maxBounces:Number(metadata?.maxBounces)||Number(job?.settings?.maxBounces)||0,
+    estimator:metadata?.estimator||null,
+    mis:metadata?.mis===true,
+    russianRoulette:metadata?.russianRoulette===true,
+    importanceSampling:metadata?.importanceSampling||null,
+    noise:Number.isFinite(Number(metadata?.noise))?Number(metadata.noise):null,
+    transmission:metadata?.transmission===true,
+    progressive:metadata?.progressive===true,
+    adaptive:metadata?.adaptive===true,
+    minSamples:Number(job?.settings?.minSamples)||0,
+    maxSamples:Number(job?.settings?.maxSamples)||0,
+    noiseThreshold:Number(job?.settings?.noiseThreshold)||0,
+    lightCache:clone(metadata?.lightCache||null),
+    emissiveTriangleLights:Number(metadata?.emissiveTriangleLights)||0,
+    rendererDiagnostics:clone(metadata?.diagnostics||null),
+    cameraRays:Number(rendererPerformance?.cameraRays)||0,
+    pathRays:Number(rendererPerformance?.pathRays)||0,
+    shadowRays:Number(rendererPerformance?.shadowRays)||0,
+    probeRays:Number(rendererPerformance?.probeRays)||0,
+    totalRays:Number(rendererPerformance?.totalRays)||0,
+    samples:Number(rendererPerformance?.samples)||0,
+    raysPerSecond:Number(rendererPerformance?.raysPerSecond)||0,
+    stageMs:clone(rendererPerformance?.stageMs||null),
+    pathGuiding:job?.settings?.pathGuiding===true,
+    lightTree:job?.settings?.lightTree===true,
+    acceleration:job?.settings?.acceleration||null
+  }) : null;
   const workerStats=jobs()?.workerStats?.()||null;
   const executionContext=root.LiteTraceExecutionContext||null;
   return Object.freeze({
@@ -23443,6 +23478,7 @@ const snapshot=()=>{
     status:job?.status||job?.progress?.status||null,
     progress:clone(job?.progress?.snapshot?.()||job?.progress||null),
     fastDiagnostics:clone(fastDiagnostics),
+    giDiagnostics:clone(giDiagnostics),
     rendererPerformance:clone(rendererPerformance),
     finalPerformance:clone(finalPerformance),
     workerStats:clone(workerStats),
@@ -23454,7 +23490,8 @@ const snapshot=()=>{
     })
   });
 };
-root.ThreeDLiteLiteTraceTelemetry3992=Object.freeze({version:VERSION,snapshot,currentJob});
+root.ThreeDLiteLiteTraceTelemetry3994=Object.freeze({version:VERSION,snapshot,currentJob});
+root.ThreeDLiteLiteTraceTelemetry3992=root.ThreeDLiteLiteTraceTelemetry3994;
 if(A){
   const previous=A.renderDataSnapshot?.bind(A);
   A.renderDataSnapshot=()=>{
@@ -23466,6 +23503,7 @@ if(A){
 }
 try{if(root.ThreeDLiteVersion&&typeof root.ThreeDLiteVersion==='object')root.ThreeDLiteVersion.version=VERSION;}catch(_){}
 document.documentElement.dataset.liteTraceTelemetryVersion=VERSION;
+root.__3DLiteLiteTraceTelemetry3994=true;
 root.__3DLiteLiteTraceTelemetry3992=true;
 })();
 </script>
