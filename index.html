@@ -6846,6 +6846,7 @@ const LightEnergyPolicy=Object.freeze({
 });
 window.LightEnergyPolicy=LightEnergyPolicy;
 window.__3DLiteLightEnergy3983=true;
+window.__3DLiteLightDefaultDirection3983=true;
 window.ThreeDLiteLightEnergy3983=Object.freeze({version:'3.98.3',baselineIntensity:1,referenceDistance:100});
 
 var EditorLightSystem={
@@ -6941,9 +6942,6 @@ var EditorLightSystem={
     };
     obj.userData.isRenderLight=true;
     obj.position.set(0,0,Math.max(20,size));
-    if(type==='sun'||type==='rectangle'||type==='disc'||type==='mesh'){
-      obj.rotation.x=-Math.PI*.25;
-    }
     scene.add(obj);objects.push(obj);
     window.__3DLiteLightRevision=(window.__3DLiteLightRevision||0)+1;
     selectOnly(obj);
