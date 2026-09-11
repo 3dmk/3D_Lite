@@ -1,5 +1,5 @@
 {
-  "passed": false,
+  "passed": true,
   "core": {
     "title": "LitePix v4.10.0 Core Runtime",
     "version": "4.10.0",
@@ -7,14 +7,14 @@
     "bridgeType": "function"
   },
   "fast": {
-    "wallMs": 156,
+    "wallMs": 163,
     "engine": "fast",
     "renderer": "Part 4 Fast Direct",
     "native": null,
     "secondaryGI": null,
     "performance": {
-      "totalMs": 98.60000000000582,
-      "traceMs": 96.89999999999418,
+      "totalMs": 110.60000000000582,
+      "traceMs": 108.5,
       "actualRays": 0,
       "raysPerSecond": 0,
       "samples": 0,
@@ -23,7 +23,7 @@
     }
   },
   "path": {
-    "wallMs": 418,
+    "wallMs": 417,
     "engine": "path",
     "renderer": "Group 9 Progressive Path GI",
     "native": {
@@ -68,14 +68,14 @@
           "path-reservoir-grid": 0
         }
       },
-      "elapsedMs": 374.5
+      "elapsedMs": 390.5
     },
     "secondaryGI": "Light Cache",
     "performance": {
-      "totalMs": 378.4000000000233,
-      "traceMs": 377.9000000000233,
+      "totalMs": 395,
+      "traceMs": 394.5,
       "actualRays": 10368,
-      "raysPerSecond": 27436,
+      "raysPerSecond": 26281,
       "samples": 10368,
       "yields": 82,
       "bvhBuildMs": null
@@ -83,7 +83,5 @@
   },
   "pageErrors": [],
   "consoleErrors": [],
-  "failures": [
-    "v4.10 identity/bridge mismatch"
-  ]
+  "failures": []
 }
