@@ -26,7 +26,7 @@ jobs:
           sleep 2
       - name: Browser/runtime smoke
         run: |
-          cat > /tmp/smoke3979.js <<'JS'
+          cat > smoke3979.js <<'JS'
           const { chromium } = require('playwright');
           (async()=>{
             const browser=await chromium.launch({headless:true,args:['--use-angle=swiftshader','--enable-webgl','--ignore-gpu-blocklist']});
@@ -42,7 +42,7 @@ jobs:
               reset:!!document.getElementById('rfResetView3979'),zoom:!!document.getElementById('rfZoomReadout3979'),debug:!!document.getElementById('l3nRenderDebugListBtn'),ctx:typeof window.LiteTraceExecutionContext!=='undefined'
             }));
             if(!identity.text||identity.api!=='3.97.9'||!identity.hud||!identity.bucket||!identity.dot||!identity.reset||!identity.zoom||!identity.debug||!identity.ctx) throw new Error('identity/UI check failed '+JSON.stringify(identity));
-            await page.evaluate(()=>{ window.RenderFramework.showFrameBuffer?.(); });
+            await page.evaluate(()=>window.RenderFramework.showFrameBuffer?.());
             await page.waitForTimeout(200);
             const z0=await page.evaluate(()=>window.RenderFramework.ui.frameBuffer.zoom);
             await page.locator('#rfZoomIn').click();
@@ -59,9 +59,8 @@ jobs:
             });
             await page.waitForFunction(()=>window.ThreeDLiteRenderWindow3979.snapshot().bucketCount>0,{timeout:120000});
             const mid=await page.evaluate(()=>window.ThreeDLiteRenderWindow3979.snapshot());
-            if(!(mid.bucketCount>0)) throw new Error('no live bucket updates');
             await page.waitForFunction(()=>/Finished|Error|Cancelled/.test(window.RenderFramework.jobs?.activeJob?.status||''),{timeout:120000});
-            const final=await page.evaluate(()=>({status:window.RenderFramework.jobs.activeJob.status,error:String(window.RenderFramework.jobs.activeJob.error?.message||''),rnd:(window.ThreeDLiteL3NRenderDebugger?.snapshot()?.reports||[]).slice(-10).map(x=>[x.code,x.message]),rw:window.ThreeDLiteRenderWindow3979.snapshot(),frames:window.ThreeDLiteRuntimeTelemetry?.snapshot?.()?.frames||window.__3DLiteRuntimeTelemetry?.frames||0}));
+            const final=await page.evaluate(()=>({status:window.RenderFramework.jobs.activeJob.status,error:String(window.RenderFramework.jobs.activeJob.error?.message||''),rnd:(window.ThreeDLiteL3NRenderDebugger?.snapshot()?.reports||[]).slice(-10).map(x=>[x.code,x.message]),rw:window.ThreeDLiteRenderWindow3979.snapshot()}));
             if(final.status!=='Finished') throw new Error('render did not finish '+JSON.stringify(final));
             if(final.error.includes('LiteTraceExecutionContext')) throw new Error('LiteTrace context regression');
             if(final.rnd.some(x=>x[0]==='RND-1104' && String(x[1]).includes('LiteTraceExecutionContext'))) throw new Error('RND-1104 LiteTrace regression');
@@ -71,4 +70,4 @@ jobs:
             await browser.close();
           })().catch(e=>{console.error(e);process.exit(1)});
           JS
-          node /tmp/smoke3979.js
+          node smoke3979.js
