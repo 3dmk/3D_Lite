@@ -1,0 +1,58 @@
+name: L3N v3.98.4 Adaptive Code Browser Smoke
+on:
+  push:
+    branches: [l3n-dev]
+    paths:
+      - '.l3n-browser-smoke-v3984-trigger'
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: l3n-dev}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - run: npm install --no-save playwright@1.55.0
+      - run: npx playwright install --with-deps chromium
+      - run: python3 -m http.server 8000 >/tmp/3dlite.log 2>&1 &
+      - name: Validate adaptive compiled-code viewer
+        run: |
+          node <<'NODE'
+          const {chromium}=require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--use-angle=swiftshader','--enable-webgl','--ignore-gpu-blocklist']});
+            const page=await browser.newPage({viewport:{width:1280,height:900}});
+            const errors=[]; page.on('pageerror',e=>errors.push(String(e))); page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
+            await page.goto('http://127.0.0.1:8000/',{waitUntil:'load',timeout:120000});
+            await page.waitForTimeout(2500);
+            const pre=await page.evaluate(()=>({
+              version:window.ThreeDLiteVersion?.version||window.ThreeDLiteVersion,
+              marker:!!window.__3DLiteAdaptiveRenderCodeExport3984,
+              api:!!window.ThreeDLiteAdaptiveRenderCode3984,
+              controller:!!window.L3NAdaptiveRenderLearningController,
+              btn:!!document.getElementById('l3nAdaptiveCodeBtn3984'),
+              preview:window.ThreeDLiteAdaptiveRenderCode3984?.preview?.()
+            }));
+            console.log('PRE',JSON.stringify(pre));
+            if(pre.version!=='3.98.4') throw new Error('version '+pre.version);
+            if(!pre.marker||!pre.api||!pre.controller||!pre.btn) throw new Error('adaptive code API/UI missing');
+            if(!(pre.preview?.strategy?.rayBudget>0&&pre.preview.strategy.rayBudget<=1)) throw new Error('strategy preview invalid '+JSON.stringify(pre.preview));
+            await page.evaluate(()=>{document.getElementById('renderFrameWindow')?.classList.add('open');});
+            await page.click('#l3nAdaptiveCodeBtn3984');
+            await page.waitForTimeout(100);
+            const ui=await page.evaluate(()=>{
+              const panel=document.getElementById('l3nAdaptiveCodePanel3984');
+              const ta=document.getElementById('l3nAdaptiveCodeText3984');
+              return {display:panel?.style.display||'',len:ta?.value?.length||0,hasBuild:ta?.value?.includes('buildNextRenderStrategy'),hasScore:ta?.value?.includes('workScore'),readonly:!!ta?.readOnly};
+            });
+            console.log('UI',JSON.stringify(ui));
+            if(ui.display==='none'||ui.len<1000||!ui.hasBuild||!ui.hasScore||!ui.readonly) throw new Error('compiled code panel invalid '+JSON.stringify(ui));
+            await page.click('#l3nAdaptiveCodeSelect3984');
+            const sel=await page.evaluate(()=>{const ta=document.getElementById('l3nAdaptiveCodeText3984');return {start:ta.selectionStart,end:ta.selectionEnd,len:ta.value.length};});
+            if(sel.start!==0||sel.end!==sel.len) throw new Error('select all failed '+JSON.stringify(sel));
+            await page.click('#l3nAdaptiveCodeClose3984');
+            if(errors.some(e=>/ReferenceError|TypeError|SyntaxError|3DLite Renderer.*validation/i.test(e))) throw new Error('browser errors '+errors.join('\n'));
+            await browser.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
