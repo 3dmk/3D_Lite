@@ -17,7 +17,7 @@ jobs:
         run: python3 -m http.server 8000 >/tmp/3dlite.log 2>&1 &
       - name: Run themed light icon smoke
         run: |
-          cat > /tmp/smoke.js <<'JS'
+          cat > smoke-v3982.js <<'JS'
           const { chromium }=require('playwright');
           (async()=>{
             const browser=await chromium.launch({headless:true,args:['--use-angle=swiftshader','--enable-webgl','--ignore-gpu-blocklist']});
@@ -26,27 +26,15 @@ jobs:
             await page.goto('http://127.0.0.1:8000',{waitUntil:'load',timeout:120000});
             await page.waitForTimeout(2500);
             const r=await page.evaluate(()=>{
-              const out={};
-              out.version=window.ThreeDLiteVersion;
-              out.marker=!!window.__3DLiteLightViewportIcons3982;
-              out.api=window.ThreeDLiteLightViewportIcons3982;
-              const types=['point','spot','rectangle','disc','sphere','sun','dome','mesh'];
-              out.items=[];
+              const out={}; out.version=window.ThreeDLiteVersion; out.marker=!!window.__3DLiteLightViewportIcons3982; out.api=window.ThreeDLiteLightViewportIcons3982;
+              const types=['point','spot','rectangle','disc','sphere','sun','dome','mesh']; out.items=[];
               for(const type of types){
                 const o=EditorLightSystem.create(type,{size:25,color:'#ff0000'});
-                const before=o.geometry.boundingSphere?.radius||0;
-                const materialColor=o.material?.color?.getHexString?.();
-                o.userData.renderLight.size=250;
-                EditorLightSystem.updateIcon(o);
-                const after=o.geometry.boundingSphere?.radius||0;
+                const before=o.geometry.boundingSphere?.radius||0; const materialColor=o.material?.color?.getHexString?.();
+                o.userData.renderLight.size=250; EditorLightSystem.updateIcon(o); const after=o.geometry.boundingSphere?.radius||0;
                 out.items.push({type,isLight:EditorLightSystem.isLightObject(o),before,after,materialColor,theme:o.userData.lightViewportIcon?.theme,px:o.userData.lightViewportIcon?.pixels,line:o.isLineSegments===true});
               }
-              const snap=RenderSceneBoundary.buildSnapshot();
-              out.lightCount=snap.lights.length;
-              out.renderObjectCount=snap.objects.length;
-              out.rnd1104=window.ThreeDLiteRenderErrorCodes?.['RND-1104']?.title||window.ThreeDLiteL3NCompleteRenderDebugger?.codes?.['RND-1104']?.title||null;
-              out.debugList=!!window.ThreeDLiteRenderDebugListUI;
-              return out;
+              const snap=RenderSceneBoundary.buildSnapshot(); out.lightCount=snap.lights.length; out.debugList=!!window.ThreeDLiteRenderDebugListUI; return out;
             });
             console.log(JSON.stringify(r));
             if(r.version!=='3.98.2') throw new Error('version '+r.version);
@@ -60,4 +48,4 @@ jobs:
             await browser.close();
           })().catch(e=>{console.error(e);process.exit(1)});
           JS
-          node /tmp/smoke.js
+          node smoke-v3982.js
