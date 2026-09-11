@@ -16,7 +16,7 @@ jobs:
         with:
           python-version: '3.x'
       - name: Apply patch
-        run: python tools/l3n_render_window_live_v3979.py
+        run: python tools/run_l3n_render_window_live_v3979.py
       - name: Static sanity
         run: |
           python - <<'PY'
@@ -24,7 +24,7 @@ jobs:
           s=Path('index.html').read_text(encoding='utf-8')
           checks=[
             '3DLite 3.97.9',
-            '__3DLiteRenderWindowLive3979',
+            '<script id="__3DLiteRenderWindowLive3979">',
             'ThreeDLiteRenderWindow3979',
             'renderBucketMarker3979',
             'renderProgressDot3979',
