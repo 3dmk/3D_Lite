@@ -1,0 +1,33 @@
+name: LitePix v4.13 Shading Inspect
+on:
+  push:
+    branches: [litepix-v4.13-blas-tlas-refit]
+    paths: ['.github/workflows/litepix-v413-shading-inspect.yml']
+permissions:
+  contents: write
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('index.html').read_text().splitlines()
+          terms=['SurfaceInterpolator','RenderMaterialLibrary','resolveHit(job.renderScene','interpolate','triangleIndex','materialIndex']
+          out=[];seen=set()
+          for term in terms:
+            hits=[i for i,l in enumerate(s) if term.lower() in l.lower()]
+            for i in hits[:12]:
+              lo=max(0,i-30);hi=min(len(s),i+80);k=(lo,hi)
+              if k in seen: continue
+              out.append(f'\n===== {term} @ {i+1} =====');out.extend(f'{j+1}: {s[j]}' for j in range(lo,hi));seen.add(k)
+          Path('reports/litepix').mkdir(parents=True,exist_ok=True)
+          Path('reports/litepix/v4.13-shading-inspect.txt').write_text('\n'.join(out))
+          PY
+      - run: |
+          git config user.name 'LitePix v4.13 Shading Inspect'
+          git config user.email 'actions@users.noreply.github.com'
+          git add reports/litepix/v4.13-shading-inspect.txt
+          git commit -m 'Inspect v4.13 shading hit dependencies' || exit 0
+          git push
