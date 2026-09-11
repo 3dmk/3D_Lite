@@ -1,0 +1,76 @@
+name: v3.99.5 Fast Lighting Runtime Gate
+
+on:
+  push:
+    branches: [v3.99.5-fast-direct-lighting-fix]
+    paths:
+      - '.github/workflows/v3995-lighting-runtime-gate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install Chromium probe
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null
+      - name: Run oriented-normal and renderer regression tests
+        shell: bash
+        run: |
+          python3 -m http.server 8000 >/tmp/3dlite-v3995-http.log 2>&1 &
+          PID=$!
+          trap 'kill $PID || true' EXIT
+          node <<'NODE'
+          const {chromium}=require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--use-gl=swiftshader','--enable-webgl','--ignore-gpu-blocklist']});
+            const page=await browser.newPage({viewport:{width:1440,height:1000}});
+            const pageErrors=[],consoleErrors=[];
+            page.on('pageerror',e=>pageErrors.push(String(e?.stack||e)));
+            page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
+            const response=await page.goto('http://127.0.0.1:8000/index.html',{waitUntil:'domcontentloaded',timeout:120000});
+            await page.waitForTimeout(5000);
+            const core=await page.evaluate(()=>{
+              const store={positions:new Float32Array([-1,-1,0,1,-1,0,0,1,0]),normals:new Float32Array([0,0,1,0,0,1,0,0,1]),triangles:new Uint32Array([0,1,2])};
+              const acceleration={store};
+              const hit={triangleIndex:0,u:.25,v:.25,geometricNormal:[0,0,1],orientedGeometricNormal:[0,0,-1]};
+              const n=SurfaceInterpolator.normal(acceleration,hit);
+              const light=new RenderSceneLight({id:'reg-spot',name:'Regression Spot',type:'spot',enabled:true,color:'#ffffff',intensity:10,range:100,size:1,width:1,height:1,coneAngle:45,penumbra:.2,castShadows:false,position:[0,0,-10],direction:[0,0,1]});
+              const sample=DirectLightSampler.sample(light,[0,0,0]);
+              const mat=new RenderSurfaceMaterial({id:'reg-mat',name:'Regression',shading:'physical',baseColor:[.8,.4,.2],roughness:.5,metalness:0,opacity:1,emissive:[0,0,0],emissiveIntensity:0});
+              const brdf=PhysicalBSDF.evaluate(mat,n,[0,0,-1],sample.direction);
+              return {title:document.title,version:window.ThreeDLiteVersion?.version||null,marker:window.__3DLiteFastDirectLighting3995===true,normal:n,orientedDot:-n[2],sampleDirection:sample.direction,sampleRadiance:sample.radiance,brdf,litEnergy:brdf.reduce((a,b)=>a+b,0)*sample.radiance.reduce((a,b)=>a+b,0)};
+            });
+            const set=engine=>page.evaluate(engine=>{const setv=(id,v)=>{const e=document.getElementById(id);if(!e)return;e.value=String(v);e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));};setv('rsEngine',engine);setv('rsWidth',96);setv('rsHeight',54);setv('rsBounces',2);setv('rsMinSamples',1);setv('rsMaxSamples',2);setv('rsNoise',.2);},engine);
+            const render=async engine=>{await set(engine);const prior=await page.evaluate(()=>window.RenderFramework?.jobs?.lastJob?.id||0);await page.evaluate(()=>document.getElementById('renderNowBtn').click());await page.waitForFunction(prior=>{const j=window.RenderFramework?.jobs?.lastJob;return !!j&&j.id!==prior&&j.finished&&j.performance;},prior,{timeout:120000,polling:200});return page.evaluate(()=>({job:window.RenderFramework.jobs.lastJob,telemetry:window.ThreeDLiteLiteTraceTelemetry3994?.snapshot?.()||window.ThreeDLiteLiteTraceTelemetry3992?.snapshot?.()||null}));};
+            const fast=await render('fast');
+            const path=await render('path');
+            const fastRenderer=fast.job.beautyFrame?.metadata?.renderer||null;
+            const pathRenderer=path.job.beautyFrame?.metadata?.renderer||null;
+            console.log(JSON.stringify({status:response?.status(),core,fast:{engine:fast.job.settings.engine,renderer:fastRenderer,telemetry:fast.telemetry},path:{engine:path.job.settings.engine,renderer:pathRenderer,telemetry:path.telemetry},pageErrors,consoleErrors},null,2));
+            const f=[];
+            if(response?.status()!==200)f.push('HTTP != 200');
+            if(core.title!=='3DLite v3.99.5 L3N GitHub Runtime'||core.version!=='3.99.5'||!core.marker)f.push('version/marker mismatch');
+            if(core.normal[2]>-.999||core.orientedDot<.999)f.push('shading normal did not follow oriented hit side');
+            if(core.sampleDirection[2]>-.999)f.push('spot sample direction wrong');
+            if(core.sampleRadiance.every(v=>!(v>0)))f.push('spot sample radiance is black');
+            if(core.brdf.every(v=>!(v>0))||!(core.litEnergy>0))f.push('direct BRDF remained black');
+            if(fast.job.settings.engine!=='fast'||fastRenderer!=='Part 4 Fast Direct'||!fast.telemetry?.fastDiagnostics)f.push('Fast renderer smoke failed');
+            if(fast.telemetry?.giDiagnostics!==null)f.push('GI diagnostics leaked into Fast');
+            if(path.job.settings.engine!=='path'||!String(pathRenderer||'').includes('Path GI')||!path.telemetry?.giDiagnostics)f.push('Path/GI smoke failed');
+            if(path.telemetry?.fastDiagnostics!==null)f.push('Fast diagnostics leaked into Path');
+            if(pageErrors.length)f.push('page errors '+pageErrors.length);
+            if(consoleErrors.length)f.push('console errors '+consoleErrors.length);
+            if(f.length){console.error('v3.99.5 RUNTIME GATE FAILED\n'+f.join('\n'));process.exitCode=1;}else console.log('v3.99.5 RUNTIME GATE PASSED');
+            await browser.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
