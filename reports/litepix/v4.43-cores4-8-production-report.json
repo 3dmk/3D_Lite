@@ -1,0 +1,681 @@
+{
+  "passed": true,
+  "identity": {
+    "title": "LitePix v4.43.0 Core Runtime",
+    "version": "4.43.0",
+    "m427": true,
+    "m431": true,
+    "m435": true,
+    "m439": true,
+    "m443": true,
+    "orch": true
+  },
+  "on": {
+    "wallMs": 671,
+    "performance": {
+      "totalMs": 659.4000000000233,
+      "traceMs": 502.7000000000117,
+      "actualRays": 11838,
+      "raysPerSecond": 23549,
+      "samples": 10368,
+      "yields": 82,
+      "bvhBuildMs": null
+    },
+    "secondaryGI": "Light Cache",
+    "core2": {
+      "version": "4.19.0",
+      "provider": "LitePix Core2 production consolidated",
+      "architecture": "packed SAH BLAS + partial BLAS invalidation + selective TLAS + static/dynamic split + worker BVH prewarm",
+      "traceRays": 11838,
+      "shadowRays": 0,
+      "elapsedMs": 472.3,
+      "worker": {
+        "version": "4.18.0",
+        "provider": "LitePix Core2 worker BVH prewarm",
+        "supported": true,
+        "prewarmRuns": 1,
+        "workerBuilds": 2,
+        "cacheHits": 0,
+        "failures": 0,
+        "cachedBLAS": 2,
+        "lastPrewarmMs": 14.4,
+        "totalWorkerMs": 6.9
+      },
+      "tlas": {
+        "version": "4.16.0",
+        "provider": "LitePix Core2 selective TLAS",
+        "mode": "delegate-geometry",
+        "dirtyObjectIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "dirtyCount": 14,
+        "selectiveRefits": 0,
+        "nodesUpdated": 0,
+        "fullDelegates": 1,
+        "cleanReuses": 0,
+        "lastPrepareMs": 4.7
+      },
+      "dynamic": {
+        "version": "4.17.0",
+        "provider": "LitePix Core2 static/dynamic split",
+        "dynamicIds": [],
+        "staticInstances": 14,
+        "dynamicInstances": 0,
+        "splitBuilds": 1,
+        "staticRebuilds": 1,
+        "dynamicRebuilds": 1,
+        "lastDirty": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ]
+      },
+      "partial": {
+        "version": "4.15.0",
+        "provider": "LitePix Core2 partial BLAS cache",
+        "mode": "rebuild",
+        "dirtyTransforms": 14,
+        "dirtyGeometry": [
+          "FA3A91F3-0620-401E-9BE3-DD006D109B28",
+          "7431F792-CA92-40DF-A369-D6BCB2A43B3A"
+        ],
+        "builds": 1,
+        "refits": 0,
+        "cleanReuses": 0,
+        "partialBLASUpdates": 0,
+        "blasRebuilds": 0,
+        "invalidations": 0,
+        "lastPrepareMs": 2.9,
+        "totalPrepareMs": 2.9,
+        "instances": 14,
+        "uniqueBLAS": 2,
+        "tlasNodes": 7
+      },
+      "inner": {
+        "version": "4.17.0",
+        "provider": "LitePix Core2 static/dynamic split",
+        "instances": 14,
+        "uniqueBLAS": 2,
+        "tlasNodes": 7,
+        "buildMs": 1.1,
+        "rebuildCount": 1,
+        "refitCount": 0,
+        "traceRays": 0,
+        "shadowRays": 0,
+        "fallback": false,
+        "mode": "delegate-geometry",
+        "dirtyObjectIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "dirtyCount": 14,
+        "selectiveRefits": 0,
+        "nodesUpdated": 0,
+        "fullDelegates": 1,
+        "cleanReuses": 0,
+        "lastPrepareMs": 4.7,
+        "dynamicIds": [],
+        "staticInstances": 14,
+        "dynamicInstances": 0,
+        "splitBuilds": 1,
+        "staticRebuilds": 1,
+        "dynamicRebuilds": 1,
+        "lastDirty": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13
+        ],
+        "traceRays417": 11838,
+        "shadowRays417": 0
+      }
+    },
+    "core3": {
+      "version": "4.23.0",
+      "provider": "LitePix Core3 production raster guide",
+      "architecture": "production G-buffer + hierarchical guide pyramid + temporal reprojection/disocclusion validation",
+      "frame": 1,
+      "records": 10368,
+      "primaryHits": 914,
+      "misses": 9454,
+      "passes": 2,
+      "edgeMean": 0.3816350203300918,
+      "temporalTests": 0,
+      "gbuffer": {
+        "version": "4.20.0",
+        "width": 96,
+        "height": 54,
+        "frame": 1,
+        "writes": 914,
+        "validPixels": 457,
+        "coverage": 0.08815586419753087,
+        "bytes": 502848
+      },
+      "pyramid": {
+        "version": "4.21.0",
+        "builds": 1,
+        "levels": [
+          {
+            "level": 0,
+            "width": 96,
+            "height": 54
+          },
+          {
+            "level": 1,
+            "width": 48,
+            "height": 27
+          },
+          {
+            "level": 2,
+            "width": 24,
+            "height": 14
+          },
+          {
+            "level": 3,
+            "width": 12,
+            "height": 7
+          },
+          {
+            "level": 4,
+            "width": 6,
+            "height": 4
+          },
+          {
+            "level": 5,
+            "width": 3,
+            "height": 2
+          },
+          {
+            "level": 6,
+            "width": 2,
+            "height": 1
+          },
+          {
+            "level": 7,
+            "width": 1,
+            "height": 1
+          }
+        ]
+      },
+      "temporal": {
+        "version": "4.22.0",
+        "frames": 1,
+        "reprojected": 0,
+        "accepted": 0,
+        "rejected": 0,
+        "acceptRate": 0
+      },
+      "elapsedMs": 477.80000000004657
+    },
+    "c48": {
+      "version": "4.43.0",
+      "provider": "LitePix Cores 4-8 production orchestrator",
+      "records": 10368,
+      "passes": 2,
+      "core4": {
+        "version": "4.27.0",
+        "provider": "LitePix Core4 production hierarchical GI",
+        "architecture": "irradiance cache + probe hierarchy + adaptive hierarchical GI",
+        "primaryHits": 914,
+        "cacheHits": 874,
+        "cacheMisses": 40,
+        "inserts": 40,
+        "cache": {
+          "version": "4.24.0",
+          "records": 40,
+          "hits": 874,
+          "misses": 40,
+          "hitRate": 0.9562363238512035,
+          "candidateTests": 4591,
+          "cells": 26,
+          "spatialHash": true,
+          "inserts": 40,
+          "updates": 0,
+          "queries": 914
+        },
+        "probes": {
+          "version": "4.25.0",
+          "probes": 0,
+          "refinements": 0,
+          "levels": 4
+        },
+        "adaptive": {
+          "version": "4.26.0",
+          "passes": 2,
+          "samples": 30,
+          "activeBlocks": 96,
+          "finalizedBlocks": 0,
+          "refinedBlocks": 120,
+          "createdBlocks": 126,
+          "cache": {
+            "records": 0,
+            "hits": 0,
+            "misses": 0,
+            "hitRate": 0,
+            "candidateTests": 0,
+            "cells": 0,
+            "spatialHash": true
+          }
+        },
+        "elapsedMs": 478.4000000000233
+      },
+      "core5": {
+        "version": "4.31.0",
+        "provider": "LitePix Core5 production ray reuse",
+        "architecture": "weighted reservoirs + spatial reuse + temporal reuse + shadow visibility cache",
+        "records": 10368,
+        "reused": 10368,
+        "spatial": {
+          "version": "4.29.0",
+          "accepted": 81152,
+          "rejected": 0,
+          "acceptRate": 1
+        },
+        "temporal": {
+          "version": "4.30.0",
+          "frames": 2,
+          "accepted": 5184,
+          "rejected": 0,
+          "acceptRate": 1
+        },
+        "shadow": {
+          "entries": 0,
+          "hits": 0,
+          "misses": 0,
+          "hitRate": 0
+        },
+        "elapsedMs": 478.29999999998836
+      },
+      "core6": {
+        "version": "4.35.0",
+        "provider": "LitePix Core6 production materials/color",
+        "architecture": "material preflight + texture color policy + energy audit + compiled material cache",
+        "compiled": 2,
+        "preflight": {
+          "version": "4.32.0",
+          "checked": 2,
+          "fixed": 2,
+          "invalid": 0
+        },
+        "textures": {
+          "version": "4.33.0",
+          "count": 0,
+          "invalid": 0,
+          "valid": 0,
+          "fixes": []
+        },
+        "energy": {
+          "version": "4.34.0",
+          "materials": 2,
+          "energyWarnings": 0
+        },
+        "cacheEntries": 2,
+        "elapsedMs": 478.20000000001164
+      },
+      "core7": {
+        "version": "4.39.0",
+        "provider": "LitePix Core7 production rendering",
+        "architecture": "tile scheduling + checkpoint/recovery + AOV contract + production frame state",
+        "state": "done",
+        "tiles": {
+          "version": "4.36.0",
+          "tiles": 24,
+          "completed": 0,
+          "failed": 0
+        },
+        "checkpoints": {
+          "version": "4.37.0",
+          "saves": 0,
+          "loads": 0,
+          "removes": 1
+        },
+        "output": {
+          "version": "4.38.0",
+          "frames": 1,
+          "aovs": [
+            "beauty",
+            "direct",
+            "indirect",
+            "diffuse",
+            "specular",
+            "reflection",
+            "refraction",
+            "emission",
+            "shadow",
+            "ao",
+            "normal",
+            "depth",
+            "objectId",
+            "materialId",
+            "variance"
+          ],
+          "aovCount": 15
+        },
+        "error": null,
+        "elapsedMs": 478
+      },
+      "core8": {
+        "version": "4.43.0",
+        "provider": "LitePix Core8 production telemetry/optimization",
+        "architecture": "runtime telemetry + quality regression + optimization advisor + hardware benchmark",
+        "telemetry": {
+          "version": "4.40.0",
+          "frames": 1,
+          "history": 1,
+          "last": {
+            "meta": {
+              "renderer": null,
+              "secondaryGI": null,
+              "frame": 1
+            },
+            "stages": {},
+            "rays": {
+              "camera": 0,
+              "path": 0,
+              "shadow": 0,
+              "probe": 0,
+              "reflection": 0,
+              "refraction": 0,
+              "total": 0,
+              "raysPerSecond": 0,
+              "elapsedMs": 477.70000000001164
+            },
+            "cache": {
+              "hits": 0,
+              "misses": 0,
+              "inserts": 0,
+              "refinements": 0,
+              "hitRate": 0
+            },
+            "noise": {
+              "count": 1,
+              "min": 0.008734858473781821,
+              "max": 0.008734858473781821,
+              "mean": 0.008734858473781821,
+              "p50": 0.008734858473781821,
+              "p95": 0.008734858473781821
+            },
+            "memory": {
+              "usedBytes": 0,
+              "limitBytes": 0
+            },
+            "blocks": {
+              "active": 0,
+              "finalized": 0,
+              "refined": 0,
+              "version": "4.26.0",
+              "passes": 2,
+              "samples": 30,
+              "activeBlocks": 96,
+              "finalizedBlocks": 0,
+              "refinedBlocks": 120,
+              "createdBlocks": 126,
+              "cache": {
+                "records": 0,
+                "hits": 0,
+                "misses": 0,
+                "hitRate": 0,
+                "candidateTests": 0,
+                "cells": 0,
+                "spatialHash": true
+              }
+            },
+            "time": 1789163070887
+          }
+        },
+        "quality": {
+          "version": "4.41.0",
+          "comparisons": 0,
+          "failures": 0,
+          "last": null
+        },
+        "advisor": {
+          "version": "4.42.0",
+          "runs": 1,
+          "actions": [
+            "increase cache locality or improve compatibility thresholds"
+          ]
+        },
+        "hardware": {},
+        "elapsedMs": 478
+      },
+      "elapsedMs": 478
+    }
+  },
+  "off": {
+    "wallMs": 492,
+    "performance": {
+      "totalMs": 475.70000000001164,
+      "traceMs": 415.5,
+      "actualRays": 11838,
+      "raysPerSecond": 28491,
+      "samples": 10368,
+      "yields": 82,
+      "bvhBuildMs": null
+    },
+    "secondaryGI": "Light Cache",
+    "core2": {
+      "version": "4.19.0",
+      "provider": "LitePix Core2 production consolidated",
+      "architecture": "packed SAH BLAS + partial BLAS invalidation + selective TLAS + static/dynamic split + worker BVH prewarm",
+      "traceRays": 11838,
+      "shadowRays": 0,
+      "elapsedMs": 411.6,
+      "worker": {
+        "version": "4.18.0",
+        "provider": "LitePix Core2 worker BVH prewarm",
+        "supported": true,
+        "prewarmRuns": 2,
+        "workerBuilds": 2,
+        "cacheHits": 2,
+        "failures": 0,
+        "cachedBLAS": 2,
+        "lastPrewarmMs": 0.3,
+        "totalWorkerMs": 6.9
+      },
+      "tlas": {
+        "version": "4.16.0",
+        "provider": "LitePix Core2 selective TLAS",
+        "mode": "reuse-clean",
+        "dirtyObjectIndices": [],
+        "dirtyCount": 0,
+        "selectiveRefits": 0,
+        "nodesUpdated": 0,
+        "fullDelegates": 1,
+        "cleanReuses": 1,
+        "lastPrepareMs": 1.1
+      },
+      "dynamic": {
+        "version": "4.17.0",
+        "provider": "LitePix Core2 static/dynamic split",
+        "dynamicIds": [],
+        "staticInstances": 14,
+        "dynamicInstances": 0,
+        "splitBuilds": 1,
+        "staticRebuilds": 1,
+        "dynamicRebuilds": 1,
+        "lastDirty": []
+      },
+      "partial": {
+        "version": "4.15.0",
+        "provider": "LitePix Core2 partial BLAS cache",
+        "mode": "rebuild",
+        "dirtyTransforms": 14,
+        "dirtyGeometry": [
+          "FA3A91F3-0620-401E-9BE3-DD006D109B28",
+          "7431F792-CA92-40DF-A369-D6BCB2A43B3A"
+        ],
+        "builds": 1,
+        "refits": 0,
+        "cleanReuses": 0,
+        "partialBLASUpdates": 0,
+        "blasRebuilds": 0,
+        "invalidations": 0,
+        "lastPrepareMs": 2.9,
+        "totalPrepareMs": 2.9,
+        "instances": 14,
+        "uniqueBLAS": 2,
+        "tlasNodes": 7
+      },
+      "inner": {
+        "version": "4.17.0",
+        "provider": "LitePix Core2 static/dynamic split",
+        "instances": 14,
+        "uniqueBLAS": 2,
+        "tlasNodes": 7,
+        "buildMs": 1.1,
+        "rebuildCount": 1,
+        "refitCount": 0,
+        "traceRays": 0,
+        "shadowRays": 0,
+        "fallback": false,
+        "mode": "reuse-clean",
+        "dirtyObjectIndices": [],
+        "dirtyCount": 0,
+        "selectiveRefits": 0,
+        "nodesUpdated": 0,
+        "fullDelegates": 1,
+        "cleanReuses": 1,
+        "lastPrepareMs": 1.1,
+        "dynamicIds": [],
+        "staticInstances": 14,
+        "dynamicInstances": 0,
+        "splitBuilds": 1,
+        "staticRebuilds": 1,
+        "dynamicRebuilds": 1,
+        "lastDirty": [],
+        "traceRays417": 11838,
+        "shadowRays417": 0
+      }
+    },
+    "core3": {
+      "version": "4.23.0",
+      "provider": "LitePix Core3 production raster guide",
+      "architecture": "production G-buffer + hierarchical guide pyramid + temporal reprojection/disocclusion validation",
+      "frame": 1,
+      "records": 10368,
+      "primaryHits": 914,
+      "misses": 9454,
+      "passes": 2,
+      "edgeMean": 0.3816350203300918,
+      "temporalTests": 454,
+      "gbuffer": {
+        "version": "4.20.0",
+        "width": 96,
+        "height": 54,
+        "frame": 1,
+        "writes": 914,
+        "validPixels": 457,
+        "coverage": 0.08815586419753087,
+        "bytes": 502848
+      },
+      "pyramid": {
+        "version": "4.21.0",
+        "builds": 1,
+        "levels": [
+          {
+            "level": 0,
+            "width": 96,
+            "height": 54
+          },
+          {
+            "level": 1,
+            "width": 48,
+            "height": 27
+          },
+          {
+            "level": 2,
+            "width": 24,
+            "height": 14
+          },
+          {
+            "level": 3,
+            "width": 12,
+            "height": 7
+          },
+          {
+            "level": 4,
+            "width": 6,
+            "height": 4
+          },
+          {
+            "level": 5,
+            "width": 3,
+            "height": 2
+          },
+          {
+            "level": 6,
+            "width": 2,
+            "height": 1
+          },
+          {
+            "level": 7,
+            "width": 1,
+            "height": 1
+          }
+        ]
+      },
+      "temporal": {
+        "version": "4.22.0",
+        "frames": 2,
+        "reprojected": 454,
+        "accepted": 454,
+        "rejected": 0,
+        "acceptRate": 1
+      },
+      "elapsedMs": 412.20000000001164
+    },
+    "c48": null
+  },
+  "maxPixelDiff": 0,
+  "meanPixelDiff": 0,
+  "pageErrors": [],
+  "consoleErrors": [],
+  "failures": []
+}
