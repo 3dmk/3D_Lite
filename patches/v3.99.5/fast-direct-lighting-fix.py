@@ -53,11 +53,11 @@ if new not in s:
     if s.count(old)!=1: raise SystemExit(f'SurfaceInterpolator anchor count={s.count(old)}')
     s=s.replace(old,new,1)
 
-# Export a release marker without disturbing historical subsystem markers.
-marker="window.__3DLiteFastDirectLighting3995=true;"
+marker="root.__3DLiteFastDirectLighting3995=true;"
 if marker not in s:
-    anchor="window.__3DLiteLiteTraceTelemetry3992=true;"
-    if s.count(anchor)!=1: raise SystemExit(f'release marker anchor count={s.count(anchor)}')
+    anchors=["root.__3DLiteLiteTraceTelemetry3992=true;","root.__3DLiteLiteTraceTelemetry3994=true;"]
+    anchor=next((a for a in anchors if s.count(a)==1),None)
+    if not anchor: raise SystemExit('release marker anchor not found')
     s=s.replace(anchor,anchor+'\n'+marker,1)
 
 p.write_text(s,encoding='utf-8')
