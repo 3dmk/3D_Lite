@@ -45,8 +45,9 @@ if new4 not in s:
     if s.count(old4)!=1: raise SystemExit(f'release-blocking: path metadata hook anchor count={s.count(old4)}')
     s=s.replace(old4,new4,1)
 
-old5="""    RenderCoreH.markStage(job,'render',renderStart16);\n    if(LiteTraceExecutionContext.performance===perf16){LiteTraceExecutionContext.activeJob=null;LiteTraceExecutionContext.performance=null;}"""
-new5="""    RenderCoreH.markStage(job,'render',renderStart16);\n    job.litePixPathStats410=litePixPath410?.snapshot?.()||job.litePixPathStats410||null;\n    if(litePixPath410)litePixPath410.dispose();\n    if(LiteTraceExecutionContext.performance===perf16){LiteTraceExecutionContext.activeJob=null;LiteTraceExecutionContext.performance=null;}"""
+# Finalize only the Path GI renderer: include the unique Global Illumination AOV tail.
+old5="""      aovs.set3('Global Illumination',i,[\n        Math.max(0,beauty[0]-direct[0]-emission[0]),\n        Math.max(0,beauty[1]-direct[1]-emission[1]),\n        Math.max(0,beauty[2]-direct[2]-emission[2])\n      ]);\n    }\n    RenderCoreH.markStage(job,'render',renderStart16);\n    if(LiteTraceExecutionContext.performance===perf16){LiteTraceExecutionContext.activeJob=null;LiteTraceExecutionContext.performance=null;}"""
+new5="""      aovs.set3('Global Illumination',i,[\n        Math.max(0,beauty[0]-direct[0]-emission[0]),\n        Math.max(0,beauty[1]-direct[1]-emission[1]),\n        Math.max(0,beauty[2]-direct[2]-emission[2])\n      ]);\n    }\n    RenderCoreH.markStage(job,'render',renderStart16);\n    job.litePixPathStats410=litePixPath410?.snapshot?.()||job.litePixPathStats410||null;\n    if(litePixPath410)litePixPath410.dispose();\n    if(LiteTraceExecutionContext.performance===perf16){LiteTraceExecutionContext.activeJob=null;LiteTraceExecutionContext.performance=null;}"""
 if new5 not in s:
     if s.count(old5)!=1: raise SystemExit(f'release-blocking: final path hook anchor count={s.count(old5)}')
     s=s.replace(old5,new5,1)
