@@ -1,0 +1,74 @@
+name: L3N v3.97.9 Render Window Browser Smoke
+on:
+  push:
+    branches: [l3n-dev]
+    paths: ['.l3n-browser-smoke-v3979-trigger']
+permissions:
+  contents: read
+jobs:
+  browser-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: l3n-dev
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm i playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null 2>&1
+      - name: Start server
+        run: |
+          python3 -m http.server 8000 >/tmp/3dlite-v3979-http.log 2>&1 &
+          sleep 2
+      - name: Browser/runtime smoke
+        run: |
+          cat > /tmp/smoke3979.js <<'JS'
+          const { chromium } = require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--use-angle=swiftshader','--enable-webgl','--ignore-gpu-blocklist']});
+            const page=await browser.newPage({viewport:{width:1440,height:1000}});
+            const pageErrors=[]; const badConsole=[];
+            page.on('pageerror',e=>pageErrors.push(String(e)));
+            page.on('console',m=>{const t=m.text(); if(m.type()==='error' && t.includes('[3DLite Renderer] validation')) badConsole.push(t);});
+            await page.goto('http://127.0.0.1:8000/index.html',{waitUntil:'load',timeout:120000});
+            await page.waitForFunction(()=>window.RenderFramework?.initialized && window.ThreeDLiteRenderWindow3979?.version==='3.97.9',{timeout:60000});
+            const identity=await page.evaluate(()=>({
+              text:document.body.innerText.includes('3DLite 3.97.9'), api:window.ThreeDLiteRenderWindow3979?.version,
+              hud:!!document.getElementById('renderLiveHud3979'),bucket:!!document.getElementById('renderBucketMarker3979'),dot:!!document.getElementById('renderProgressDot3979'),
+              reset:!!document.getElementById('rfResetView3979'),zoom:!!document.getElementById('rfZoomReadout3979'),debug:!!document.getElementById('l3nRenderDebugListBtn'),ctx:typeof window.LiteTraceExecutionContext!=='undefined'
+            }));
+            if(!identity.text||identity.api!=='3.97.9'||!identity.hud||!identity.bucket||!identity.dot||!identity.reset||!identity.zoom||!identity.debug||!identity.ctx) throw new Error('identity/UI check failed '+JSON.stringify(identity));
+            await page.evaluate(()=>{ window.RenderFramework.showFrameBuffer?.(); });
+            await page.waitForTimeout(200);
+            const z0=await page.evaluate(()=>window.RenderFramework.ui.frameBuffer.zoom);
+            await page.locator('#rfZoomIn').click();
+            const z1=await page.evaluate(()=>window.RenderFramework.ui.frameBuffer.zoom);
+            if(!(z1>z0)) throw new Error('zoom-in failed');
+            await page.locator('#rfResetView3979').click();
+            await page.evaluate(()=>{
+              const s=window.RenderFramework.settings;
+              s.engine='fast';s.width=160;s.height=90;s.percentage=100;s.tileSize='16';s.progressive=false;s.maxSamples=2;s.minSamples=1;
+              const set=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v};
+              const chk=(id,v)=>{const e=document.getElementById(id);if(e)e.checked=v};
+              set('rsEngine','fast');set('rsWidth','160');set('rsHeight','90');set('rsPercent','100');set('rsTile','16');set('rsMinSamples','1');set('rsMaxSamples','2');chk('rsProgressive',false);
+              window.RenderFramework.render();
+            });
+            await page.waitForFunction(()=>window.ThreeDLiteRenderWindow3979.snapshot().bucketCount>0,{timeout:120000});
+            const mid=await page.evaluate(()=>window.ThreeDLiteRenderWindow3979.snapshot());
+            if(!(mid.bucketCount>0)) throw new Error('no live bucket updates');
+            await page.waitForFunction(()=>/Finished|Error|Cancelled/.test(window.RenderFramework.jobs?.activeJob?.status||''),{timeout:120000});
+            const final=await page.evaluate(()=>({status:window.RenderFramework.jobs.activeJob.status,error:String(window.RenderFramework.jobs.activeJob.error?.message||''),rnd:(window.ThreeDLiteL3NRenderDebugger?.snapshot()?.reports||[]).slice(-10).map(x=>[x.code,x.message]),rw:window.ThreeDLiteRenderWindow3979.snapshot(),frames:window.ThreeDLiteRuntimeTelemetry?.snapshot?.()?.frames||window.__3DLiteRuntimeTelemetry?.frames||0}));
+            if(final.status!=='Finished') throw new Error('render did not finish '+JSON.stringify(final));
+            if(final.error.includes('LiteTraceExecutionContext')) throw new Error('LiteTrace context regression');
+            if(final.rnd.some(x=>x[0]==='RND-1104' && String(x[1]).includes('LiteTraceExecutionContext'))) throw new Error('RND-1104 LiteTrace regression');
+            if(pageErrors.length) throw new Error('page errors: '+pageErrors.join(' | '));
+            if(badConsole.length) throw new Error('renderer validation errors: '+badConsole.join(' | '));
+            console.log(JSON.stringify({identity,mid:{bucketCount:mid.bucketCount,bucketTotal:mid.bucketTotal,lastStage:mid.lastStage},final},null,2));
+            await browser.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          JS
+          node /tmp/smoke3979.js
