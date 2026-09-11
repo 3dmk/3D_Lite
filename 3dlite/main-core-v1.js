@@ -35,8 +35,8 @@ class ThreeDLiteMainCoreV1{
     return this.generations();
   }
   _publishLegacy(kind){
-    if(kind==='scene'||kind==='transform'||kind==='material')root.__3DLiteSceneRevision=Math.max(Number(root.__3DLiteSceneRevision)||0,this._generations.scene);
-    if(kind==='geometry'||kind==='topology')root.__3DLiteGeometryRevision=Math.max(Number(root.__3DLiteGeometryRevision)||0,this._generations.geometry);
+    if(kind==='scene'||kind==='transform'||kind==='material')root.__3DLiteSceneRevision=(Number(root.__3DLiteSceneRevision)||0)+1;
+    if(kind==='geometry'||kind==='topology')root.__3DLiteGeometryRevision=(Number(root.__3DLiteGeometryRevision)||0)+1;
   }
   transaction(label,operation,validate){
     if(this._active)throw new Error('3DLite Main Core: nested authoritative transaction is not allowed');
