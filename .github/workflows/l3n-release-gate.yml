@@ -73,8 +73,9 @@ jobs:
 
           const titleMatch = html.match(/<title>(?:LitePix|3DLite)\s+v(\d+\.\d+\.\d+)[^<]*<\/title>/i);
           if (!titleMatch) failures.push('LitePix/3DLite semantic version missing from document title');
-          const litePix = /const LitePixVersion=Object\.freeze\(\{name:'LitePix',version:'4\.00\.0'/.test(html);
-          if (/<title>LitePix\b/i.test(html) && !litePix) failures.push('LitePix title present without central LitePixVersion owner');
+          const versionMatch = html.match(/const LitePixVersion=Object\.freeze\(\{name:'LitePix',version:'(\d+\.\d+\.\d+)'/);
+          if (/<title>LitePix\b/i.test(html) && !versionMatch) failures.push('LitePix title present without central LitePixVersion owner');
+          if (titleMatch && versionMatch && titleMatch[1] !== versionMatch[1]) failures.push(`LitePix title/version owner mismatch: ${titleMatch[1]} vs ${versionMatch[1]}`);
           if (/3DLite v3\.93\.0 — L3N Runtime Learning/.test(html)) warnings.push('Stale v3.93.0 Runtime Learning section comment remains; non-blocking documentation debt.');
 
           console.log(`Checked ${ids.length} ids, ${scriptCount} parsed script blocks, and ${serviceNames.length} project service declarations.`);
@@ -96,5 +97,5 @@ jobs:
             echo ''
             echo '- Branch: `${{ github.ref_name }}`'
             echo '- Commit: `${{ github.sha }}`'
-            echo '- Gate checks startup structure, duplicate IDs, script integrity, single-loop ownership, runtime telemetry correctness, service duplication, version identity, and Three.js dependency markers.'
+            echo '- Gate checks startup structure, duplicate IDs, script integrity, single-loop ownership, runtime telemetry correctness, service duplication, synchronized semantic version identity, and Three.js dependency markers.'
           } >> "$GITHUB_STEP_SUMMARY"
