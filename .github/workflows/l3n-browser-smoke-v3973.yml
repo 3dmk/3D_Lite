@@ -50,6 +50,8 @@ jobs:
               if(!reg.resolve(issue.id,'smoke resolved')) throw new Error('resolve failed');
               reg.ingestRuntimeReport({version:'3.97.3',passed:true,tests:[],frame:{slowFrames:0,severeFrames:0},comparison:{comparisons:{}}});
               const snap=reg.snapshot();
+              const canvas=document.querySelector('#viewport canvas');
+              const telemetry=window.ThreeDLiteRuntimeTelemetry?.summary?.()||{};
               return {
                 title:document.title,
                 publicVersion:window.ThreeDLiteVersion?.version,
@@ -60,8 +62,11 @@ jobs:
                 categories:cats.length,
                 total:snap.total,
                 viewport:!!document.querySelector('#viewport'),
-                canvas:!!document.querySelector('#viewport canvas'),
-                rendered:document.querySelector('#viewport canvas')?.dataset?.viewportRendered||null,
+                canvas:!!canvas,
+                canvasWidth:canvas?.width||0,
+                canvasHeight:canvas?.height||0,
+                viewportReady:document.documentElement.dataset.viewportReady||null,
+                frames:telemetry.frames||0,
                 three:!!window.THREE,
                 regression:window.ThreeDLiteL3NIntegration?.regression?.()
               };
@@ -70,7 +75,9 @@ jobs:
             if(!result.title.includes('3DLite v3.97.3')) throw new Error('wrong title '+result.title);
             for(const [k,v] of Object.entries({publicVersion:result.publicVersion,apiVersion:result.apiVersion,liveVersion:result.liveVersion,buildVersion:result.buildVersion,registryVersion:result.registryVersion})) if(v!=='3.97.3') throw new Error(k+' wrong: '+v);
             if(!result.viewport||!result.canvas||!result.three) throw new Error('viewport dependency missing');
-            if(result.rendered!=='true') throw new Error('viewport not rendered');
+            if(result.canvasWidth<=0||result.canvasHeight<=0) throw new Error('viewport canvas has invalid size');
+            if(result.viewportReady!=='true') throw new Error('viewport readiness marker missing: '+result.viewportReady);
+            if(result.frames<=0) throw new Error('viewport/render RAF telemetry did not advance');
             if(pageErrors.length) throw new Error('page errors: '+pageErrors.join(' | '));
             if(rendererErrors.length) throw new Error('renderer validation errors: '+rendererErrors.join(' | '));
             if(result.regression && result.regression.passed===false) throw new Error('L3N regression failed: '+JSON.stringify(result.regression));
