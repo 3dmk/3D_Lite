@@ -1,0 +1,23 @@
+name: L3N Inspect Light Energy v3.98.3
+on:
+  push:
+    branches: [l3n-dev]
+    paths:
+      - '.l3n-inspect-light-energy-v3983-trigger'
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect light energy code
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('index.html').read_text(errors='ignore').splitlines()
+          for a,b in [(6808,6825),(7030,7085),(7300,7370),(7990,8065),(1,30)]:
+            print(f'--- {a}-{b} ---')
+            for i in range(a-1,min(b,len(s))): print(f'{i+1}: {s[i]}')
+          for i,line in enumerate(s):
+            if '3.98.2' in line or '<title>' in line:
+              print(f'VER {i+1}: {line}')
+          PY
