@@ -1,0 +1,38 @@
+{
+  "version": "4.13.0",
+  "stage": "Core2 BLAS/TLAS scene acceleration + transform refit",
+  "passed": true,
+  "sceneRefitTest": {
+    "instances": 1024,
+    "uniqueBLAS": 1,
+    "tlasNodes": 511,
+    "buildMs": 12.148,
+    "refitMs": 4.841,
+    "refitCount": 1,
+    "fallback": false
+  },
+  "browserPathParity": {
+    "sharedInstances": 2,
+    "uniqueBLAS": 1,
+    "sceneAccelerationActive": true,
+    "sceneBuildMs": 0.9,
+    "v412WallMs": 823,
+    "v413WallMs": 696,
+    "v412TraceMs": 695.8,
+    "v413TraceMs": 644.4,
+    "v412RaysPerSecond": 27048,
+    "v413RaysPerSecond": 29205,
+    "actualRays": 18820,
+    "maxPixelDiff": 0,
+    "meanPixelDiff": 0,
+    "secondaryGI": "Light Cache",
+    "pageErrors": 0,
+    "consoleErrors": 0
+  },
+  "notes": [
+    "Render snapshots now preserve local-space mesh data, stable geometryId, and affine world transform while retaining the legacy world-space mesh for compatibility.",
+    "Path primary and bounce traversal prefer LitePixSceneAcceleration413; shadow visibility therefore follows the same TLAS-to-BLAS acceleration object when shadow rays are emitted.",
+    "Surface normal and UV interpolation accepts hit-provided attributes for instanced local-space BLAS hits.",
+    "Transform refit is validated on the scene acceleration API. Cross-job automatic acceleration-cache reuse remains a subsequent Core2 optimization rather than a v4.13 claim."
+  ]
+}
