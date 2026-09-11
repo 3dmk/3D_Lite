@@ -1,5 +1,5 @@
 (function(root){'use strict';
-const LP=root.LitePix=root.LitePix||{};
+const LP=root.LitePixNative=root.LitePixNative||{};
 const EPS=1e-9;
 const vmin=(a,b)=>[Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.min(a[2],b[2])];
 const vmax=(a,b)=>[Math.max(a[0],b[0]),Math.max(a[1],b[1]),Math.max(a[2],b[2])];

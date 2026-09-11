@@ -1,5 +1,5 @@
 (function(root){'use strict';
-const LP=root.LitePix=root.LitePix||{};
+const LP=root.LitePixNative=root.LitePixNative||{};
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
 class RadianceRecord{constructor(p=[0,0,0],n=[0,1,0],L=[0,0,0],radius=1,variance=1,confidence=0){this.p=p.slice();this.n=n.slice();this.L=L.slice();this.radius=Math.max(1e-5,radius);this.variance=Math.max(0,variance);this.confidence=clamp(confidence,0,1);this.age=0;this.hits=0;}}

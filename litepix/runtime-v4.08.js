@@ -1,5 +1,5 @@
 (function(root){'use strict';
-const LP=root.LitePix=root.LitePix||{};
+const LP=root.LitePixNative=root.LitePixNative||{};
 const assert=(cond,msg)=>{if(!cond)throw new Error('LitePix runtime: '+msg);};
 class LitePixRuntimeV408{constructor(opts={}){this.version='4.08.0';this.opts=opts;this.telemetry=new LP.Core8.LitePixTelemetryV2();this.scene=new LP.Core2.SceneCompiler({memoryLimitBytes:opts.memoryLimitBytes||512*1024*1024});this.raster=null;this.gi=null;this.spatialReuse=new LP.Core5.SpatialReuse({radius:opts.reuseRadius||1});this.shadowCache=new LP.Core5.ShadowReuseCache();this.materials=new LP.Core6.MaterialCache();this.aovs=new LP.Core7.AOVRegistry();this.production=new LP.Core7.ProductionQueue();this.ready=false;this._bindProduction();}
 _bindProduction(){this.production.on('start',j=>this._emit('litepix:production-start',j));this.production.on('done',j=>this._emit('litepix:production-done',j));this.production.on('error',j=>this._emit('litepix:production-error',j));}

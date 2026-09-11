@@ -1,7 +1,7 @@
 import fs from 'fs';import vm from 'vm';import assert from 'assert';
 const files=['litepix/core2-scene-acceleration.js','litepix/core3-raster-guide.js','litepix/core4-hierarchical-gi.js','litepix/core5-ray-reuse.js','litepix/core6-materials-color.js','litepix/core7-production.js','litepix/core8-telemetry-optimization.js','litepix/runtime-v4.08.js'];
 const ctx={console,performance:{now:()=>Date.now()},Math,Date,Map,Set,Float32Array,Uint32Array,Uint8Array,Array,Object,JSON,Number,String,Boolean,Infinity,Promise,setTimeout,clearTimeout};ctx.globalThis=ctx;vm.createContext(ctx);for(const f of files)vm.runInContext(fs.readFileSync(f,'utf8'),ctx,{filename:f});
-const LP=ctx.LitePix;assert(LP&&LP.AllCores&&LP.AllCores.version==='4.08.0');for(let i=2;i<=8;i++)assert(LP['Core'+i],'missing Core'+i);
+const LP=ctx.LitePixNative;assert(LP&&LP.AllCores&&LP.AllCores.version==='4.08.0');for(let i=2;i<=8;i++)assert(LP['Core'+i],'missing Core'+i);
 // Core2
 const bvh=new LP.Core2.SAHBVH({maxLeaf:1});bvh.build([{bounds:{min:[0,0,0],max:[1,1,1]}},{bounds:{min:[3,0,0],max:[4,1,1]}}]);assert(bvh.stats().primitives===2&&bvh.stats().nodes>=1);
 const sc=new LP.Core2.SceneCompiler();sc.compile({meshes:[{id:'m',primitives:[{bounds:{min:[0,0,0],max:[1,1,1]}}]}],instances:[{id:'i',bounds:{min:[0,0,0],max:[1,1,1]}}]});assert(sc.snapshot().staticMeshes===1);

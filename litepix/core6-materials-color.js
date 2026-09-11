@@ -1,5 +1,5 @@
 (function(root){'use strict';
-const LP=root.LitePix=root.LitePix||{};
+const LP=root.LitePixNative=root.LitePixNative||{};
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const srgbToLinear1=c=>{c=clamp(c,0,1);return c<=0.04045?c/12.92:Math.pow((c+0.055)/1.055,2.4);};
 const linearToSrgb1=c=>{c=Math.max(0,c);return c<=0.0031308?12.92*c:1.055*Math.pow(c,1/2.4)-0.055;};

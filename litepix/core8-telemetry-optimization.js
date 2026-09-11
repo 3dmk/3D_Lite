@@ -1,5 +1,5 @@
 (function(root){'use strict';
-const LP=root.LitePix=root.LitePix||{};
+const LP=root.LitePixNative=root.LitePixNative||{};
 const now=()=>typeof performance!=='undefined'&&performance.now?performance.now():Date.now();
 class MetricAccumulator{constructor(){this.values=[];}add(v){if(Number.isFinite(v))this.values.push(v);}summary(){if(!this.values.length)return{count:0,min:0,max:0,mean:0,p50:0,p95:0};const a=[...this.values].sort((x,y)=>x-y),n=a.length,q=p=>a[Math.min(n-1,Math.floor((n-1)*p))];const sum=a.reduce((s,v)=>s+v,0);return{count:n,min:a[0],max:a[n-1],mean:sum/n,p50:q(.5),p95:q(.95)};}}
 class StageTimer{constructor(){this.open=new Map();this.metrics=new Map();}begin(name){this.open.set(name,now());}end(name){const t=this.open.get(name);if(t==null)return 0;const d=now()-t;this.open.delete(name);if(!this.metrics.has(name))this.metrics.set(name,new MetricAccumulator());this.metrics.get(name).add(d);return d;}snapshot(){const out={};for(const[k,v]of this.metrics)out[k]=v.summary();return out;}}
