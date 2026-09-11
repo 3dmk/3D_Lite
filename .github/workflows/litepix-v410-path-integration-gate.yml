@@ -32,7 +32,7 @@ jobs:
           node <<'NODE'
           const fs=require('fs'),h=fs.readFileSync('index.html','utf8'),f=[];
           if(!h.includes('<title>LitePix v4.10.0 Native Path Integration</title>'))f.push('v4.10 title missing');
-          if(!h.includes("const LitePixVersion=Object.freeze({name:'LitePix',version:'4.10.0'});"))f.push('v4.10 central version missing');
+          if(!/const\s+LitePixVersion\s*=\s*Object\.freeze\(\{[^;]*name:'LitePix'[^;]*version:'4\.10\.0'[^;]*\}\);/.test(h))f.push('v4.10 central version missing');
           for(const x of ['path-integration-v4.10.js','new LitePixPathExecution410(width,height','litePixPath410.record(i,x,y,sample,ph,accumulator)','litePixPath410.completePass(accumulator)','litePixNativePath:litePixPath410?.snapshot?.()||null'])if(!h.includes(x))f.push('missing '+x);
           const ids=[...h.matchAll(/\bid\s*=\s*["']([^"']+)["']/gi)].map(m=>m[1]),seen=new Set(),dups=[];for(const id of ids){if(seen.has(id))dups.push(id);else seen.add(id)}if(dups.length)f.push('duplicate ids '+[...new Set(dups)].join(','));
           const ext=[...h.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].filter(m=>/\bsrc\s*=/.test(m[1])&&(m[2]||'').trim());if(ext.length)f.push('external script inline bodies '+ext.length);
