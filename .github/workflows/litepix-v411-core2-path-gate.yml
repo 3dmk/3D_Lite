@@ -30,7 +30,7 @@ jobs:
           const fs=require('fs'),h=fs.readFileSync('index.html','utf8'),f=[];
           if(!h.includes('<title>LitePix v4.11.0 Core2 Path BVH</title>'))f.push('v4.11 title missing');
           if(!/const\s+LitePixVersion\s*=\s*Object\.freeze\(\{[^;]*name:'LitePix'[^;]*version:'4\.11\.0'[^;]*\}\);/.test(h))f.push('v4.11 central version missing');
-          for(const x of ['core2-path-v4.11.js','LitePixCore2PathAcceleration411.wrap(acceleration,job)','litePixCore2BVH:job.litePixCore2Acceleration411?.snapshot?.()||null'])if(!h.includes(x))f.push('missing '+x);
+          for(const x of ['core2-path-v4.11.js','window.LitePixCore2PathAcceleration411.wrap(acceleration,job)','litePixCore2BVH:job.litePixCore2Acceleration411?.snapshot?.()||null'])if(!h.includes(x))f.push('missing '+x);
           const ids=[...h.matchAll(/\bid\s*=\s*["']([^"']+)["']/gi)].map(m=>m[1]),seen=new Set(),dups=[];for(const id of ids){if(seen.has(id))dups.push(id);else seen.add(id)}if(dups.length)f.push('duplicate ids '+[...new Set(dups)].join(','));
           const ext=[...h.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].filter(m=>/\bsrc\s*=/.test(m[1])&&(m[2]||'').trim());if(ext.length)f.push('external script inline bodies '+ext.length);
           const loops=(h.match(/requestAnimationFrame\s*\(\s*animate\s*\)/g)||[]).length;if(loops!==1)f.push('animation loop owners '+loops);
@@ -44,6 +44,7 @@ jobs:
           npx playwright install --with-deps chromium >/dev/null
       - name: Browser correctness and traversal benchmark
         run: |
+          set -o pipefail
           python3 -m http.server 8000 >/tmp/lp411-http.log 2>&1 &
           PID=$!
           trap 'kill $PID || true' EXIT
