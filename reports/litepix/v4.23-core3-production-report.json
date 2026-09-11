@@ -1,0 +1,569 @@
+{
+  "passed": true,
+  "identity": {
+    "title": "LitePix v4.23.0 Core Runtime",
+    "version": "4.23.0",
+    "m423": true,
+    "m422": true,
+    "m421": true,
+    "m420": true,
+    "core3Version": "4.23.0"
+  },
+  "first": {
+    "wallMs": 669,
+    "performance": {
+      "totalMs": 657.1999999999971,
+      "traceMs": 492.09999999999127,
+      "actualRays": 11864,
+      "raysPerSecond": 24109,
+      "samples": 10368,
+      "yields": 82,
+      "bvhBuildMs": null
+    },
+    "secondaryGI": "Light Cache",
+    "core3": {
+      "version": "4.23.0",
+      "provider": "LitePix Core3 production raster guide",
+      "architecture": "production G-buffer + hierarchical guide pyramid + temporal reprojection/disocclusion validation",
+      "frame": 1,
+      "records": 10368,
+      "primaryHits": 786,
+      "misses": 9582,
+      "passes": 2,
+      "edgeMean": 0.4232987575706938,
+      "temporalTests": 0,
+      "gbuffer": {
+        "version": "4.20.0",
+        "width": 96,
+        "height": 54,
+        "frame": 1,
+        "writes": 786,
+        "validPixels": 393,
+        "coverage": 0.07581018518518519,
+        "bytes": 502848
+      },
+      "pyramid": {
+        "version": "4.21.0",
+        "builds": 1,
+        "levels": [
+          {
+            "level": 0,
+            "width": 96,
+            "height": 54
+          },
+          {
+            "level": 1,
+            "width": 48,
+            "height": 27
+          },
+          {
+            "level": 2,
+            "width": 24,
+            "height": 14
+          },
+          {
+            "level": 3,
+            "width": 12,
+            "height": 7
+          },
+          {
+            "level": 4,
+            "width": 6,
+            "height": 4
+          },
+          {
+            "level": 5,
+            "width": 3,
+            "height": 2
+          },
+          {
+            "level": 6,
+            "width": 2,
+            "height": 1
+          },
+          {
+            "level": 7,
+            "width": 1,
+            "height": 1
+          }
+        ]
+      },
+      "temporal": {
+        "version": "4.22.0",
+        "frames": 1,
+        "reprojected": 0,
+        "accepted": 0,
+        "rejected": 0,
+        "acceptRate": 0
+      },
+      "elapsedMs": 464.79999999998836
+    },
+    "core2": {
+      "version": "4.19.0",
+      "provider": "LitePix Core2 production consolidated",
+      "architecture": "packed SAH BLAS + partial BLAS invalidation + selective TLAS + static/dynamic split + worker BVH prewarm",
+      "traceRays": 11864,
+      "shadowRays": 0,
+      "elapsedMs": 458.7,
+      "worker": {
+        "version": "4.18.0",
+        "provider": "LitePix Core2 worker BVH prewarm",
+        "supported": true,
+        "prewarmRuns": 1,
+        "workerBuilds": 2,
+        "cacheHits": 0,
+        "failures": 0,
+        "cachedBLAS": 2,
+        "lastPrewarmMs": 18.2,
+        "totalWorkerMs": 8.5
+      },
+      "tlas": {
+        "version": "4.16.0",
+        "provider": "LitePix Core2 selective TLAS",
+        "mode": "delegate-geometry",
+        "dirtyObjectIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17
+        ],
+        "dirtyCount": 18,
+        "selectiveRefits": 0,
+        "nodesUpdated": 0,
+        "fullDelegates": 1,
+        "cleanReuses": 0,
+        "lastPrepareMs": 5.2
+      },
+      "dynamic": {
+        "version": "4.17.0",
+        "provider": "LitePix Core2 static/dynamic split",
+        "dynamicIds": [],
+        "staticInstances": 18,
+        "dynamicInstances": 0,
+        "splitBuilds": 1,
+        "staticRebuilds": 1,
+        "dynamicRebuilds": 1,
+        "lastDirty": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17
+        ]
+      },
+      "partial": {
+        "version": "4.15.0",
+        "provider": "LitePix Core2 partial BLAS cache",
+        "mode": "rebuild",
+        "dirtyTransforms": 18,
+        "dirtyGeometry": [
+          "B3EF0E52-FF6F-492A-8799-559C8A096E73",
+          "31D7FE77-D0A9-4DEC-9885-AB376929286F"
+        ],
+        "builds": 1,
+        "refits": 0,
+        "cleanReuses": 0,
+        "partialBLASUpdates": 0,
+        "blasRebuilds": 0,
+        "invalidations": 0,
+        "lastPrepareMs": 3.2,
+        "totalPrepareMs": 3.2,
+        "instances": 18,
+        "uniqueBLAS": 2,
+        "tlasNodes": 11
+      },
+      "inner": {
+        "version": "4.17.0",
+        "provider": "LitePix Core2 static/dynamic split",
+        "instances": 18,
+        "uniqueBLAS": 2,
+        "tlasNodes": 11,
+        "buildMs": 1.3,
+        "rebuildCount": 1,
+        "refitCount": 0,
+        "traceRays": 0,
+        "shadowRays": 0,
+        "fallback": false,
+        "mode": "delegate-geometry",
+        "dirtyObjectIndices": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17
+        ],
+        "dirtyCount": 18,
+        "selectiveRefits": 0,
+        "nodesUpdated": 0,
+        "fullDelegates": 1,
+        "cleanReuses": 0,
+        "lastPrepareMs": 5.2,
+        "dynamicIds": [],
+        "staticInstances": 18,
+        "dynamicInstances": 0,
+        "splitBuilds": 1,
+        "staticRebuilds": 1,
+        "dynamicRebuilds": 1,
+        "lastDirty": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17
+        ],
+        "traceRays417": 11864,
+        "shadowRays417": 0
+      }
+    }
+  },
+  "second": {
+    "wallMs": 517,
+    "performance": {
+      "totalMs": 484.5,
+      "traceMs": 416.3999999999942,
+      "actualRays": 11864,
+      "raysPerSecond": 28492,
+      "samples": 10368,
+      "yields": 82,
+      "bvhBuildMs": null
+    },
+    "secondaryGI": "Light Cache",
+    "core3": {
+      "version": "4.23.0",
+      "provider": "LitePix Core3 production raster guide",
+      "architecture": "production G-buffer + hierarchical guide pyramid + temporal reprojection/disocclusion validation",
+      "frame": 1,
+      "records": 10368,
+      "primaryHits": 786,
+      "misses": 9582,
+      "passes": 2,
+      "edgeMean": 0.4232987575706938,
+      "temporalTests": 384,
+      "gbuffer": {
+        "version": "4.20.0",
+        "width": 96,
+        "height": 54,
+        "frame": 1,
+        "writes": 786,
+        "validPixels": 393,
+        "coverage": 0.07581018518518519,
+        "bytes": 502848
+      },
+      "pyramid": {
+        "version": "4.21.0",
+        "builds": 1,
+        "levels": [
+          {
+            "level": 0,
+            "width": 96,
+            "height": 54
+          },
+          {
+            "level": 1,
+            "width": 48,
+            "height": 27
+          },
+          {
+            "level": 2,
+            "width": 24,
+            "height": 14
+          },
+          {
+            "level": 3,
+            "width": 12,
+            "height": 7
+          },
+          {
+            "level": 4,
+            "width": 6,
+            "height": 4
+          },
+          {
+            "level": 5,
+            "width": 3,
+            "height": 2
+          },
+          {
+            "level": 6,
+            "width": 2,
+            "height": 1
+          },
+          {
+            "level": 7,
+            "width": 1,
+            "height": 1
+          }
+        ]
+      },
+      "temporal": {
+        "version": "4.22.0",
+        "frames": 2,
+        "reprojected": 384,
+        "accepted": 384,
+        "rejected": 0,
+        "acceptRate": 1
+      },
+      "elapsedMs": 414.09999999999127
+    },
+    "core2": {
+      "version": "4.19.0",
+      "provider": "LitePix Core2 production consolidated",
+      "architecture": "packed SAH BLAS + partial BLAS invalidation + selective TLAS + static/dynamic split + worker BVH prewarm",
+      "traceRays": 11864,
+      "shadowRays": 0,
+      "elapsedMs": 412.1,
+      "worker": {
+        "version": "4.18.0",
+        "provider": "LitePix Core2 worker BVH prewarm",
+        "supported": true,
+        "prewarmRuns": 2,
+        "workerBuilds": 2,
+        "cacheHits": 2,
+        "failures": 0,
+        "cachedBLAS": 2,
+        "lastPrewarmMs": 0.2,
+        "totalWorkerMs": 8.5
+      },
+      "tlas": {
+        "version": "4.16.0",
+        "provider": "LitePix Core2 selective TLAS",
+        "mode": "reuse-clean",
+        "dirtyObjectIndices": [],
+        "dirtyCount": 0,
+        "selectiveRefits": 0,
+        "nodesUpdated": 0,
+        "fullDelegates": 1,
+        "cleanReuses": 1,
+        "lastPrepareMs": 1.7
+      },
+      "dynamic": {
+        "version": "4.17.0",
+        "provider": "LitePix Core2 static/dynamic split",
+        "dynamicIds": [],
+        "staticInstances": 18,
+        "dynamicInstances": 0,
+        "splitBuilds": 1,
+        "staticRebuilds": 1,
+        "dynamicRebuilds": 1,
+        "lastDirty": []
+      },
+      "partial": {
+        "version": "4.15.0",
+        "provider": "LitePix Core2 partial BLAS cache",
+        "mode": "rebuild",
+        "dirtyTransforms": 18,
+        "dirtyGeometry": [
+          "B3EF0E52-FF6F-492A-8799-559C8A096E73",
+          "31D7FE77-D0A9-4DEC-9885-AB376929286F"
+        ],
+        "builds": 1,
+        "refits": 0,
+        "cleanReuses": 0,
+        "partialBLASUpdates": 0,
+        "blasRebuilds": 0,
+        "invalidations": 0,
+        "lastPrepareMs": 3.2,
+        "totalPrepareMs": 3.2,
+        "instances": 18,
+        "uniqueBLAS": 2,
+        "tlasNodes": 11
+      },
+      "inner": {
+        "version": "4.17.0",
+        "provider": "LitePix Core2 static/dynamic split",
+        "instances": 18,
+        "uniqueBLAS": 2,
+        "tlasNodes": 11,
+        "buildMs": 1.3,
+        "rebuildCount": 1,
+        "refitCount": 0,
+        "traceRays": 0,
+        "shadowRays": 0,
+        "fallback": false,
+        "mode": "reuse-clean",
+        "dirtyObjectIndices": [],
+        "dirtyCount": 0,
+        "selectiveRefits": 0,
+        "nodesUpdated": 0,
+        "fullDelegates": 1,
+        "cleanReuses": 1,
+        "lastPrepareMs": 1.7,
+        "dynamicIds": [],
+        "staticInstances": 18,
+        "dynamicInstances": 0,
+        "splitBuilds": 1,
+        "staticRebuilds": 1,
+        "dynamicRebuilds": 1,
+        "lastDirty": [],
+        "traceRays417": 11864,
+        "shadowRays417": 0
+      }
+    }
+  },
+  "off": {
+    "wallMs": 499,
+    "performance": {
+      "totalMs": 465.3000000000029,
+      "traceMs": 406.8000000000029,
+      "actualRays": 11864,
+      "raysPerSecond": 29164,
+      "samples": 10368,
+      "yields": 82,
+      "bvhBuildMs": null
+    },
+    "secondaryGI": "Light Cache",
+    "core3": null,
+    "core2": {
+      "version": "4.19.0",
+      "provider": "LitePix Core2 production consolidated",
+      "architecture": "packed SAH BLAS + partial BLAS invalidation + selective TLAS + static/dynamic split + worker BVH prewarm",
+      "traceRays": 11864,
+      "shadowRays": 0,
+      "elapsedMs": 405.3,
+      "worker": {
+        "version": "4.18.0",
+        "provider": "LitePix Core2 worker BVH prewarm",
+        "supported": true,
+        "prewarmRuns": 3,
+        "workerBuilds": 2,
+        "cacheHits": 4,
+        "failures": 0,
+        "cachedBLAS": 2,
+        "lastPrewarmMs": 0.1,
+        "totalWorkerMs": 8.5
+      },
+      "tlas": {
+        "version": "4.16.0",
+        "provider": "LitePix Core2 selective TLAS",
+        "mode": "reuse-clean",
+        "dirtyObjectIndices": [],
+        "dirtyCount": 0,
+        "selectiveRefits": 0,
+        "nodesUpdated": 0,
+        "fullDelegates": 1,
+        "cleanReuses": 2,
+        "lastPrepareMs": 0.1
+      },
+      "dynamic": {
+        "version": "4.17.0",
+        "provider": "LitePix Core2 static/dynamic split",
+        "dynamicIds": [],
+        "staticInstances": 18,
+        "dynamicInstances": 0,
+        "splitBuilds": 1,
+        "staticRebuilds": 1,
+        "dynamicRebuilds": 1,
+        "lastDirty": []
+      },
+      "partial": {
+        "version": "4.15.0",
+        "provider": "LitePix Core2 partial BLAS cache",
+        "mode": "rebuild",
+        "dirtyTransforms": 18,
+        "dirtyGeometry": [
+          "B3EF0E52-FF6F-492A-8799-559C8A096E73",
+          "31D7FE77-D0A9-4DEC-9885-AB376929286F"
+        ],
+        "builds": 1,
+        "refits": 0,
+        "cleanReuses": 0,
+        "partialBLASUpdates": 0,
+        "blasRebuilds": 0,
+        "invalidations": 0,
+        "lastPrepareMs": 3.2,
+        "totalPrepareMs": 3.2,
+        "instances": 18,
+        "uniqueBLAS": 2,
+        "tlasNodes": 11
+      },
+      "inner": {
+        "version": "4.17.0",
+        "provider": "LitePix Core2 static/dynamic split",
+        "instances": 18,
+        "uniqueBLAS": 2,
+        "tlasNodes": 11,
+        "buildMs": 1.3,
+        "rebuildCount": 1,
+        "refitCount": 0,
+        "traceRays": 0,
+        "shadowRays": 0,
+        "fallback": false,
+        "mode": "reuse-clean",
+        "dirtyObjectIndices": [],
+        "dirtyCount": 0,
+        "selectiveRefits": 0,
+        "nodesUpdated": 0,
+        "fullDelegates": 1,
+        "cleanReuses": 2,
+        "lastPrepareMs": 0.1,
+        "dynamicIds": [],
+        "staticInstances": 18,
+        "dynamicInstances": 0,
+        "splitBuilds": 1,
+        "staticRebuilds": 1,
+        "dynamicRebuilds": 1,
+        "lastDirty": [],
+        "traceRays417": 11864,
+        "shadowRays417": 0
+      }
+    }
+  },
+  "maxPixelDiff": 0,
+  "meanPixelDiff": 0,
+  "pageErrors": [],
+  "consoleErrors": [],
+  "failures": []
+}
