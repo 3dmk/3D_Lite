@@ -1,0 +1,318 @@
+{
+  "passed": true,
+  "identity": {
+    "title": "3D Lite — LitePix v4.44.0",
+    "version": "4.44.0",
+    "marker": true
+  },
+  "normalized": {
+    "renderEngine": "PATH",
+    "maxBounces": 5,
+    "spp": 7,
+    "noiseThreshold": 0.02,
+    "renderWidth": 320,
+    "renderHeight": 180,
+    "renderer": "PATH",
+    "bounces": 5,
+    "maxSamples": 7,
+    "noise": 0.02,
+    "width": 320,
+    "height": 180,
+    "engine": "path"
+  },
+  "audit": {
+    "version": "4.44.0",
+    "software": "3D Lite",
+    "renderer": "LitePix",
+    "registry": [
+      {
+        "legacy": "Render jobs / active-last job",
+        "target": "LitePix Core1",
+        "status": "implemented"
+      },
+      {
+        "legacy": "LiteTrace execution context",
+        "target": "LitePix Core1 + Path runtime",
+        "status": "merged"
+      },
+      {
+        "legacy": "Fast renderer diagnostics",
+        "target": "Core1/Core8 telemetry",
+        "status": "replaced"
+      },
+      {
+        "legacy": "Renderer performance telemetry",
+        "target": "Core8",
+        "status": "improved"
+      },
+      {
+        "legacy": "Worker statistics",
+        "target": "Core2/Core8",
+        "status": "improved"
+      },
+      {
+        "legacy": "Path primary/bounce traversal",
+        "target": "Core2 packed SAH BLAS/TLAS",
+        "status": "improved"
+      },
+      {
+        "legacy": "Shadow visibility",
+        "target": "Core2 any-hit traversal",
+        "status": "improved"
+      },
+      {
+        "legacy": "BVH acceleration",
+        "target": "Core2 BLAS/TLAS + cache/refit",
+        "status": "improved"
+      },
+      {
+        "legacy": "Direct-light normal handling",
+        "target": "Path surface interpolation",
+        "status": "preserved"
+      },
+      {
+        "legacy": "Material linear color behavior",
+        "target": "Core6 + compatibility path",
+        "status": "preserved"
+      },
+      {
+        "legacy": "GI / indirect lighting",
+        "target": "Core4 + Light Cache",
+        "status": "implemented"
+      },
+      {
+        "legacy": "Light Cache",
+        "target": "Path GI + Core4 infrastructure",
+        "status": "preserved"
+      },
+      {
+        "legacy": "G-buffer / raster guides",
+        "target": "Core3",
+        "status": "added"
+      },
+      {
+        "legacy": "Spatial/temporal reuse",
+        "target": "Core5",
+        "status": "added"
+      },
+      {
+        "legacy": "PBR/material validation",
+        "target": "Core6",
+        "status": "implemented"
+      },
+      {
+        "legacy": "Tiles/AOV/checkpoints",
+        "target": "Core7",
+        "status": "implemented"
+      },
+      {
+        "legacy": "Runtime telemetry/quality/hardware advice",
+        "target": "Core8",
+        "status": "implemented"
+      },
+      {
+        "legacy": "Historical MaxPix symbol-by-symbol API",
+        "target": "LitePix",
+        "status": "unverified-source"
+      }
+    ],
+    "capabilities": {
+      "core1": true,
+      "core2": true,
+      "core3": true,
+      "core4": true,
+      "core5": true,
+      "core6": true,
+      "core7": true,
+      "core8": true,
+      "cores4to8": true,
+      "materialLinearFix": true,
+      "renderFramework": true,
+      "pathRuntime": true,
+      "legacyLiteTraceContext": true
+    },
+    "missingRuntimeCapabilities": [],
+    "operationalComplete": true,
+    "historicalComplete": false,
+    "unresolved": [
+      "Historical MaxPix symbol-by-symbol API"
+    ],
+    "note": "Historical MaxPix source/API was not found as a separately identifiable module in the protected pre-LitePix repository, so symbol-by-symbol certification remains intentionally false."
+  },
+  "legacyTelemetry": {
+    "schema": 3,
+    "version": "4.44.0",
+    "generatedAt": "2026-09-11T22:15:24.197Z",
+    "renderer": "LitePix",
+    "status": null,
+    "progress": null,
+    "fastDiagnostics": null,
+    "giDiagnostics": null,
+    "rendererPerformance": null,
+    "finalPerformance": null,
+    "workerStats": {
+      "configuredSize": 3,
+      "autoSize": 3,
+      "available": true,
+      "generation": 1,
+      "workers": 0,
+      "idle": 0,
+      "queued": 0,
+      "active": 0,
+      "paused": false,
+      "failures": 0,
+      "completed": 0,
+      "cancelled": 0,
+      "timeouts": 0,
+      "states": []
+    },
+    "execution": {
+      "activeJobId": null,
+      "performanceAttached": false,
+      "controllerHasActiveJob": false,
+      "controllerHasLastJob": false
+    },
+    "software": "3D Lite",
+    "jobId": null,
+    "rendererName": null,
+    "litePix": {
+      "core2": null,
+      "core3": null,
+      "cores4to8": null
+    }
+  },
+  "render": {
+    "secondaryGI": "Light Cache",
+    "migration": {
+      "version": "4.44.0",
+      "software": "3D Lite",
+      "renderer": "LitePix",
+      "registry": [
+        {
+          "legacy": "Render jobs / active-last job",
+          "target": "LitePix Core1",
+          "status": "implemented"
+        },
+        {
+          "legacy": "LiteTrace execution context",
+          "target": "LitePix Core1 + Path runtime",
+          "status": "merged"
+        },
+        {
+          "legacy": "Fast renderer diagnostics",
+          "target": "Core1/Core8 telemetry",
+          "status": "replaced"
+        },
+        {
+          "legacy": "Renderer performance telemetry",
+          "target": "Core8",
+          "status": "improved"
+        },
+        {
+          "legacy": "Worker statistics",
+          "target": "Core2/Core8",
+          "status": "improved"
+        },
+        {
+          "legacy": "Path primary/bounce traversal",
+          "target": "Core2 packed SAH BLAS/TLAS",
+          "status": "improved"
+        },
+        {
+          "legacy": "Shadow visibility",
+          "target": "Core2 any-hit traversal",
+          "status": "improved"
+        },
+        {
+          "legacy": "BVH acceleration",
+          "target": "Core2 BLAS/TLAS + cache/refit",
+          "status": "improved"
+        },
+        {
+          "legacy": "Direct-light normal handling",
+          "target": "Path surface interpolation",
+          "status": "preserved"
+        },
+        {
+          "legacy": "Material linear color behavior",
+          "target": "Core6 + compatibility path",
+          "status": "preserved"
+        },
+        {
+          "legacy": "GI / indirect lighting",
+          "target": "Core4 + Light Cache",
+          "status": "implemented"
+        },
+        {
+          "legacy": "Light Cache",
+          "target": "Path GI + Core4 infrastructure",
+          "status": "preserved"
+        },
+        {
+          "legacy": "G-buffer / raster guides",
+          "target": "Core3",
+          "status": "added"
+        },
+        {
+          "legacy": "Spatial/temporal reuse",
+          "target": "Core5",
+          "status": "added"
+        },
+        {
+          "legacy": "PBR/material validation",
+          "target": "Core6",
+          "status": "implemented"
+        },
+        {
+          "legacy": "Tiles/AOV/checkpoints",
+          "target": "Core7",
+          "status": "implemented"
+        },
+        {
+          "legacy": "Runtime telemetry/quality/hardware advice",
+          "target": "Core8",
+          "status": "implemented"
+        },
+        {
+          "legacy": "Historical MaxPix symbol-by-symbol API",
+          "target": "LitePix",
+          "status": "unverified-source"
+        }
+      ],
+      "capabilities": {
+        "core1": true,
+        "core2": true,
+        "core3": true,
+        "core4": true,
+        "core5": true,
+        "core6": true,
+        "core7": true,
+        "core8": true,
+        "cores4to8": true,
+        "materialLinearFix": true,
+        "renderFramework": true,
+        "pathRuntime": true,
+        "legacyLiteTraceContext": true
+      },
+      "missingRuntimeCapabilities": [],
+      "operationalComplete": true,
+      "historicalComplete": false,
+      "unresolved": [
+        "Historical MaxPix symbol-by-symbol API"
+      ],
+      "note": "Historical MaxPix source/API was not found as a separately identifiable module in the protected pre-LitePix repository, so symbol-by-symbol certification remains intentionally false."
+    },
+    "performance": {
+      "totalMs": 307.89999999990687,
+      "traceMs": 198.89999999990687,
+      "actualRays": 4268,
+      "raysPerSecond": 21458,
+      "samples": 4080,
+      "yields": 32,
+      "bvhBuildMs": null
+    }
+  },
+  "pageErrors": [],
+  "consoleErrors": [],
+  "failures": []
+}
