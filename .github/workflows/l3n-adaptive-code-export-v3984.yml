@@ -1,0 +1,40 @@
+name: L3N v3.98.4 Adaptive Code Export
+on:
+  push:
+    branches: [l3n-dev]
+    paths:
+      - '.l3n-adaptive-code-export-v3984-trigger'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: l3n-dev
+      - name: Patch adaptive render code export UI
+        run: python3 tools/l3n_adaptive_code_export_v3984.py
+      - name: Static validation
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('index.html').read_text(errors='ignore')
+          assert "version:'3.98.4'" in s
+          assert 'window.__3DLiteAdaptiveRenderCodeExport3984=true' in s
+          assert 'l3nAdaptiveCodeBtn3984' in s
+          assert 'l3nAdaptiveCodePanel3984' in s
+          assert 'l3nAdaptiveCodeText3984' in s
+          assert 'buildNextRenderStrategy' in s
+          assert 'quality-per-millisecond' in s
+          assert s.count('boot3DLite();') == 1
+          print('static v3.98.4 adaptive code export validation passed')
+          PY
+      - name: Commit patched index
+        run: |
+          git config user.name '3dmk'
+          git config user.email 'noneatall2026@gmail.com'
+          git add index.html
+          git diff --cached --quiet && exit 0
+          git commit -m '3DLite v3.98.4 adaptive render compiled code viewer'
+          git push origin HEAD:l3n-dev
