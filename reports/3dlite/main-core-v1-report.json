@@ -27,7 +27,7 @@
       "viewport": 1
     },
     "beforeLegacy": 0,
-    "afterLegacy": 0,
+    "afterLegacy": 1,
     "rollbackCaught": true,
     "rollbackValue": 1,
     "nestedRejected": true,
@@ -61,7 +61,7 @@
     },
     "stamp": {
       "version": "1.0.0",
-      "scene": 0,
+      "scene": 1,
       "geometry": 0,
       "topology": 0,
       "transform": 1,
