@@ -23312,5 +23312,8 @@ const base=A.buildNextRenderStrategy.bind(A);A.buildNextRenderStrategy=(cur,h)=>
 <script id="l3n-adaptive-segment-3">
 (()=>{const A=window.ThreeDLiteAdaptiveRender3990;if(!A)return;A.passBudget=(pass,noise)=>{const p=Math.max(1,pass||1);let b=p<=2?1:p<=4?.8:p<=8?.6:p<=16?.4:p<=32?.25:p<=48?.15:.1;if((noise||0)>.08)b=Math.max(b,.5);return A.clamp(b,.08,1);};const base=A.buildNextRenderStrategy.bind(A);A.buildNextRenderStrategy=(cur,h)=>{const x=base(cur,h);x.rayBudget=A.passBudget(cur.pass,cur.noise);x.shadowBudget=A.clamp(.2+.8*x.rayBudget,.15,1);x.secondaryBudget=A.clamp(.15+.85*x.rayBudget,.1,1);return x;};
 })();</script>
+<script id="l3n-adaptive-segment-4">
+(()=>{const A=window.ThreeDLiteAdaptiveRender3990;if(!A)return;const S=A.state;S.lightLearning={lights:new Map(),minContribution:.002};A.learnLight=(id,contribution,visible=true,cost=1)=>{const m=S.lightLearning.lights,o=m.get(id)||{energy:0,visible:0,blocked:0,samples:0,cost:0};o.energy=.8*o.energy+.2*Math.max(0,contribution||0);visible?o.visible++:o.blocked++;o.samples++;o.cost+=cost;m.set(id,o);return o;};A.lightScore=id=>{const o=S.lightLearning.lights.get(id);if(!o)return 1;const vis=o.visible/Math.max(1,o.samples);return (o.energy+.001)*(vis+.05)/Math.max(.25,o.cost/o.samples);};A.shouldSampleLight=id=>A.lightScore(id)>=S.lightLearning.minContribution;const base=A.buildNextRenderStrategy.bind(A);A.buildNextRenderStrategy=(cur,h)=>{const x=base(cur,h);x.lightBudget=A.clamp(.2+.8*x.rayBudget,.15,1);x.lightPolicy='importance+visibility+contribution';x.lightCutoff=S.lightLearning.minContribution;return x;};
+})();</script>
 </body>
 </html>
