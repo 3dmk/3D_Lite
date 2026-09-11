@@ -1,0 +1,2419 @@
+===== around line 1063 =====
+1060:         <div class="render-section-title">Global Illumination</div>
+1061:         <div class="render-row"><label></label><label class="render-check"><input id="rsGI" type="checkbox" checked> Global Illumination</label></div>
+1062:         <div class="render-row"><label>Primary GI</label><select id="rsPrimaryGI"><option>Brute Force</option></select></div>
+1063:         <div class="render-row"><label>Secondary GI</label><select id="rsSecondaryGI"><option>None</option><option>Brute Force</option><option selected>Light Cache</option></select></div>
+1064:       </div>
+1065: 
+1066:       <div class="render-section render-future">
+1067:         <div class="render-section-title">Sampling</div>
+1068:         <div class="render-row"><label></label><label class="render-check"><input id="rsProgressive" type="checkbox" checked> Progressive Rendering</label></div>
+
+===== around line 1100 =====
+1097:         <div class="render-row"><label>CPU Threads</label><select id="rsThreads"><option selected>Auto</option><option>Responsive</option><option>Balanced</option><option>Maximum</option><option>1</option><option>2</option><option>4</option><option>8</option><option>16</option><option>32</option><option>64</option></select></div>
+1098:         <div class="render-row"><label>Tile Size</label><select id="rsTile"><option selected>Auto</option><option>8</option><option>16</option><option>32</option><option>64</option></select></div>
+1099:         <div class="render-row"><label>Acceleration</label><select id="rsAcceleration"><option selected>BVH</option></select></div>
+1100:         <div class="render-row"><label></label><label class="render-check"><input id="rsLightTree" type="checkbox"> Light Tree</label></div>
+1101:         <div class="render-row"><label></label><label class="render-check"><input id="rsPathGuiding" type="checkbox"> Path Guiding</label></div>
+1102:       </div>
+1103: 
+1104:       <div class="render-footer">
+1105:         <button id="renderSettingsRenderBtn" type="button">Render</button>
+
+===== around line 1136 =====
+1133:         <option>Denoised Beauty</option>
+1134:         <option>Alpha</option>
+1135:         <option>Diffuse</option>
+1136:         <option>Direct Lighting</option>
+1137:         <option>Global Illumination</option>
+1138:         <option>Reflection</option>
+1139:         <option>Refraction</option>
+1140:         <option>Specular</option>
+1141:         <option>Emission</option>
+
+===== around line 1385 =====
+1382:         <div class="createTypeTabs" role="tablist" aria-label="Create Types">
+1383:           <button id="objectsCreateTabBtn" class="createTypeTab active" role="tab" aria-controls="objectsCreatePage" aria-selected="true">Objects</button>
+1384:           <button id="splinesCreateTabBtn" class="createTypeTab" role="tab" aria-controls="splinesCreatePage" aria-selected="false">Splines</button>
+1385:           <button id="lightsCreateTabBtn" class="createTypeTab" role="tab" aria-controls="lightsCreatePage" aria-selected="false">Lights</button>
+1386:         </div>
+1387: 
+1388:         <div id="objectsCreatePage" class="createTypePage active" role="tabpanel">
+1389: 
+1390: 
+
+===== around line 1567 =====
+1564:         </div>
+1565: 
+1566: 
+1567:         <div id="lightsCreatePage" class="createTypePage" role="tabpanel" hidden>
+1568:           <div class="section">
+1569:             <div class="sectionTitle">Lights</div>
+1570:             <div class="grid2">
+1571:               <button data-light-create="point">Point</button>
+1572:               <button data-light-create="spot">Spot</button>
+
+===== around line 1569 =====
+1566: 
+1567:         <div id="lightsCreatePage" class="createTypePage" role="tabpanel" hidden>
+1568:           <div class="section">
+1569:             <div class="sectionTitle">Lights</div>
+1570:             <div class="grid2">
+1571:               <button data-light-create="point">Point</button>
+1572:               <button data-light-create="spot">Spot</button>
+1573:               <button data-light-create="rectangle">Rectangle</button>
+1574:               <button data-light-create="disc">Disc</button>
+
+===== around line 1571 =====
+1568:           <div class="section">
+1569:             <div class="sectionTitle">Lights</div>
+1570:             <div class="grid2">
+1571:               <button data-light-create="point">Point</button>
+1572:               <button data-light-create="spot">Spot</button>
+1573:               <button data-light-create="rectangle">Rectangle</button>
+1574:               <button data-light-create="disc">Disc</button>
+1575:               <button data-light-create="sphere">Sphere</button>
+1576:               <button data-light-create="sun">Sun</button>
+
+===== around line 1572 =====
+1569:             <div class="sectionTitle">Lights</div>
+1570:             <div class="grid2">
+1571:               <button data-light-create="point">Point</button>
+1572:               <button data-light-create="spot">Spot</button>
+1573:               <button data-light-create="rectangle">Rectangle</button>
+1574:               <button data-light-create="disc">Disc</button>
+1575:               <button data-light-create="sphere">Sphere</button>
+1576:               <button data-light-create="sun">Sun</button>
+1577:               <button data-light-create="dome">Dome</button>
+
+===== around line 1573 =====
+1570:             <div class="grid2">
+1571:               <button data-light-create="point">Point</button>
+1572:               <button data-light-create="spot">Spot</button>
+1573:               <button data-light-create="rectangle">Rectangle</button>
+1574:               <button data-light-create="disc">Disc</button>
+1575:               <button data-light-create="sphere">Sphere</button>
+1576:               <button data-light-create="sun">Sun</button>
+1577:               <button data-light-create="dome">Dome</button>
+1578:               <button data-light-create="mesh">Mesh</button>
+
+===== around line 1574 =====
+1571:               <button data-light-create="point">Point</button>
+1572:               <button data-light-create="spot">Spot</button>
+1573:               <button data-light-create="rectangle">Rectangle</button>
+1574:               <button data-light-create="disc">Disc</button>
+1575:               <button data-light-create="sphere">Sphere</button>
+1576:               <button data-light-create="sun">Sun</button>
+1577:               <button data-light-create="dome">Dome</button>
+1578:               <button data-light-create="mesh">Mesh</button>
+1579:             </div>
+
+===== around line 1575 =====
+1572:               <button data-light-create="spot">Spot</button>
+1573:               <button data-light-create="rectangle">Rectangle</button>
+1574:               <button data-light-create="disc">Disc</button>
+1575:               <button data-light-create="sphere">Sphere</button>
+1576:               <button data-light-create="sun">Sun</button>
+1577:               <button data-light-create="dome">Dome</button>
+1578:               <button data-light-create="mesh">Mesh</button>
+1579:             </div>
+1580:           </div>
+
+===== around line 1576 =====
+1573:               <button data-light-create="rectangle">Rectangle</button>
+1574:               <button data-light-create="disc">Disc</button>
+1575:               <button data-light-create="sphere">Sphere</button>
+1576:               <button data-light-create="sun">Sun</button>
+1577:               <button data-light-create="dome">Dome</button>
+1578:               <button data-light-create="mesh">Mesh</button>
+1579:             </div>
+1580:           </div>
+1581:           <div class="section">
+
+===== around line 1577 =====
+1574:               <button data-light-create="disc">Disc</button>
+1575:               <button data-light-create="sphere">Sphere</button>
+1576:               <button data-light-create="sun">Sun</button>
+1577:               <button data-light-create="dome">Dome</button>
+1578:               <button data-light-create="mesh">Mesh</button>
+1579:             </div>
+1580:           </div>
+1581:           <div class="section">
+1582:             <div class="sectionTitle">New Light Parameters</div>
+
+===== around line 1578 =====
+1575:               <button data-light-create="sphere">Sphere</button>
+1576:               <button data-light-create="sun">Sun</button>
+1577:               <button data-light-create="dome">Dome</button>
+1578:               <button data-light-create="mesh">Mesh</button>
+1579:             </div>
+1580:           </div>
+1581:           <div class="section">
+1582:             <div class="sectionTitle">New Light Parameters</div>
+1583:             <div class="row"><label>Intensity</label><input id="newLightIntensity" type="number" min="0" step="0.1" value="10"></div>
+
+===== around line 1582 =====
+1579:             </div>
+1580:           </div>
+1581:           <div class="section">
+1582:             <div class="sectionTitle">New Light Parameters</div>
+1583:             <div class="row"><label>Intensity</label><input id="newLightIntensity" type="number" min="0" step="0.1" value="10"></div>
+1584:             <div class="row"><label>Color</label><input id="newLightColor" type="color" value="#ffffff"></div>
+1585:             <div class="row"><label>Size</label><input id="newLightSize" type="number" min="0.01" step="0.1" value="25"></div>
+1586:             <div class="row"><label>Range</label><input id="newLightRange" type="number" min="0" step="1" value="0"></div>
+1587:             <div class="small">Click a light type to create it at the current scene origin. Move/rotate it with the normal transform gizmo.</div>
+
+===== around line 1583 =====
+1580:           </div>
+1581:           <div class="section">
+1582:             <div class="sectionTitle">New Light Parameters</div>
+1583:             <div class="row"><label>Intensity</label><input id="newLightIntensity" type="number" min="0" step="0.1" value="10"></div>
+1584:             <div class="row"><label>Color</label><input id="newLightColor" type="color" value="#ffffff"></div>
+1585:             <div class="row"><label>Size</label><input id="newLightSize" type="number" min="0.01" step="0.1" value="25"></div>
+1586:             <div class="row"><label>Range</label><input id="newLightRange" type="number" min="0" step="1" value="0"></div>
+1587:             <div class="small">Click a light type to create it at the current scene origin. Move/rotate it with the normal transform gizmo.</div>
+1588:           </div>
+
+===== around line 1584 =====
+1581:           <div class="section">
+1582:             <div class="sectionTitle">New Light Parameters</div>
+1583:             <div class="row"><label>Intensity</label><input id="newLightIntensity" type="number" min="0" step="0.1" value="10"></div>
+1584:             <div class="row"><label>Color</label><input id="newLightColor" type="color" value="#ffffff"></div>
+1585:             <div class="row"><label>Size</label><input id="newLightSize" type="number" min="0.01" step="0.1" value="25"></div>
+1586:             <div class="row"><label>Range</label><input id="newLightRange" type="number" min="0" step="1" value="0"></div>
+1587:             <div class="small">Click a light type to create it at the current scene origin. Move/rotate it with the normal transform gizmo.</div>
+1588:           </div>
+1589:         </div>
+
+===== around line 1585 =====
+1582:             <div class="sectionTitle">New Light Parameters</div>
+1583:             <div class="row"><label>Intensity</label><input id="newLightIntensity" type="number" min="0" step="0.1" value="10"></div>
+1584:             <div class="row"><label>Color</label><input id="newLightColor" type="color" value="#ffffff"></div>
+1585:             <div class="row"><label>Size</label><input id="newLightSize" type="number" min="0.01" step="0.1" value="25"></div>
+1586:             <div class="row"><label>Range</label><input id="newLightRange" type="number" min="0" step="1" value="0"></div>
+1587:             <div class="small">Click a light type to create it at the current scene origin. Move/rotate it with the normal transform gizmo.</div>
+1588:           </div>
+1589:         </div>
+1590: 
+
+===== around line 1586 =====
+1583:             <div class="row"><label>Intensity</label><input id="newLightIntensity" type="number" min="0" step="0.1" value="10"></div>
+1584:             <div class="row"><label>Color</label><input id="newLightColor" type="color" value="#ffffff"></div>
+1585:             <div class="row"><label>Size</label><input id="newLightSize" type="number" min="0.01" step="0.1" value="25"></div>
+1586:             <div class="row"><label>Range</label><input id="newLightRange" type="number" min="0" step="1" value="0"></div>
+1587:             <div class="small">Click a light type to create it at the current scene origin. Move/rotate it with the normal transform gizmo.</div>
+1588:           </div>
+1589:         </div>
+1590: 
+1591:         <div id="splinesCreatePage" class="createTypePage" role="tabpanel" hidden>
+
+===== around line 1587 =====
+1584:             <div class="row"><label>Color</label><input id="newLightColor" type="color" value="#ffffff"></div>
+1585:             <div class="row"><label>Size</label><input id="newLightSize" type="number" min="0.01" step="0.1" value="25"></div>
+1586:             <div class="row"><label>Range</label><input id="newLightRange" type="number" min="0" step="1" value="0"></div>
+1587:             <div class="small">Click a light type to create it at the current scene origin. Move/rotate it with the normal transform gizmo.</div>
+1588:           </div>
+1589:         </div>
+1590: 
+1591:         <div id="splinesCreatePage" class="createTypePage" role="tabpanel" hidden>
+1592:           <div class="section">
+
+===== around line 1611 =====
+1608: 
+1609:       <div id="modifyTabPage" class="commandTabPage active" role="tabpanel">
+1610: 
+1611: <div id="lightModifySection" class="section" style="display:none">
+1612:   <div class="sectionTitle">Light</div>
+1613:   <div class="row"><label>Type</label><input id="lightTypeReadout" class="fieldGrow" type="text" readonly></div>
+1614:   <div class="row"><label>Intensity</label><input id="lightIntensity" type="number" min="0" step="0.1" value="10"></div>
+1615:   <div class="row"><label>Color</label><input id="lightColor" type="color" value="#ffffff"></div>
+1616:   <div class="row"><label>Range</label><input id="lightRange" type="number" min="0" step="1" value="0"></div>
+
+===== around line 1612 =====
+1609:       <div id="modifyTabPage" class="commandTabPage active" role="tabpanel">
+1610: 
+1611: <div id="lightModifySection" class="section" style="display:none">
+1612:   <div class="sectionTitle">Light</div>
+1613:   <div class="row"><label>Type</label><input id="lightTypeReadout" class="fieldGrow" type="text" readonly></div>
+1614:   <div class="row"><label>Intensity</label><input id="lightIntensity" type="number" min="0" step="0.1" value="10"></div>
+1615:   <div class="row"><label>Color</label><input id="lightColor" type="color" value="#ffffff"></div>
+1616:   <div class="row"><label>Range</label><input id="lightRange" type="number" min="0" step="1" value="0"></div>
+1617:   <div class="row"><label>Size</label><input id="lightSize" type="number" min="0.01" step="0.1" value="25"></div>
+
+===== around line 1613 =====
+1610: 
+1611: <div id="lightModifySection" class="section" style="display:none">
+1612:   <div class="sectionTitle">Light</div>
+1613:   <div class="row"><label>Type</label><input id="lightTypeReadout" class="fieldGrow" type="text" readonly></div>
+1614:   <div class="row"><label>Intensity</label><input id="lightIntensity" type="number" min="0" step="0.1" value="10"></div>
+1615:   <div class="row"><label>Color</label><input id="lightColor" type="color" value="#ffffff"></div>
+1616:   <div class="row"><label>Range</label><input id="lightRange" type="number" min="0" step="1" value="0"></div>
+1617:   <div class="row"><label>Size</label><input id="lightSize" type="number" min="0.01" step="0.1" value="25"></div>
+1618:   <div class="row"><label>Width</label><input id="lightWidth" type="number" min="0.01" step="0.1" value="50"></div>
+
+===== around line 1614 =====
+1611: <div id="lightModifySection" class="section" style="display:none">
+1612:   <div class="sectionTitle">Light</div>
+1613:   <div class="row"><label>Type</label><input id="lightTypeReadout" class="fieldGrow" type="text" readonly></div>
+1614:   <div class="row"><label>Intensity</label><input id="lightIntensity" type="number" min="0" step="0.1" value="10"></div>
+1615:   <div class="row"><label>Color</label><input id="lightColor" type="color" value="#ffffff"></div>
+1616:   <div class="row"><label>Range</label><input id="lightRange" type="number" min="0" step="1" value="0"></div>
+1617:   <div class="row"><label>Size</label><input id="lightSize" type="number" min="0.01" step="0.1" value="25"></div>
+1618:   <div class="row"><label>Width</label><input id="lightWidth" type="number" min="0.01" step="0.1" value="50"></div>
+1619:   <div class="row"><label>Height</label><input id="lightHeight" type="number" min="0.01" step="0.1" value="50"></div>
+
+===== around line 1615 =====
+1612:   <div class="sectionTitle">Light</div>
+1613:   <div class="row"><label>Type</label><input id="lightTypeReadout" class="fieldGrow" type="text" readonly></div>
+1614:   <div class="row"><label>Intensity</label><input id="lightIntensity" type="number" min="0" step="0.1" value="10"></div>
+1615:   <div class="row"><label>Color</label><input id="lightColor" type="color" value="#ffffff"></div>
+1616:   <div class="row"><label>Range</label><input id="lightRange" type="number" min="0" step="1" value="0"></div>
+1617:   <div class="row"><label>Size</label><input id="lightSize" type="number" min="0.01" step="0.1" value="25"></div>
+1618:   <div class="row"><label>Width</label><input id="lightWidth" type="number" min="0.01" step="0.1" value="50"></div>
+1619:   <div class="row"><label>Height</label><input id="lightHeight" type="number" min="0.01" step="0.1" value="50"></div>
+1620:   <div class="row"><label>Cone</label><input id="lightConeAngle" type="number" min="1" max="179" step="1" value="45"></div>
+
+===== around line 1616 =====
+1613:   <div class="row"><label>Type</label><input id="lightTypeReadout" class="fieldGrow" type="text" readonly></div>
+1614:   <div class="row"><label>Intensity</label><input id="lightIntensity" type="number" min="0" step="0.1" value="10"></div>
+1615:   <div class="row"><label>Color</label><input id="lightColor" type="color" value="#ffffff"></div>
+1616:   <div class="row"><label>Range</label><input id="lightRange" type="number" min="0" step="1" value="0"></div>
+1617:   <div class="row"><label>Size</label><input id="lightSize" type="number" min="0.01" step="0.1" value="25"></div>
+1618:   <div class="row"><label>Width</label><input id="lightWidth" type="number" min="0.01" step="0.1" value="50"></div>
+1619:   <div class="row"><label>Height</label><input id="lightHeight" type="number" min="0.01" step="0.1" value="50"></div>
+1620:   <div class="row"><label>Cone</label><input id="lightConeAngle" type="number" min="1" max="179" step="1" value="45"></div>
+1621:   <div class="row"><label>Penumbra</label><input id="lightPenumbra" type="number" min="0" max="1" step="0.05" value="0.15"></div>
+
+===== around line 1617 =====
+1614:   <div class="row"><label>Intensity</label><input id="lightIntensity" type="number" min="0" step="0.1" value="10"></div>
+1615:   <div class="row"><label>Color</label><input id="lightColor" type="color" value="#ffffff"></div>
+1616:   <div class="row"><label>Range</label><input id="lightRange" type="number" min="0" step="1" value="0"></div>
+1617:   <div class="row"><label>Size</label><input id="lightSize" type="number" min="0.01" step="0.1" value="25"></div>
+1618:   <div class="row"><label>Width</label><input id="lightWidth" type="number" min="0.01" step="0.1" value="50"></div>
+1619:   <div class="row"><label>Height</label><input id="lightHeight" type="number" min="0.01" step="0.1" value="50"></div>
+1620:   <div class="row"><label>Cone</label><input id="lightConeAngle" type="number" min="1" max="179" step="1" value="45"></div>
+1621:   <div class="row"><label>Penumbra</label><input id="lightPenumbra" type="number" min="0" max="1" step="0.05" value="0.15"></div>
+1622:   <label class="checkRow"><input id="lightEnabled" type="checkbox" checked> Enabled</label>
+
+===== around line 1618 =====
+1615:   <div class="row"><label>Color</label><input id="lightColor" type="color" value="#ffffff"></div>
+1616:   <div class="row"><label>Range</label><input id="lightRange" type="number" min="0" step="1" value="0"></div>
+1617:   <div class="row"><label>Size</label><input id="lightSize" type="number" min="0.01" step="0.1" value="25"></div>
+1618:   <div class="row"><label>Width</label><input id="lightWidth" type="number" min="0.01" step="0.1" value="50"></div>
+1619:   <div class="row"><label>Height</label><input id="lightHeight" type="number" min="0.01" step="0.1" value="50"></div>
+1620:   <div class="row"><label>Cone</label><input id="lightConeAngle" type="number" min="1" max="179" step="1" value="45"></div>
+1621:   <div class="row"><label>Penumbra</label><input id="lightPenumbra" type="number" min="0" max="1" step="0.05" value="0.15"></div>
+1622:   <label class="checkRow"><input id="lightEnabled" type="checkbox" checked> Enabled</label>
+1623:   <label class="checkRow"><input id="lightCastShadows" type="checkbox" checked> Cast Shadows</label>
+
+===== around line 1619 =====
+1616:   <div class="row"><label>Range</label><input id="lightRange" type="number" min="0" step="1" value="0"></div>
+1617:   <div class="row"><label>Size</label><input id="lightSize" type="number" min="0.01" step="0.1" value="25"></div>
+1618:   <div class="row"><label>Width</label><input id="lightWidth" type="number" min="0.01" step="0.1" value="50"></div>
+1619:   <div class="row"><label>Height</label><input id="lightHeight" type="number" min="0.01" step="0.1" value="50"></div>
+1620:   <div class="row"><label>Cone</label><input id="lightConeAngle" type="number" min="1" max="179" step="1" value="45"></div>
+1621:   <div class="row"><label>Penumbra</label><input id="lightPenumbra" type="number" min="0" max="1" step="0.05" value="0.15"></div>
+1622:   <label class="checkRow"><input id="lightEnabled" type="checkbox" checked> Enabled</label>
+1623:   <label class="checkRow"><input id="lightCastShadows" type="checkbox" checked> Cast Shadows</label>
+1624: </div>
+
+===== around line 1620 =====
+1617:   <div class="row"><label>Size</label><input id="lightSize" type="number" min="0.01" step="0.1" value="25"></div>
+1618:   <div class="row"><label>Width</label><input id="lightWidth" type="number" min="0.01" step="0.1" value="50"></div>
+1619:   <div class="row"><label>Height</label><input id="lightHeight" type="number" min="0.01" step="0.1" value="50"></div>
+1620:   <div class="row"><label>Cone</label><input id="lightConeAngle" type="number" min="1" max="179" step="1" value="45"></div>
+1621:   <div class="row"><label>Penumbra</label><input id="lightPenumbra" type="number" min="0" max="1" step="0.05" value="0.15"></div>
+1622:   <label class="checkRow"><input id="lightEnabled" type="checkbox" checked> Enabled</label>
+1623:   <label class="checkRow"><input id="lightCastShadows" type="checkbox" checked> Cast Shadows</label>
+1624: </div>
+1625: 
+
+===== around line 1621 =====
+1618:   <div class="row"><label>Width</label><input id="lightWidth" type="number" min="0.01" step="0.1" value="50"></div>
+1619:   <div class="row"><label>Height</label><input id="lightHeight" type="number" min="0.01" step="0.1" value="50"></div>
+1620:   <div class="row"><label>Cone</label><input id="lightConeAngle" type="number" min="1" max="179" step="1" value="45"></div>
+1621:   <div class="row"><label>Penumbra</label><input id="lightPenumbra" type="number" min="0" max="1" step="0.05" value="0.15"></div>
+1622:   <label class="checkRow"><input id="lightEnabled" type="checkbox" checked> Enabled</label>
+1623:   <label class="checkRow"><input id="lightCastShadows" type="checkbox" checked> Cast Shadows</label>
+1624: </div>
+1625: 
+1626: <div class="section">
+
+===== around line 1622 =====
+1619:   <div class="row"><label>Height</label><input id="lightHeight" type="number" min="0.01" step="0.1" value="50"></div>
+1620:   <div class="row"><label>Cone</label><input id="lightConeAngle" type="number" min="1" max="179" step="1" value="45"></div>
+1621:   <div class="row"><label>Penumbra</label><input id="lightPenumbra" type="number" min="0" max="1" step="0.05" value="0.15"></div>
+1622:   <label class="checkRow"><input id="lightEnabled" type="checkbox" checked> Enabled</label>
+1623:   <label class="checkRow"><input id="lightCastShadows" type="checkbox" checked> Cast Shadows</label>
+1624: </div>
+1625: 
+1626: <div class="section">
+1627:         <div class="sectionTitle">Object</div>
+
+===== around line 1623 =====
+1620:   <div class="row"><label>Cone</label><input id="lightConeAngle" type="number" min="1" max="179" step="1" value="45"></div>
+1621:   <div class="row"><label>Penumbra</label><input id="lightPenumbra" type="number" min="0" max="1" step="0.05" value="0.15"></div>
+1622:   <label class="checkRow"><input id="lightEnabled" type="checkbox" checked> Enabled</label>
+1623:   <label class="checkRow"><input id="lightCastShadows" type="checkbox" checked> Cast Shadows</label>
+1624: </div>
+1625: 
+1626: <div class="section">
+1627:         <div class="sectionTitle">Object</div>
+1628: 
+
+===== around line 1878 =====
+1875: /* ============================================================
+1876:    3DLite Generation Knowledge Manifest
+1877:    Gen 3 carries this forward into the next Gen 1.
+1878:    This is intentionally runtime-light metadata: future generations
+1879:    use it as design evidence, ownership guidance, and regression policy.
+1880:    ============================================================ */
+1881: const GENERATION_KNOWLEDGE = Object.freeze({
+1882:   version: '3.78.23',
+1883:   generationModel: 'Gen3 -> next Gen1 cumulative cross-learning',
+
+===== around line 2073 =====
+2070: 
+2071: /* ============================================================
+2072:    3DLite 2.5
+2073:    Clean-room lightweight modeling editor.
+2074:    Interaction/UI reference: 3ds Max-style workflow.
+2075:    ============================================================ */
+2076: 
+2077: const COLORS={
+2078:   background:0x3a3a3a,
+
+===== around line 3337 =====
+3334: 
+3335: const VertexHitPolicy=Object.freeze({
+3336:   // Hover and click deliberately share the same screen-space radius.
+3337:   // This makes the complete highlighted vertex target clickable instead of only its center.
+3338:   radiusPx:18,
+3339:   highlightSizePx:18,
+3340:   allowThroughSurface:true
+3341: });
+3342: 
+
+===== around line 3339 =====
+3336:   // Hover and click deliberately share the same screen-space radius.
+3337:   // This makes the complete highlighted vertex target clickable instead of only its center.
+3338:   radiusPx:18,
+3339:   highlightSizePx:18,
+3340:   allowThroughSurface:true
+3341: });
+3342: 
+3343: function pickEditableVertexScreenSpace(e,mesh=selected,{excludeId=-1,radius=VertexHitPolicy.radiusPx}={}){
+3344:   const ep=mesh?.userData?.editPoly;if(!ep)return null;
+
+===== around line 3693 =====
+3690:   axis.push(-half,0,0, half,0,0);
+3691:   axis.push(0,-half,0, 0,half,0);
+3692: 
+3693:   // Slightly wider than one physical pixel. Screen-space width remains stable
+3694:   // when the camera is tilted, preventing jagged diagonal grid lines.
+3695:   const minorLine=cleanLineSegments(minor,cleanLineMaterial(COLORS.gridMinor,0.9,.76),'gridMinor');
+3696:   const majorLine=cleanLineSegments(major,cleanLineMaterial(COLORS.gridMajor,1.0,.90),'gridMajor');
+3697:   const axisLine=cleanLineSegments(axis,cleanLineMaterial(0x6d8190,1.12,.96),'gridAxis');
+3698:   minorLine.renderOrder=majorLine.renderOrder=axisLine.renderOrder=-10;
+
+===== around line 3822 =====
+3819:   syncBackSidesUI();
+3820: }
+3821: 
+3822: const hemi=new THREE.HemisphereLight(0xfffbf4,0x625d55,1.18);
+3823: scene.add(hemi);
+3824: const dir=new THREE.DirectionalLight(0xfff7ed,.52);
+3825: dir.position.set(400,-300,700);
+3826: scene.add(dir);
+3827: 
+
+===== around line 3824 =====
+3821: 
+3822: const hemi=new THREE.HemisphereLight(0xfffbf4,0x625d55,1.18);
+3823: scene.add(hemi);
+3824: const dir=new THREE.DirectionalLight(0xfff7ed,.52);
+3825: dir.position.set(400,-300,700);
+3826: scene.add(dir);
+3827: 
+3828: 
+3829: function polygonBoundaryWireGeometry(geometry){
+
+===== around line 4155 =====
+4152: 
+4153:   hoverVertex(){
+4154:     return this.ensure('subHoverVertex','points',()=>new THREE.PointsMaterial({
+4155:       color:COLORS.vertexHover,size:VertexHitPolicy.highlightSizePx,sizeAttenuation:false,
+4156:       depthTest:false,depthWrite:false
+4157:     }),100);
+4158:   },
+4159: 
+4160:   hoverEdge(){
+
+===== around line 4436 =====
+4433: }
+4434: class RenderMaterialSnapshot{constructor(d){Object.assign(this,d);freezeRenderSnapshot(this)}}
+4435: class RenderCameraSnapshot{constructor(d){Object.assign(this,d);freezeRenderSnapshot(this)}}
+4436: class RenderLightSnapshot{constructor(d){Object.assign(this,d);freezeRenderSnapshot(this)}}
+4437: class RenderObjectSnapshot{constructor(d){Object.assign(this,d);freezeRenderSnapshot(this)}}
+4438: class RenderSceneSnapshot{
+4439:   constructor(d){
+4440:     this.objects=Object.freeze(d.objects.slice());
+4441:     this.materials=Object.freeze(d.materials.slice());
+
+===== around line 4442 =====
+4439:   constructor(d){
+4440:     this.objects=Object.freeze(d.objects.slice());
+4441:     this.materials=Object.freeze(d.materials.slice());
+4442:     this.lights=Object.freeze(d.lights.slice());
+4443:     this.camera=d.camera;this.metadata=freezeRenderSnapshot(d.metadata||{});
+4444:     Object.freeze(this);
+4445:   }
+4446: }
+4447: const RenderRevisionPolicy=Object.freeze({
+
+===== around line 4448 =====
+4445:   }
+4446: }
+4447: const RenderRevisionPolicy=Object.freeze({
+4448:   keys:Object.freeze(['sceneRevision','geometryRevision','materialRevision','lightRevision','cameraRevision']),
+4449:   changed(previous,current){
+4450:     const p=previous?.metadata||{},c=current?.metadata||{};
+4451:     return {
+4452:       scene:p.sceneRevision!==c.sceneRevision,
+4453:       geometry:p.geometryRevision!==c.geometryRevision,
+
+===== around line 4455 =====
+4452:       scene:p.sceneRevision!==c.sceneRevision,
+4453:       geometry:p.geometryRevision!==c.geometryRevision,
+4454:       material:p.materialRevision!==c.materialRevision,
+4455:       light:p.lightRevision!==c.lightRevision,
+4456:       camera:p.cameraRevision!==c.cameraRevision
+4457:     };
+4458:   },
+4459:   invalidation(previous,current){
+4460:     const x=this.changed(previous,current);
+
+===== around line 4462 =====
+4459:   invalidation(previous,current){
+4460:     const x=this.changed(previous,current);
+4461:     return Object.freeze({
+4462:       rebuildSnapshot:x.scene||x.geometry||x.material||x.light||x.camera,
+4463:       rebuildGeometry:x.scene||x.geometry,
+4464:       rebuildAcceleration:x.scene||x.geometry,
+4465:       rebuildMaterials:x.scene||x.material,
+4466:       rebuildLights:x.scene||x.light,
+4467:       rebuildCamera:x.scene||x.camera
+
+===== around line 4466 =====
+4463:       rebuildGeometry:x.scene||x.geometry,
+4464:       rebuildAcceleration:x.scene||x.geometry,
+4465:       rebuildMaterials:x.scene||x.material,
+4466:       rebuildLights:x.scene||x.light,
+4467:       rebuildCamera:x.scene||x.camera
+4468:     });
+4469:   }
+4470: });
+4471: 
+
+===== around line 4532 =====
+4529:       attenuationColor:m?.attenuationColor?[m.attenuationColor.r,m.attenuationColor.g,m.attenuationColor.b]:[1,1,1],
+4530:       attenuationDistance:Number.isFinite(m?.attenuationDistance)?m.attenuationDistance:Infinity,
+4531:       emissive:m?.emissive?[m.emissive.r,m.emissive.g,m.emissive.b]:[0,0,0],
+4532:       emissiveIntensity:Number.isFinite(m?.emissiveIntensity)?m.emissiveIntensity:0
+4533:     });
+4534:   },
+4535:   bounds(p){
+4536:     let mn=[Infinity,Infinity,Infinity],mx=[-Infinity,-Infinity,-Infinity];
+4537:     for(let i=0;i<p.length;i+=3)for(let a=0;a<3;a++){const x=p[i+a];if(x<mn[a])mn[a]=x;if(x>mx[a])mx[a]=x}
+
+===== around line 4581 =====
+4578:     });
+4579:   },
+4580:   buildSnapshot(){
+4581:     const mats=[],map=new Map(),ros=[],lights=[];
+4582:     for(const obj of objects){
+4583:       if(EditorLightSystem?.isLightObject?.(obj)){
+4584:         const light=LightSnapshotTools.fromEditorObject(obj);
+4585:         if(light)lights.push(light);
+4586:         continue;
+
+===== around line 4583 =====
+4580:   buildSnapshot(){
+4581:     const mats=[],map=new Map(),ros=[],lights=[];
+4582:     for(const obj of objects){
+4583:       if(EditorLightSystem?.isLightObject?.(obj)){
+4584:         const light=LightSnapshotTools.fromEditorObject(obj);
+4585:         if(light)lights.push(light);
+4586:         continue;
+4587:       }
+4588:       if(!obj?.isMesh||obj.visible===false||obj.userData?.renderVisible===false)continue;
+
+===== around line 4584 =====
+4581:     const mats=[],map=new Map(),ros=[],lights=[];
+4582:     for(const obj of objects){
+4583:       if(EditorLightSystem?.isLightObject?.(obj)){
+4584:         const light=LightSnapshotTools.fromEditorObject(obj);
+4585:         if(light)lights.push(light);
+4586:         continue;
+4587:       }
+4588:       if(!obj?.isMesh||obj.visible===false||obj.userData?.renderVisible===false)continue;
+4589:       const src=Array.isArray(obj.material)?obj.material:[obj.material],ids=[];
+
+===== around line 4585 =====
+4582:     for(const obj of objects){
+4583:       if(EditorLightSystem?.isLightObject?.(obj)){
+4584:         const light=LightSnapshotTools.fromEditorObject(obj);
+4585:         if(light)lights.push(light);
+4586:         continue;
+4587:       }
+4588:       if(!obj?.isMesh||obj.visible===false||obj.userData?.renderVisible===false)continue;
+4589:       const src=Array.isArray(obj.material)?obj.material:[obj.material],ids=[];
+4590:       for(const m of src){const id=this.materialId(m);ids.push(id);if(!map.has(id)){const rm=this.material(m);map.set(id,rm);mats.push(rm)}}
+
+===== around line 4599 =====
+4596:       }));
+4597:     }
+4598:     const scene=new RenderSceneSnapshot({
+4599:       objects:ros,materials:mats,lights,camera:this.camera(),
+4600:       metadata:{
+4601:         version:'3.79.16',snapshotRevision:Date.now(),
+4602:         sceneRevision:(window.__3DLiteSceneRevision||0),geometryRevision:(window.__3DLiteGeometryRevision||0),
+4603:         materialRevision:(window.__3DLiteMaterialRevision||0),lightRevision:(window.__3DLiteLightRevision||0),
+4604:         cameraRevision:(window.__3DLiteCameraRevision||0),coordinateSystem:'Z-up',
+
+===== around line 4603 =====
+4600:       metadata:{
+4601:         version:'3.79.16',snapshotRevision:Date.now(),
+4602:         sceneRevision:(window.__3DLiteSceneRevision||0),geometryRevision:(window.__3DLiteGeometryRevision||0),
+4603:         materialRevision:(window.__3DLiteMaterialRevision||0),lightRevision:(window.__3DLiteLightRevision||0),
+4604:         cameraRevision:(window.__3DLiteCameraRevision||0),coordinateSystem:'Z-up',
+4605:         sourceObjectCount:objects.length,renderObjectCount:ros.length
+4606:       }
+4607:     });
+4608:     const check=RenderSnapshotValidator.validate(scene);if(!check.ok)throw new Error(check.errors.join('; '));
+
+===== around line 4655 =====
+4652:   if(typeof RenderRevisionPolicy.invalidation!=='function')errors.push('Missing revision invalidation policy');
+4653:   return {ok:!errors.length,errors};
+4654: }
+4655: Object.assign(window,{RenderSceneSnapshot,RenderObjectSnapshot,RenderMeshSnapshot,RenderMaterialSnapshot,RenderCameraSnapshot,RenderLightSnapshot,RenderSnapshotValidator,RenderRevisionPolicy,RenderSceneBoundary,RenderGroup2Contract});
+4656: 
+4657: 
+4658: /* ============================================================
+4659:    3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 3
+4660:    Worker/Scheduler + Render Geometry Core
+
+===== around line 5813 =====
+5810:   invalidate(){this.geometryRevision=null;this.acceleration=null;},
+5811:   revision(scene){
+5812:     const m=scene?.metadata||{};
+5813:     return [m.sceneRevision??'s?',m.geometryRevision??'g?',m.materialRevision??'m?',m.lightRevision??'l?',scene?.objects?.length||0,
+5814:       ...(scene?.objects||[]).map(o=>`${o.id}:${o.visible!==false?1:0}:${o.mesh?.positions?.length||0}:${o.mesh?.indices?.length||0}`)
+5815:     ].join('|');
+5816:   },
+5817:   get(scene){
+5818:     const rev=this.revision(scene);
+
+===== around line 5904 =====
+5901:   ]),
+5902:   doesNotOwn:Object.freeze([
+5903:     'editor scene','MNMesh','selection','transforms','editor materials',
+5904:     'physical BSDF','lights','GI','denoising'
+5905:   ])
+5906: });
+5907: 
+5908: 
+5909: function runRenderGroup4SelfTests(){
+
+===== around line 5978 =====
+5975: 
+5976: /* ============================================================
+5977:    3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 5
+5978:    Physical Materials + Basic Direct Lighting
+5979:    ============================================================ */
+5980: 
+5981: const RenderColor=Object.freeze({
+5982:   clamp01(x){return Math.max(0,Math.min(1,x))},
+5983:   add(a,b){return [a[0]+b[0],a[1]+b[1],a[2]+b[2]]},
+
+===== around line 6050 =====
+6047:     this.attenuationDistance=(Number.isFinite(Number(snapshot.attenuationDistance))&&Number(snapshot.attenuationDistance)>0)?Number(snapshot.attenuationDistance):Infinity;
+6048:     const emissiveSrgb=RenderMaterialPolicy.finiteColor(snapshot.emissive,[0,0,0]);
+6049:     this.emissive=Object.freeze(RenderColor.srgbToLinear(emissiveSrgb));
+6050:     this.emissiveIntensity=RenderMaterialPolicy.scalar(snapshot.emissiveIntensity,0,0,1e8);
+6051:     Object.freeze(this);
+6052:   }
+6053: }
+6054: 
+6055: const RenderMaterialLibrary=Object.freeze({
+
+===== around line 6064 =====
+6061:     }
+6062:     const fallback=new RenderSurfaceMaterial({
+6063:       id:'__fallback__',name:'Fallback',baseColor:[.54,.54,.54],
+6064:       roughness:.65,metalness:0,opacity:1,emissive:[0,0,0],emissiveIntensity:0
+6065:     });
+6066:     return Object.freeze({
+6067:       list:Object.freeze(list),
+6068:       fallback,
+6069:       get(id){return byId.get(id)||fallback}
+
+===== around line 6080 =====
+6077:   }
+6078: });
+6079: 
+6080: class RenderDirectionalLight{
+6081:   constructor(direction,color=[1,1,1],intensity=1,name='Directional'){
+6082:     this.type='directional';
+6083:     this.name=name;
+6084:     this.direction=Object.freeze(RayMath.normalize(direction));
+6085:     this.color=Object.freeze(color.slice(0,3));
+
+===== around line 6081 =====
+6078: });
+6079: 
+6080: class RenderDirectionalLight{
+6081:   constructor(direction,color=[1,1,1],intensity=1,name='Directional'){
+6082:     this.type='directional';
+6083:     this.name=name;
+6084:     this.direction=Object.freeze(RayMath.normalize(direction));
+6085:     this.color=Object.freeze(color.slice(0,3));
+6086:     this.intensity=Math.max(0,intensity);
+
+===== around line 6086 =====
+6083:     this.name=name;
+6084:     this.direction=Object.freeze(RayMath.normalize(direction));
+6085:     this.color=Object.freeze(color.slice(0,3));
+6086:     this.intensity=Math.max(0,intensity);
+6087:     Object.freeze(this);
+6088:   }
+6089: }
+6090: 
+6091: class RenderAmbientLight{
+
+===== around line 6091 =====
+6088:   }
+6089: }
+6090: 
+6091: class RenderAmbientLight{
+6092:   constructor(color=[1,1,1],intensity=.05,name='Environment Fill'){
+6093:     this.type='ambient';
+6094:     this.name=name;
+6095:     this.color=Object.freeze(color.slice(0,3));
+6096:     this.intensity=Math.max(0,intensity);
+
+===== around line 6092 =====
+6089: }
+6090: 
+6091: class RenderAmbientLight{
+6092:   constructor(color=[1,1,1],intensity=.05,name='Environment Fill'){
+6093:     this.type='ambient';
+6094:     this.name=name;
+6095:     this.color=Object.freeze(color.slice(0,3));
+6096:     this.intensity=Math.max(0,intensity);
+6097:     Object.freeze(this);
+
+===== around line 6096 =====
+6093:     this.type='ambient';
+6094:     this.name=name;
+6095:     this.color=Object.freeze(color.slice(0,3));
+6096:     this.intensity=Math.max(0,intensity);
+6097:     Object.freeze(this);
+6098:   }
+6099: }
+6100: 
+6101: const BasicRenderLighting=Object.freeze({
+
+===== around line 6101 =====
+6098:   }
+6099: }
+6100: 
+6101: const BasicRenderLighting=Object.freeze({
+6102:   create(renderScene,settings){
+6103:     const sceneLights=SceneLightCompiler.compile(renderScene);
+6104:     if(sceneLights.length)return sceneLights;
+6105: 
+6106:     const q=renderScene.camera.quaternion;
+
+===== around line 6103 =====
+6100: 
+6101: const BasicRenderLighting=Object.freeze({
+6102:   create(renderScene,settings){
+6103:     const sceneLights=SceneLightCompiler.compile(renderScene);
+6104:     if(sceneLights.length)return sceneLights;
+6105: 
+6106:     const q=renderScene.camera.quaternion;
+6107:     const keyDir=RenderCameraRayGenerator.rotateByQuaternion(
+6108:       RayMath.normalize([-.45,.65,.8]),q
+
+===== around line 6104 =====
+6101: const BasicRenderLighting=Object.freeze({
+6102:   create(renderScene,settings){
+6103:     const sceneLights=SceneLightCompiler.compile(renderScene);
+6104:     if(sceneLights.length)return sceneLights;
+6105: 
+6106:     const q=renderScene.camera.quaternion;
+6107:     const keyDir=RenderCameraRayGenerator.rotateByQuaternion(
+6108:       RayMath.normalize([-.45,.65,.8]),q
+6109:     );
+
+===== around line 6112 =====
+6109:     );
+6110:     const environment=RenderColor.hexToLinear(settings.background||'#202020');
+6111:     return Object.freeze([
+6112:       Object.freeze({type:'sun',name:'Default Key',direction:RayMath.mul(keyDir,-1),color:[1.0,.93,.82],intensity:2.4,enabled:true,castShadows:false}),
+6113:       Object.freeze({type:'dome',name:'Environment Fill',color:environment,intensity:Math.max(.025,.14*(settings.environmentStrength??1)),enabled:true,castShadows:false})
+6114:     ]);
+6115:   }
+6116: });
+6117: 
+
+===== around line 6113 =====
+6110:     const environment=RenderColor.hexToLinear(settings.background||'#202020');
+6111:     return Object.freeze([
+6112:       Object.freeze({type:'sun',name:'Default Key',direction:RayMath.mul(keyDir,-1),color:[1.0,.93,.82],intensity:2.4,enabled:true,castShadows:false}),
+6113:       Object.freeze({type:'dome',name:'Environment Fill',color:environment,intensity:Math.max(.025,.14*(settings.environmentStrength??1)),enabled:true,castShadows:false})
+6114:     ]);
+6115:   }
+6116: });
+6117: 
+6118: const PhysicalBSDF=Object.freeze({
+
+===== around line 6204 =====
+6201: });
+6202: 
+6203: const RenderAOVNames=Object.freeze([
+6204:   'Beauty','Alpha','Diffuse','Direct Lighting','Global Illumination',
+6205:   'Reflection','Refraction','Specular','Emission','Shadow',
+6206:   'Normal','Depth','Albedo','Object ID','Material ID','Noise'
+6207: ]);
+6208: 
+6209: class RenderAOVSet{
+
+===== around line 6270 =====
+6267:     if(!hit?.hit)return null;
+6268:     const material=RenderMaterialLibrary.resolveHit(job.renderScene,compiled.materials,hit);
+6269:     const n=SurfaceInterpolator.normal(acceleration,hit);
+6270:     const emission=RenderColor.mul(material.emissive,material.emissiveIntensity);
+6271:     const direct=Group9DirectMIS.evaluate(job,acceleration,compiled,ray,hit,pixelSeed);
+6272:     const objId=hit.objectIndex??0,matId=hit.materialIndex??0;
+6273:     return {
+6274:       alpha:1,
+6275:       albedo:material.baseColor,
+
+===== around line 6295 =====
+6292:     set.set3('Albedo',i,a.albedo);set.set3('Diffuse',i,a.diffuse);set.set3('Emission',i,a.emission);
+6293:     set.set3('Normal',i,a.normal);set.set1('Depth',i,a.depth);
+6294:     set.set3('Object ID',i,a.objectId);set.set3('Material ID',i,a.materialId);
+6295:     set.set3('Direct Lighting',i,a.direct);set.set3('Specular',i,a.specular);
+6296:     set.set3('Reflection',i,a.reflection);set.set3('Refraction',i,a.refraction);set.set3('Shadow',i,a.shadow);
+6297:   }
+6298: });
+6299: 
+6300: 
+
+===== around line 6379 =====
+6376:     this.probeRays=0;
+6377:     this.samples=0;
+6378:     this.yields=0;
+6379:     this.stageMs={snapshot:0,geometry:0,worker:0,bvh:0,shading:0,lightCache:0,render:0,denoise:0,toneMap:0,post:0};
+6380:     this.startedAt=RenderProfiler16.now();
+6381:   }
+6382:   addRay(type){
+6383:     if(type===RenderRayType.CAMERA)this.cameraRays++;
+6384:     else if(type===RenderRayType.SHADOW)this.shadowRays++;
+
+===== around line 6433 =====
+6430:   preserves:Object.freeze([
+6431:     'existing Fast scanline traversal',
+6432:     'existing Path progressive traversal',
+6433:     'Group 15 Light Tree and Path Guiding',
+6434:     'Group 14 region rendering',
+6435:     'editor startup order',
+6436:     'viewport ownership'
+6437:   ]),
+6438:   doesNotOwn:Object.freeze([
+
+===== around line 6611 =====
+6608: window.__3DLiteLiteTraceExecutionContext3978=true;
+6609: 
+6610: var BasicDirectRenderer=Object.freeze({
+6611:   shade(job,acceleration,materials,lights,ray,hit){
+6612:     const material=RenderMaterialLibrary.resolveHit(job.renderScene,materials,hit);
+6613:     if(material.shading==='unlit'){
+6614:       return RenderColor.add(material.baseColor,RenderColor.mul(material.emissive,material.emissiveIntensity));
+6615:     }
+6616: 
+
+===== around line 6614 =====
+6611:   shade(job,acceleration,materials,lights,ray,hit){
+6612:     const material=RenderMaterialLibrary.resolveHit(job.renderScene,materials,hit);
+6613:     if(material.shading==='unlit'){
+6614:       return RenderColor.add(material.baseColor,RenderColor.mul(material.emissive,material.emissiveIntensity));
+6615:     }
+6616: 
+6617:     const n=SurfaceInterpolator.normal(acceleration,hit);
+6618:     const v=RayMath.mul(ray.direction,-1);
+6619:     let color=RenderColor.mul(material.emissive,material.emissiveIntensity);
+
+===== around line 6619 =====
+6616: 
+6617:     const n=SurfaceInterpolator.normal(acceleration,hit);
+6618:     const v=RayMath.mul(ray.direction,-1);
+6619:     let color=RenderColor.mul(material.emissive,material.emissiveIntensity);
+6620: 
+6621:     for(const light of lights){
+6622:       const sample=DirectLightSampler.sample(light,hit.position);
+6623:       if(sample.kind==='ambient'){
+6624:         const diffuse=RenderColor.mul(material.baseColor,(1-material.metalness)/Math.PI);
+
+===== around line 6621 =====
+6618:     const v=RayMath.mul(ray.direction,-1);
+6619:     let color=RenderColor.mul(material.emissive,material.emissiveIntensity);
+6620: 
+6621:     for(const light of lights){
+6622:       const sample=DirectLightSampler.sample(light,hit.position);
+6623:       if(sample.kind==='ambient'){
+6624:         const diffuse=RenderColor.mul(material.baseColor,(1-material.metalness)/Math.PI);
+6625:         color=RenderColor.add(color,RenderColor.mul(RenderColor.mul(diffuse,sample.radiance),Math.PI));
+6626:       }else{
+
+===== around line 6622 =====
+6619:     let color=RenderColor.mul(material.emissive,material.emissiveIntensity);
+6620: 
+6621:     for(const light of lights){
+6622:       const sample=DirectLightSampler.sample(light,hit.position);
+6623:       if(sample.kind==='ambient'){
+6624:         const diffuse=RenderColor.mul(material.baseColor,(1-material.metalness)/Math.PI);
+6625:         color=RenderColor.add(color,RenderColor.mul(RenderColor.mul(diffuse,sample.radiance),Math.PI));
+6626:       }else{
+6627:         const brdf=PhysicalBSDF.evaluate(material,n,v,sample.direction);
+
+===== around line 6698 =====
+6695:       metadata:Object.freeze({
+6696:         renderer:'Part 4 Fast Direct',
+6697:         materialCount:compiled.materials.list.length,
+6698:         lightCount:compiled.lights.length,
+6699:         toneMapping:'ACES',
+6700:         colorSpace:'sRGB output / linear shading',
+6701:         diagnostics:RenderPart4Core.diagnostics(job,compiled,acceleration),
+6702:         performance:RenderCoreH.performance(job)
+6703:       })
+
+===== around line 6718 =====
+6715: 
+6716:   compileScene(renderScene,settings){
+6717:     const materials=RenderMaterialLibrary.compile(renderScene);
+6718:     const lights=BasicRenderLighting.create(renderScene,settings);
+6719:     return Object.freeze({materials,lights});
+6720:   },
+6721: 
+6722:   evaluateDirect(job,acceleration,compiled,ray,hit,pixelSeed=1,options={}){
+6723:     return DirectLightingIntegrator.evaluate(job,acceleration,compiled,ray,hit,pixelSeed,options);
+
+===== around line 6719 =====
+6716:   compileScene(renderScene,settings){
+6717:     const materials=RenderMaterialLibrary.compile(renderScene);
+6718:     const lights=BasicRenderLighting.create(renderScene,settings);
+6719:     return Object.freeze({materials,lights});
+6720:   },
+6721: 
+6722:   evaluateDirect(job,acceleration,compiled,ray,hit,pixelSeed=1,options={}){
+6723:     return DirectLightingIntegrator.evaluate(job,acceleration,compiled,ray,hit,pixelSeed,options);
+6724:   },
+
+===== around line 6723 =====
+6720:   },
+6721: 
+6722:   evaluateDirect(job,acceleration,compiled,ray,hit,pixelSeed=1,options={}){
+6723:     return DirectLightingIntegrator.evaluate(job,acceleration,compiled,ray,hit,pixelSeed,options);
+6724:   },
+6725: 
+6726:   validate(){
+6727:     const errors=[];
+6728:     const g5=validateRenderGroup5();if(!g5.ok)errors.push(...g5.errors);
+
+===== around line 6742 =====
+6739:     'render material compilation',
+6740:     'linear color conversion',
+6741:     'GGX physical BRDF',
+6742:     'basic direct directional lighting',
+6743:     'basic environment fill',
+6744:     'tone mapping and display conversion',
+6745:     'barycentric shading-normal interpolation'
+6746:   ]),
+6747:   consumes:Object.freeze([
+
+===== around line 6754 =====
+6751:   ]),
+6752:   doesNotOwn:Object.freeze([
+6753:     'editor viewport materials',
+6754:     'full scene light object system',
+6755:     'shadow visibility',
+6756:     'area-light sampling',
+6757:     'path GI',
+6758:     'light cache',
+6759:     'denoising'
+
+===== around line 6756 =====
+6753:     'editor viewport materials',
+6754:     'full scene light object system',
+6755:     'shadow visibility',
+6756:     'area-light sampling',
+6757:     'path GI',
+6758:     'light cache',
+6759:     'denoising'
+6760:   ])
+6761: });
+
+===== around line 6758 =====
+6755:     'shadow visibility',
+6756:     'area-light sampling',
+6757:     'path GI',
+6758:     'light cache',
+6759:     'denoising'
+6760:   ])
+6761: });
+6762: 
+6763: function runRenderGroup5SelfTests(){
+
+===== around line 6772 =====
+6769: 
+6770:   const mat=new RenderSurfaceMaterial({
+6771:     id:'t',name:'t',shading:'physical',baseColor:[.8,.3,.2],
+6772:     roughness:.5,metalness:0,opacity:1,emissive:[0,0,0],emissiveIntensity:0
+6773:   });
+6774:   const brdf=PhysicalBSDF.evaluate(mat,[0,0,1],[0,0,1],[0,0,1]);
+6775:   if(brdf.some(x=>!Number.isFinite(x)||x<0))errors.push('Physical BRDF finite/positive test failed');
+6776: 
+6777:   const metallic=new RenderSurfaceMaterial({
+
+===== around line 6779 =====
+6776: 
+6777:   const metallic=new RenderSurfaceMaterial({
+6778:     id:'m',name:'m',shading:'physical',baseColor:[.9,.7,.2],
+6779:     roughness:.25,metalness:1,opacity:1,emissive:[0,0,0],emissiveIntensity:0
+6780:   });
+6781:   const mb=PhysicalBSDF.evaluate(metallic,[0,0,1],[0,0,1],[0,0,1]);
+6782:   if(mb.some(x=>!Number.isFinite(x)||x<0))errors.push('Metallic BRDF test failed');
+6783: 
+6784:   const tm=RenderColor.aces([10,3,1]);
+
+===== around line 6803 =====
+6800: 
+6801: Object.assign(window,{
+6802:   RenderColor,RenderSurfaceMaterial,RenderMaterialLibrary,
+6803:   RenderDirectionalLight,RenderAmbientLight,BasicRenderLighting,
+6804:   PhysicalBSDF,SurfaceInterpolator,BasicDirectRenderer,RenderGroup5Contract
+6805: });
+6806: 
+6807: /* ============================================================
+6808:    3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 6
+
+===== around line 6809 =====
+6806: 
+6807: /* ============================================================
+6808:    3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 6
+6809:    Full 3DLite Light System
+6810:    ============================================================ */
+6811: const LightTypes=Object.freeze(['point','spot','rectangle','disc','sphere','sun','dome','mesh']);
+6812: 
+6813: const LightDefaults=Object.freeze({
+6814:   point:Object.freeze({intensity:10,size:2,range:0,coneAngle:45,penumbra:.15}),
+
+===== around line 6811 =====
+6808:    3DLite v3.82.8 — LiteTrace Renderer v1.1 RC1 ASI Fix — GROUP 6
+6809:    Full 3DLite Light System
+6810:    ============================================================ */
+6811: const LightTypes=Object.freeze(['point','spot','rectangle','disc','sphere','sun','dome','mesh']);
+6812: 
+6813: const LightDefaults=Object.freeze({
+6814:   point:Object.freeze({intensity:10,size:2,range:0,coneAngle:45,penumbra:.15}),
+6815:   spot:Object.freeze({intensity:25,size:2,range:0,coneAngle:45,penumbra:.15}),
+6816:   rectangle:Object.freeze({intensity:15,size:25,width:50,height:50,range:0,coneAngle:90,penumbra:0}),
+
+===== around line 6813 =====
+6810:    ============================================================ */
+6811: const LightTypes=Object.freeze(['point','spot','rectangle','disc','sphere','sun','dome','mesh']);
+6812: 
+6813: const LightDefaults=Object.freeze({
+6814:   point:Object.freeze({intensity:10,size:2,range:0,coneAngle:45,penumbra:.15}),
+6815:   spot:Object.freeze({intensity:25,size:2,range:0,coneAngle:45,penumbra:.15}),
+6816:   rectangle:Object.freeze({intensity:15,size:25,width:50,height:50,range:0,coneAngle:90,penumbra:0}),
+6817:   disc:Object.freeze({intensity:15,size:25,range:0,coneAngle:90,penumbra:0}),
+6818:   sphere:Object.freeze({intensity:15,size:25,range:0,coneAngle:180,penumbra:0}),
+
+===== around line 6814 =====
+6811: const LightTypes=Object.freeze(['point','spot','rectangle','disc','sphere','sun','dome','mesh']);
+6812: 
+6813: const LightDefaults=Object.freeze({
+6814:   point:Object.freeze({intensity:10,size:2,range:0,coneAngle:45,penumbra:.15}),
+6815:   spot:Object.freeze({intensity:25,size:2,range:0,coneAngle:45,penumbra:.15}),
+6816:   rectangle:Object.freeze({intensity:15,size:25,width:50,height:50,range:0,coneAngle:90,penumbra:0}),
+6817:   disc:Object.freeze({intensity:15,size:25,range:0,coneAngle:90,penumbra:0}),
+6818:   sphere:Object.freeze({intensity:15,size:25,range:0,coneAngle:180,penumbra:0}),
+6819:   sun:Object.freeze({intensity:3,size:.5,range:0,coneAngle:.53,penumbra:0}),
+
+===== around line 6815 =====
+6812: 
+6813: const LightDefaults=Object.freeze({
+6814:   point:Object.freeze({intensity:10,size:2,range:0,coneAngle:45,penumbra:.15}),
+6815:   spot:Object.freeze({intensity:25,size:2,range:0,coneAngle:45,penumbra:.15}),
+6816:   rectangle:Object.freeze({intensity:15,size:25,width:50,height:50,range:0,coneAngle:90,penumbra:0}),
+6817:   disc:Object.freeze({intensity:15,size:25,range:0,coneAngle:90,penumbra:0}),
+6818:   sphere:Object.freeze({intensity:15,size:25,range:0,coneAngle:180,penumbra:0}),
+6819:   sun:Object.freeze({intensity:3,size:.5,range:0,coneAngle:.53,penumbra:0}),
+6820:   dome:Object.freeze({intensity:1,size:100,range:0,coneAngle:180,penumbra:0}),
+
+===== around line 6816 =====
+6813: const LightDefaults=Object.freeze({
+6814:   point:Object.freeze({intensity:10,size:2,range:0,coneAngle:45,penumbra:.15}),
+6815:   spot:Object.freeze({intensity:25,size:2,range:0,coneAngle:45,penumbra:.15}),
+6816:   rectangle:Object.freeze({intensity:15,size:25,width:50,height:50,range:0,coneAngle:90,penumbra:0}),
+6817:   disc:Object.freeze({intensity:15,size:25,range:0,coneAngle:90,penumbra:0}),
+6818:   sphere:Object.freeze({intensity:15,size:25,range:0,coneAngle:180,penumbra:0}),
+6819:   sun:Object.freeze({intensity:3,size:.5,range:0,coneAngle:.53,penumbra:0}),
+6820:   dome:Object.freeze({intensity:1,size:100,range:0,coneAngle:180,penumbra:0}),
+6821:   mesh:Object.freeze({intensity:10,size:25,range:0,coneAngle:180,penumbra:0})
+
+===== around line 6817 =====
+6814:   point:Object.freeze({intensity:10,size:2,range:0,coneAngle:45,penumbra:.15}),
+6815:   spot:Object.freeze({intensity:25,size:2,range:0,coneAngle:45,penumbra:.15}),
+6816:   rectangle:Object.freeze({intensity:15,size:25,width:50,height:50,range:0,coneAngle:90,penumbra:0}),
+6817:   disc:Object.freeze({intensity:15,size:25,range:0,coneAngle:90,penumbra:0}),
+6818:   sphere:Object.freeze({intensity:15,size:25,range:0,coneAngle:180,penumbra:0}),
+6819:   sun:Object.freeze({intensity:3,size:.5,range:0,coneAngle:.53,penumbra:0}),
+6820:   dome:Object.freeze({intensity:1,size:100,range:0,coneAngle:180,penumbra:0}),
+6821:   mesh:Object.freeze({intensity:10,size:25,range:0,coneAngle:180,penumbra:0})
+6822: });
+
+===== around line 6818 =====
+6815:   spot:Object.freeze({intensity:25,size:2,range:0,coneAngle:45,penumbra:.15}),
+6816:   rectangle:Object.freeze({intensity:15,size:25,width:50,height:50,range:0,coneAngle:90,penumbra:0}),
+6817:   disc:Object.freeze({intensity:15,size:25,range:0,coneAngle:90,penumbra:0}),
+6818:   sphere:Object.freeze({intensity:15,size:25,range:0,coneAngle:180,penumbra:0}),
+6819:   sun:Object.freeze({intensity:3,size:.5,range:0,coneAngle:.53,penumbra:0}),
+6820:   dome:Object.freeze({intensity:1,size:100,range:0,coneAngle:180,penumbra:0}),
+6821:   mesh:Object.freeze({intensity:10,size:25,range:0,coneAngle:180,penumbra:0})
+6822: });
+6823: 
+
+===== around line 6819 =====
+6816:   rectangle:Object.freeze({intensity:15,size:25,width:50,height:50,range:0,coneAngle:90,penumbra:0}),
+6817:   disc:Object.freeze({intensity:15,size:25,range:0,coneAngle:90,penumbra:0}),
+6818:   sphere:Object.freeze({intensity:15,size:25,range:0,coneAngle:180,penumbra:0}),
+6819:   sun:Object.freeze({intensity:3,size:.5,range:0,coneAngle:.53,penumbra:0}),
+6820:   dome:Object.freeze({intensity:1,size:100,range:0,coneAngle:180,penumbra:0}),
+6821:   mesh:Object.freeze({intensity:10,size:25,range:0,coneAngle:180,penumbra:0})
+6822: });
+6823: 
+6824: var EditorLightSystem={
+
+===== around line 6820 =====
+6817:   disc:Object.freeze({intensity:15,size:25,range:0,coneAngle:90,penumbra:0}),
+6818:   sphere:Object.freeze({intensity:15,size:25,range:0,coneAngle:180,penumbra:0}),
+6819:   sun:Object.freeze({intensity:3,size:.5,range:0,coneAngle:.53,penumbra:0}),
+6820:   dome:Object.freeze({intensity:1,size:100,range:0,coneAngle:180,penumbra:0}),
+6821:   mesh:Object.freeze({intensity:10,size:25,range:0,coneAngle:180,penumbra:0})
+6822: });
+6823: 
+6824: var EditorLightSystem={
+6825:   nextId:1,
+
+===== around line 6821 =====
+6818:   sphere:Object.freeze({intensity:15,size:25,range:0,coneAngle:180,penumbra:0}),
+6819:   sun:Object.freeze({intensity:3,size:.5,range:0,coneAngle:.53,penumbra:0}),
+6820:   dome:Object.freeze({intensity:1,size:100,range:0,coneAngle:180,penumbra:0}),
+6821:   mesh:Object.freeze({intensity:10,size:25,range:0,coneAngle:180,penumbra:0})
+6822: });
+6823: 
+6824: var EditorLightSystem={
+6825:   nextId:1,
+6826:   isLightObject(obj){return !!obj?.userData?.renderLight},
+
+===== around line 6824 =====
+6821:   mesh:Object.freeze({intensity:10,size:25,range:0,coneAngle:180,penumbra:0})
+6822: });
+6823: 
+6824: var EditorLightSystem={
+6825:   nextId:1,
+6826:   isLightObject(obj){return !!obj?.userData?.renderLight},
+6827: 
+6828:   iconGeometry(type,size){
+6829:     const s=Math.max(2,Math.min(30,Number(size)||10));
+
+===== around line 6826 =====
+6823: 
+6824: var EditorLightSystem={
+6825:   nextId:1,
+6826:   isLightObject(obj){return !!obj?.userData?.renderLight},
+6827: 
+6828:   iconGeometry(type,size){
+6829:     const s=Math.max(2,Math.min(30,Number(size)||10));
+6830:     if(type==='rectangle')return new THREE.BoxGeometry(s*1.4,s*.08,s);
+6831:     if(type==='disc')return new THREE.CylinderGeometry(s*.55,s*.55,s*.08,16);
+
+===== around line 6840 =====
+6837:   },
+6838: 
+6839:   create(type,opts={}){
+6840:     type=LightTypes.includes(type)?type:'point';
+6841:     const d=LightDefaults[type]||LightDefaults.point;
+6842:     const size=Math.max(.01,Number(opts.size??d.size??25));
+6843:     const geometry=this.iconGeometry(type,size);
+6844:     const color=new THREE.Color(opts.color||'#fff2c8');
+6845:     const material=new THREE.MeshBasicMaterial({
+
+===== around line 6841 =====
+6838: 
+6839:   create(type,opts={}){
+6840:     type=LightTypes.includes(type)?type:'point';
+6841:     const d=LightDefaults[type]||LightDefaults.point;
+6842:     const size=Math.max(.01,Number(opts.size??d.size??25));
+6843:     const geometry=this.iconGeometry(type,size);
+6844:     const color=new THREE.Color(opts.color||'#fff2c8');
+6845:     const material=new THREE.MeshBasicMaterial({
+6846:       color,wireframe:true,transparent:true,opacity:.9,
+
+===== around line 6850 =====
+6847:       depthTest:true,depthWrite:false,toneMapped:false
+6848:     });
+6849:     const obj=new THREE.Mesh(geometry,material);
+6850:     obj.name=(type[0].toUpperCase()+type.slice(1))+' Light '+this.nextId++;
+6851:     obj.userData.renderLight={
+6852:       id:'light-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7),
+6853:       type,
+6854:       enabled:opts.enabled!==false,
+6855:       color:'#'+color.getHexString(),
+
+===== around line 6851 =====
+6848:     });
+6849:     const obj=new THREE.Mesh(geometry,material);
+6850:     obj.name=(type[0].toUpperCase()+type.slice(1))+' Light '+this.nextId++;
+6851:     obj.userData.renderLight={
+6852:       id:'light-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7),
+6853:       type,
+6854:       enabled:opts.enabled!==false,
+6855:       color:'#'+color.getHexString(),
+6856:       intensity:Math.max(0,Number(opts.intensity??d.intensity??10)),
+
+===== around line 6852 =====
+6849:     const obj=new THREE.Mesh(geometry,material);
+6850:     obj.name=(type[0].toUpperCase()+type.slice(1))+' Light '+this.nextId++;
+6851:     obj.userData.renderLight={
+6852:       id:'light-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,7),
+6853:       type,
+6854:       enabled:opts.enabled!==false,
+6855:       color:'#'+color.getHexString(),
+6856:       intensity:Math.max(0,Number(opts.intensity??d.intensity??10)),
+6857:       range:Math.max(0,Number(opts.range??d.range??0)),
+
+===== around line 6856 =====
+6853:       type,
+6854:       enabled:opts.enabled!==false,
+6855:       color:'#'+color.getHexString(),
+6856:       intensity:Math.max(0,Number(opts.intensity??d.intensity??10)),
+6857:       range:Math.max(0,Number(opts.range??d.range??0)),
+6858:       size,
+6859:       width:Math.max(.01,Number(opts.width??d.width??size*2)),
+6860:       height:Math.max(.01,Number(opts.height??d.height??size*2)),
+6861:       coneAngle:Math.max(1,Math.min(179,Number(opts.coneAngle??d.coneAngle??45))),
+
+===== around line 6863 =====
+6860:       height:Math.max(.01,Number(opts.height??d.height??size*2)),
+6861:       coneAngle:Math.max(1,Math.min(179,Number(opts.coneAngle??d.coneAngle??45))),
+6862:       penumbra:Math.max(0,Math.min(1,Number(opts.penumbra??d.penumbra??.15))),
+6863:       castShadows:opts.castShadows!==false,
+6864:       renderOnly:true
+6865:     };
+6866:     obj.userData.isRenderLight=true;
+6867:     obj.position.set(0,0,Math.max(20,size));
+6868:     if(type==='sun'||type==='spot'||type==='rectangle'||type==='disc'||type==='mesh'){
+
+===== around line 6866 =====
+6863:       castShadows:opts.castShadows!==false,
+6864:       renderOnly:true
+6865:     };
+6866:     obj.userData.isRenderLight=true;
+6867:     obj.position.set(0,0,Math.max(20,size));
+6868:     if(type==='sun'||type==='spot'||type==='rectangle'||type==='disc'||type==='mesh'){
+6869:       obj.rotation.x=-Math.PI*.25;
+6870:     }
+6871:     scene.add(obj);objects.push(obj);
+
+===== around line 6872 =====
+6869:       obj.rotation.x=-Math.PI*.25;
+6870:     }
+6871:     scene.add(obj);objects.push(obj);
+6872:     window.__3DLiteLightRevision=(window.__3DLiteLightRevision||0)+1;
+6873:     selectOnly(obj);
+6874:     refreshModifyPanel();
+6875:     requestRender();
+6876:     return obj;
+6877:   },
+
+===== around line 6880 =====
+6877:   },
+6878: 
+6879:   updateIcon(obj){
+6880:     if(!this.isLightObject(obj))return;
+6881:     const l=obj.userData.renderLight;
+6882:     const old=obj.geometry;
+6883:     obj.geometry=this.iconGeometry(l.type,l.size);
+6884:     old?.dispose?.();
+6885:     if(obj.material?.color)obj.material.color.set(l.color||'#ffffff');
+
+===== around line 6881 =====
+6878: 
+6879:   updateIcon(obj){
+6880:     if(!this.isLightObject(obj))return;
+6881:     const l=obj.userData.renderLight;
+6882:     const old=obj.geometry;
+6883:     obj.geometry=this.iconGeometry(l.type,l.size);
+6884:     old?.dispose?.();
+6885:     if(obj.material?.color)obj.material.color.set(l.color||'#ffffff');
+6886:     requestRender();
+
+===== around line 6890 =====
+6887:   },
+6888: 
+6889:   serialize(obj){
+6890:     if(!this.isLightObject(obj))return null;
+6891:     obj.updateMatrixWorld(true);
+6892:     const l=obj.userData.renderLight;
+6893:     const q=obj.getWorldQuaternion(new THREE.Quaternion());
+6894:     const p=obj.getWorldPosition(new THREE.Vector3());
+6895:     const dir=new THREE.Vector3(0,0,-1).applyQuaternion(q).normalize();
+
+===== around line 6892 =====
+6889:   serialize(obj){
+6890:     if(!this.isLightObject(obj))return null;
+6891:     obj.updateMatrixWorld(true);
+6892:     const l=obj.userData.renderLight;
+6893:     const q=obj.getWorldQuaternion(new THREE.Quaternion());
+6894:     const p=obj.getWorldPosition(new THREE.Vector3());
+6895:     const dir=new THREE.Vector3(0,0,-1).applyQuaternion(q).normalize();
+6896:     return {
+6897:       id:l.id||obj.uuid,
+
+===== around line 6898 =====
+6895:     const dir=new THREE.Vector3(0,0,-1).applyQuaternion(q).normalize();
+6896:     return {
+6897:       id:l.id||obj.uuid,
+6898:       name:obj.name||'Light',
+6899:       type:l.type,
+6900:       enabled:l.enabled!==false&&obj.visible!==false,
+6901:       color:l.color||'#ffffff',
+6902:       intensity:Math.max(0,Number(l.intensity)||0),
+6903:       range:Math.max(0,Number(l.range)||0),
+
+===== around line 6902 =====
+6899:       type:l.type,
+6900:       enabled:l.enabled!==false&&obj.visible!==false,
+6901:       color:l.color||'#ffffff',
+6902:       intensity:Math.max(0,Number(l.intensity)||0),
+6903:       range:Math.max(0,Number(l.range)||0),
+6904:       size:Math.max(.01,Number(l.size)||.01),
+6905:       width:Math.max(.01,Number(l.width)||.01),
+6906:       height:Math.max(.01,Number(l.height)||.01),
+6907:       coneAngle:Math.max(1,Math.min(179,Number(l.coneAngle)||45)),
+
+===== around line 6909 =====
+6906:       height:Math.max(.01,Number(l.height)||.01),
+6907:       coneAngle:Math.max(1,Math.min(179,Number(l.coneAngle)||45)),
+6908:       penumbra:Math.max(0,Math.min(1,Number(l.penumbra)||0)),
+6909:       castShadows:l.castShadows!==false,
+6910:       position:p.toArray(),
+6911:       quaternion:q.toArray(),
+6912:       direction:dir.toArray()
+6913:     };
+6914:   }
+
+===== around line 6917 =====
+6914:   }
+6915: };
+6916: 
+6917: var LightSnapshotTools=Object.freeze({
+6918:   fromEditorObject(obj){
+6919:     const d=EditorLightSystem.serialize(obj);
+6920:     return d?new RenderLightSnapshot(d):null;
+6921:   }
+6922: });
+
+===== around line 6919 =====
+6916: 
+6917: var LightSnapshotTools=Object.freeze({
+6918:   fromEditorObject(obj){
+6919:     const d=EditorLightSystem.serialize(obj);
+6920:     return d?new RenderLightSnapshot(d):null;
+6921:   }
+6922: });
+6923: 
+6924: const RenderLightPolicy=Object.freeze({
+
+===== around line 6920 =====
+6917: var LightSnapshotTools=Object.freeze({
+6918:   fromEditorObject(obj){
+6919:     const d=EditorLightSystem.serialize(obj);
+6920:     return d?new RenderLightSnapshot(d):null;
+6921:   }
+6922: });
+6923: 
+6924: const RenderLightPolicy=Object.freeze({
+6925:   supported:Object.freeze(['point','spot','rectangle','disc','sphere','sun','dome','mesh']),
+
+===== around line 6924 =====
+6921:   }
+6922: });
+6923: 
+6924: const RenderLightPolicy=Object.freeze({
+6925:   supported:Object.freeze(['point','spot','rectangle','disc','sphere','sun','dome','mesh']),
+6926:   minLinearSize:0.01,
+6927:   minArea:1e-4,
+6928:   finite3(a,fallback=[0,0,0]){
+6929:     if(!Array.isArray(a)||a.length<3||a.slice(0,3).some(v=>!Number.isFinite(Number(v))))return fallback.slice();
+
+===== around line 6937 =====
+6934:     v=Number(v);if(!Number.isFinite(v))v=fallback;
+6935:     return Math.max(min,Math.min(max,v));
+6936:   },
+6937:   area(light){
+6938:     if(light.type==='rectangle'||light.type==='mesh')return Math.max(this.minArea,light.width*light.height);
+6939:     if(light.type==='disc')return Math.max(this.minArea,Math.PI*Math.pow(light.size*.5,2));
+6940:     if(light.type==='sphere')return Math.max(this.minArea,4*Math.PI*Math.pow(light.size*.5,2));
+6941:     return 1;
+6942:   }
+
+===== around line 6938 =====
+6935:     return Math.max(min,Math.min(max,v));
+6936:   },
+6937:   area(light){
+6938:     if(light.type==='rectangle'||light.type==='mesh')return Math.max(this.minArea,light.width*light.height);
+6939:     if(light.type==='disc')return Math.max(this.minArea,Math.PI*Math.pow(light.size*.5,2));
+6940:     if(light.type==='sphere')return Math.max(this.minArea,4*Math.PI*Math.pow(light.size*.5,2));
+6941:     return 1;
+6942:   }
+6943: });
+
+===== around line 6939 =====
+6936:   },
+6937:   area(light){
+6938:     if(light.type==='rectangle'||light.type==='mesh')return Math.max(this.minArea,light.width*light.height);
+6939:     if(light.type==='disc')return Math.max(this.minArea,Math.PI*Math.pow(light.size*.5,2));
+6940:     if(light.type==='sphere')return Math.max(this.minArea,4*Math.PI*Math.pow(light.size*.5,2));
+6941:     return 1;
+6942:   }
+6943: });
+6944: 
+
+===== around line 6940 =====
+6937:   area(light){
+6938:     if(light.type==='rectangle'||light.type==='mesh')return Math.max(this.minArea,light.width*light.height);
+6939:     if(light.type==='disc')return Math.max(this.minArea,Math.PI*Math.pow(light.size*.5,2));
+6940:     if(light.type==='sphere')return Math.max(this.minArea,4*Math.PI*Math.pow(light.size*.5,2));
+6941:     return 1;
+6942:   }
+6943: });
+6944: 
+6945: class RenderSceneLight{
+
+===== around line 6945 =====
+6942:   }
+6943: });
+6944: 
+6945: class RenderSceneLight{
+6946:   constructor(snapshot){
+6947:     this.id=String(snapshot.id||'light');
+6948:     this.name=String(snapshot.name||'Light');
+6949:     this.type=RenderLightPolicy.type(snapshot.type);
+6950:     this.enabled=snapshot.enabled!==false;
+
+===== around line 6947 =====
+6944: 
+6945: class RenderSceneLight{
+6946:   constructor(snapshot){
+6947:     this.id=String(snapshot.id||'light');
+6948:     this.name=String(snapshot.name||'Light');
+6949:     this.type=RenderLightPolicy.type(snapshot.type);
+6950:     this.enabled=snapshot.enabled!==false;
+6951:     this.color=Object.freeze(RenderColor.hexToLinear(snapshot.color||'#ffffff'));
+6952:     this.intensity=RenderLightPolicy.scalar(snapshot.intensity,0,0,1e12);
+
+===== around line 6948 =====
+6945: class RenderSceneLight{
+6946:   constructor(snapshot){
+6947:     this.id=String(snapshot.id||'light');
+6948:     this.name=String(snapshot.name||'Light');
+6949:     this.type=RenderLightPolicy.type(snapshot.type);
+6950:     this.enabled=snapshot.enabled!==false;
+6951:     this.color=Object.freeze(RenderColor.hexToLinear(snapshot.color||'#ffffff'));
+6952:     this.intensity=RenderLightPolicy.scalar(snapshot.intensity,0,0,1e12);
+6953:     this.range=RenderLightPolicy.scalar(snapshot.range,0,0,1e12);
+
+===== around line 6949 =====
+6946:   constructor(snapshot){
+6947:     this.id=String(snapshot.id||'light');
+6948:     this.name=String(snapshot.name||'Light');
+6949:     this.type=RenderLightPolicy.type(snapshot.type);
+6950:     this.enabled=snapshot.enabled!==false;
+6951:     this.color=Object.freeze(RenderColor.hexToLinear(snapshot.color||'#ffffff'));
+6952:     this.intensity=RenderLightPolicy.scalar(snapshot.intensity,0,0,1e12);
+6953:     this.range=RenderLightPolicy.scalar(snapshot.range,0,0,1e12);
+6954:     this.size=RenderLightPolicy.scalar(snapshot.size,1,RenderLightPolicy.minLinearSize,1e9);
+
+===== around line 6952 =====
+6949:     this.type=RenderLightPolicy.type(snapshot.type);
+6950:     this.enabled=snapshot.enabled!==false;
+6951:     this.color=Object.freeze(RenderColor.hexToLinear(snapshot.color||'#ffffff'));
+6952:     this.intensity=RenderLightPolicy.scalar(snapshot.intensity,0,0,1e12);
+6953:     this.range=RenderLightPolicy.scalar(snapshot.range,0,0,1e12);
+6954:     this.size=RenderLightPolicy.scalar(snapshot.size,1,RenderLightPolicy.minLinearSize,1e9);
+6955:     this.width=RenderLightPolicy.scalar(snapshot.width,1,RenderLightPolicy.minLinearSize,1e9);
+6956:     this.height=RenderLightPolicy.scalar(snapshot.height,1,RenderLightPolicy.minLinearSize,1e9);
+6957:     this.coneAngle=RenderLightPolicy.scalar(snapshot.coneAngle,45,1,179)*Math.PI/180;
+
+===== around line 6953 =====
+6950:     this.enabled=snapshot.enabled!==false;
+6951:     this.color=Object.freeze(RenderColor.hexToLinear(snapshot.color||'#ffffff'));
+6952:     this.intensity=RenderLightPolicy.scalar(snapshot.intensity,0,0,1e12);
+6953:     this.range=RenderLightPolicy.scalar(snapshot.range,0,0,1e12);
+6954:     this.size=RenderLightPolicy.scalar(snapshot.size,1,RenderLightPolicy.minLinearSize,1e9);
+6955:     this.width=RenderLightPolicy.scalar(snapshot.width,1,RenderLightPolicy.minLinearSize,1e9);
+6956:     this.height=RenderLightPolicy.scalar(snapshot.height,1,RenderLightPolicy.minLinearSize,1e9);
+6957:     this.coneAngle=RenderLightPolicy.scalar(snapshot.coneAngle,45,1,179)*Math.PI/180;
+6958:     this.penumbra=RenderLightPolicy.scalar(snapshot.penumbra,0,0,1);
+
+===== around line 6954 =====
+6951:     this.color=Object.freeze(RenderColor.hexToLinear(snapshot.color||'#ffffff'));
+6952:     this.intensity=RenderLightPolicy.scalar(snapshot.intensity,0,0,1e12);
+6953:     this.range=RenderLightPolicy.scalar(snapshot.range,0,0,1e12);
+6954:     this.size=RenderLightPolicy.scalar(snapshot.size,1,RenderLightPolicy.minLinearSize,1e9);
+6955:     this.width=RenderLightPolicy.scalar(snapshot.width,1,RenderLightPolicy.minLinearSize,1e9);
+6956:     this.height=RenderLightPolicy.scalar(snapshot.height,1,RenderLightPolicy.minLinearSize,1e9);
+6957:     this.coneAngle=RenderLightPolicy.scalar(snapshot.coneAngle,45,1,179)*Math.PI/180;
+6958:     this.penumbra=RenderLightPolicy.scalar(snapshot.penumbra,0,0,1);
+6959:     this.castShadows=snapshot.castShadows!==false;
+
+===== around line 6955 =====
+6952:     this.intensity=RenderLightPolicy.scalar(snapshot.intensity,0,0,1e12);
+6953:     this.range=RenderLightPolicy.scalar(snapshot.range,0,0,1e12);
+6954:     this.size=RenderLightPolicy.scalar(snapshot.size,1,RenderLightPolicy.minLinearSize,1e9);
+6955:     this.width=RenderLightPolicy.scalar(snapshot.width,1,RenderLightPolicy.minLinearSize,1e9);
+6956:     this.height=RenderLightPolicy.scalar(snapshot.height,1,RenderLightPolicy.minLinearSize,1e9);
+6957:     this.coneAngle=RenderLightPolicy.scalar(snapshot.coneAngle,45,1,179)*Math.PI/180;
+6958:     this.penumbra=RenderLightPolicy.scalar(snapshot.penumbra,0,0,1);
+6959:     this.castShadows=snapshot.castShadows!==false;
+6960:     this.position=Object.freeze(RenderLightPolicy.finite3(snapshot.position,[0,0,0]));
+
+===== around line 6956 =====
+6953:     this.range=RenderLightPolicy.scalar(snapshot.range,0,0,1e12);
+6954:     this.size=RenderLightPolicy.scalar(snapshot.size,1,RenderLightPolicy.minLinearSize,1e9);
+6955:     this.width=RenderLightPolicy.scalar(snapshot.width,1,RenderLightPolicy.minLinearSize,1e9);
+6956:     this.height=RenderLightPolicy.scalar(snapshot.height,1,RenderLightPolicy.minLinearSize,1e9);
+6957:     this.coneAngle=RenderLightPolicy.scalar(snapshot.coneAngle,45,1,179)*Math.PI/180;
+6958:     this.penumbra=RenderLightPolicy.scalar(snapshot.penumbra,0,0,1);
+6959:     this.castShadows=snapshot.castShadows!==false;
+6960:     this.position=Object.freeze(RenderLightPolicy.finite3(snapshot.position,[0,0,0]));
+6961:     const rawDir=RenderLightPolicy.finite3(snapshot.direction,[0,0,-1]);
+
+===== around line 6957 =====
+6954:     this.size=RenderLightPolicy.scalar(snapshot.size,1,RenderLightPolicy.minLinearSize,1e9);
+6955:     this.width=RenderLightPolicy.scalar(snapshot.width,1,RenderLightPolicy.minLinearSize,1e9);
+6956:     this.height=RenderLightPolicy.scalar(snapshot.height,1,RenderLightPolicy.minLinearSize,1e9);
+6957:     this.coneAngle=RenderLightPolicy.scalar(snapshot.coneAngle,45,1,179)*Math.PI/180;
+6958:     this.penumbra=RenderLightPolicy.scalar(snapshot.penumbra,0,0,1);
+6959:     this.castShadows=snapshot.castShadows!==false;
+6960:     this.position=Object.freeze(RenderLightPolicy.finite3(snapshot.position,[0,0,0]));
+6961:     const rawDir=RenderLightPolicy.finite3(snapshot.direction,[0,0,-1]);
+6962:     let dir=RayMath.normalize(rawDir);
+
+===== around line 6958 =====
+6955:     this.width=RenderLightPolicy.scalar(snapshot.width,1,RenderLightPolicy.minLinearSize,1e9);
+6956:     this.height=RenderLightPolicy.scalar(snapshot.height,1,RenderLightPolicy.minLinearSize,1e9);
+6957:     this.coneAngle=RenderLightPolicy.scalar(snapshot.coneAngle,45,1,179)*Math.PI/180;
+6958:     this.penumbra=RenderLightPolicy.scalar(snapshot.penumbra,0,0,1);
+6959:     this.castShadows=snapshot.castShadows!==false;
+6960:     this.position=Object.freeze(RenderLightPolicy.finite3(snapshot.position,[0,0,0]));
+6961:     const rawDir=RenderLightPolicy.finite3(snapshot.direction,[0,0,-1]);
+6962:     let dir=RayMath.normalize(rawDir);
+6963:     if(!dir.every(Number.isFinite)||RayMath.length(dir)<1e-10)dir=[0,0,-1];
+
+===== around line 6959 =====
+6956:     this.height=RenderLightPolicy.scalar(snapshot.height,1,RenderLightPolicy.minLinearSize,1e9);
+6957:     this.coneAngle=RenderLightPolicy.scalar(snapshot.coneAngle,45,1,179)*Math.PI/180;
+6958:     this.penumbra=RenderLightPolicy.scalar(snapshot.penumbra,0,0,1);
+6959:     this.castShadows=snapshot.castShadows!==false;
+6960:     this.position=Object.freeze(RenderLightPolicy.finite3(snapshot.position,[0,0,0]));
+6961:     const rawDir=RenderLightPolicy.finite3(snapshot.direction,[0,0,-1]);
+6962:     let dir=RayMath.normalize(rawDir);
+6963:     if(!dir.every(Number.isFinite)||RayMath.length(dir)<1e-10)dir=[0,0,-1];
+6964:     this.direction=Object.freeze(dir);
+
+===== around line 6960 =====
+6957:     this.coneAngle=RenderLightPolicy.scalar(snapshot.coneAngle,45,1,179)*Math.PI/180;
+6958:     this.penumbra=RenderLightPolicy.scalar(snapshot.penumbra,0,0,1);
+6959:     this.castShadows=snapshot.castShadows!==false;
+6960:     this.position=Object.freeze(RenderLightPolicy.finite3(snapshot.position,[0,0,0]));
+6961:     const rawDir=RenderLightPolicy.finite3(snapshot.direction,[0,0,-1]);
+6962:     let dir=RayMath.normalize(rawDir);
+6963:     if(!dir.every(Number.isFinite)||RayMath.length(dir)<1e-10)dir=[0,0,-1];
+6964:     this.direction=Object.freeze(dir);
+6965:     Object.freeze(this);
+
+===== around line 6961 =====
+6958:     this.penumbra=RenderLightPolicy.scalar(snapshot.penumbra,0,0,1);
+6959:     this.castShadows=snapshot.castShadows!==false;
+6960:     this.position=Object.freeze(RenderLightPolicy.finite3(snapshot.position,[0,0,0]));
+6961:     const rawDir=RenderLightPolicy.finite3(snapshot.direction,[0,0,-1]);
+6962:     let dir=RayMath.normalize(rawDir);
+6963:     if(!dir.every(Number.isFinite)||RayMath.length(dir)<1e-10)dir=[0,0,-1];
+6964:     this.direction=Object.freeze(dir);
+6965:     Object.freeze(this);
+6966:   }
+
+===== around line 6969 =====
+6966:   }
+6967: }
+6968: 
+6969: var SceneLightCompiler=Object.freeze({
+6970:   compile(renderScene){
+6971:     const compiled=[];
+6972:     for(const snapshot of (renderScene?.lights||[])){
+6973:       if(snapshot?.enabled===false)continue;
+6974:       try{compiled.push(new RenderSceneLight(snapshot));}
+
+===== around line 6972 =====
+6969: var SceneLightCompiler=Object.freeze({
+6970:   compile(renderScene){
+6971:     const compiled=[];
+6972:     for(const snapshot of (renderScene?.lights||[])){
+6973:       if(snapshot?.enabled===false)continue;
+6974:       try{compiled.push(new RenderSceneLight(snapshot));}
+6975:       catch(err){throw new LightError(`${snapshot?.name||snapshot?.id||'Light'}: ${String(err?.message||err)}`,err);}
+6976:     }
+6977:     return Object.freeze(compiled);
+
+===== around line 6974 =====
+6971:     const compiled=[];
+6972:     for(const snapshot of (renderScene?.lights||[])){
+6973:       if(snapshot?.enabled===false)continue;
+6974:       try{compiled.push(new RenderSceneLight(snapshot));}
+6975:       catch(err){throw new LightError(`${snapshot?.name||snapshot?.id||'Light'}: ${String(err?.message||err)}`,err);}
+6976:     }
+6977:     return Object.freeze(compiled);
+6978:   }
+6979: });
+
+===== around line 6975 =====
+6972:     for(const snapshot of (renderScene?.lights||[])){
+6973:       if(snapshot?.enabled===false)continue;
+6974:       try{compiled.push(new RenderSceneLight(snapshot));}
+6975:       catch(err){throw new LightError(`${snapshot?.name||snapshot?.id||'Light'}: ${String(err?.message||err)}`,err);}
+6976:     }
+6977:     return Object.freeze(compiled);
+6978:   }
+6979: });
+6980: 
+
+===== around line 6981 =====
+6978:   }
+6979: });
+6980: 
+6981: const DirectLightSampler=Object.freeze({
+6982:   sample(light,point){
+6983:     if(light.type==='dome'){
+6984:       return {kind:'ambient',direction:null,distance:Infinity,radiance:RenderColor.mul(light.color,light.intensity)};
+6985:     }
+6986:     if(light.type==='sun'){
+
+===== around line 6982 =====
+6979: });
+6980: 
+6981: const DirectLightSampler=Object.freeze({
+6982:   sample(light,point){
+6983:     if(light.type==='dome'){
+6984:       return {kind:'ambient',direction:null,distance:Infinity,radiance:RenderColor.mul(light.color,light.intensity)};
+6985:     }
+6986:     if(light.type==='sun'){
+6987:       return {kind:'directional',direction:RayMath.mul(light.direction,-1),distance:Infinity,radiance:RenderColor.mul(light.color,light.intensity)};
+
+===== around line 6983 =====
+6980: 
+6981: const DirectLightSampler=Object.freeze({
+6982:   sample(light,point){
+6983:     if(light.type==='dome'){
+6984:       return {kind:'ambient',direction:null,distance:Infinity,radiance:RenderColor.mul(light.color,light.intensity)};
+6985:     }
+6986:     if(light.type==='sun'){
+6987:       return {kind:'directional',direction:RayMath.mul(light.direction,-1),distance:Infinity,radiance:RenderColor.mul(light.color,light.intensity)};
+6988:     }
+
+===== around line 6984 =====
+6981: const DirectLightSampler=Object.freeze({
+6982:   sample(light,point){
+6983:     if(light.type==='dome'){
+6984:       return {kind:'ambient',direction:null,distance:Infinity,radiance:RenderColor.mul(light.color,light.intensity)};
+6985:     }
+6986:     if(light.type==='sun'){
+6987:       return {kind:'directional',direction:RayMath.mul(light.direction,-1),distance:Infinity,radiance:RenderColor.mul(light.color,light.intensity)};
+6988:     }
+6989: 
+
+===== around line 6986 =====
+6983:     if(light.type==='dome'){
+6984:       return {kind:'ambient',direction:null,distance:Infinity,radiance:RenderColor.mul(light.color,light.intensity)};
+6985:     }
+6986:     if(light.type==='sun'){
+6987:       return {kind:'directional',direction:RayMath.mul(light.direction,-1),distance:Infinity,radiance:RenderColor.mul(light.color,light.intensity)};
+6988:     }
+6989: 
+6990:     const to=RayMath.sub(light.position,point);
+6991:     const dist=Math.max(RayMath.length(to),1e-4);
+
+===== around line 6987 =====
+6984:       return {kind:'ambient',direction:null,distance:Infinity,radiance:RenderColor.mul(light.color,light.intensity)};
+6985:     }
+6986:     if(light.type==='sun'){
+6987:       return {kind:'directional',direction:RayMath.mul(light.direction,-1),distance:Infinity,radiance:RenderColor.mul(light.color,light.intensity)};
+6988:     }
+6989: 
+6990:     const to=RayMath.sub(light.position,point);
+6991:     const dist=Math.max(RayMath.length(to),1e-4);
+6992:     const dir=RayMath.mul(to,1/dist);
+
+===== around line 6990 =====
+6987:       return {kind:'directional',direction:RayMath.mul(light.direction,-1),distance:Infinity,radiance:RenderColor.mul(light.color,light.intensity)};
+6988:     }
+6989: 
+6990:     const to=RayMath.sub(light.position,point);
+6991:     const dist=Math.max(RayMath.length(to),1e-4);
+6992:     const dir=RayMath.mul(to,1/dist);
+6993:     let attenuation=1/(dist*dist);
+6994: 
+6995:     if(light.range>0){
+
+===== around line 6995 =====
+6992:     const dir=RayMath.mul(to,1/dist);
+6993:     let attenuation=1/(dist*dist);
+6994: 
+6995:     if(light.range>0){
+6996:       if(dist>=light.range)return {kind:'local',direction:dir,distance:dist,radiance:[0,0,0]};
+6997:       const f=Math.max(0,1-dist/light.range);
+6998:       attenuation*=f*f;
+6999:     }
+7000: 
+
+===== around line 6996 =====
+6993:     let attenuation=1/(dist*dist);
+6994: 
+6995:     if(light.range>0){
+6996:       if(dist>=light.range)return {kind:'local',direction:dir,distance:dist,radiance:[0,0,0]};
+6997:       const f=Math.max(0,1-dist/light.range);
+6998:       attenuation*=f*f;
+6999:     }
+7000: 
+7001:     if(light.type==='spot'){
+
+===== around line 6997 =====
+6994: 
+6995:     if(light.range>0){
+6996:       if(dist>=light.range)return {kind:'local',direction:dir,distance:dist,radiance:[0,0,0]};
+6997:       const f=Math.max(0,1-dist/light.range);
+6998:       attenuation*=f*f;
+6999:     }
+7000: 
+7001:     if(light.type==='spot'){
+7002:       const fromLight=RayMath.mul(dir,-1);
+
+===== around line 7001 =====
+6998:       attenuation*=f*f;
+6999:     }
+7000: 
+7001:     if(light.type==='spot'){
+7002:       const fromLight=RayMath.mul(dir,-1);
+7003:       const cosTheta=RayMath.dot(light.direction,fromLight);
+7004:       const outer=Math.cos(light.coneAngle*.5);
+7005:       const inner=Math.cos(light.coneAngle*.5*(1-light.penumbra));
+7006:       const cone=inner<=outer?(cosTheta>=outer?1:0):Math.max(0,Math.min(1,(cosTheta-outer)/(inner-outer)));
+
+===== around line 7002 =====
+6999:     }
+7000: 
+7001:     if(light.type==='spot'){
+7002:       const fromLight=RayMath.mul(dir,-1);
+7003:       const cosTheta=RayMath.dot(light.direction,fromLight);
+7004:       const outer=Math.cos(light.coneAngle*.5);
+7005:       const inner=Math.cos(light.coneAngle*.5*(1-light.penumbra));
+7006:       const cone=inner<=outer?(cosTheta>=outer?1:0):Math.max(0,Math.min(1,(cosTheta-outer)/(inner-outer)));
+7007:       if(cone<=0)return {kind:'local',direction:dir,distance:dist,radiance:[0,0,0]};
+
+===== around line 7003 =====
+7000: 
+7001:     if(light.type==='spot'){
+7002:       const fromLight=RayMath.mul(dir,-1);
+7003:       const cosTheta=RayMath.dot(light.direction,fromLight);
+7004:       const outer=Math.cos(light.coneAngle*.5);
+7005:       const inner=Math.cos(light.coneAngle*.5*(1-light.penumbra));
+7006:       const cone=inner<=outer?(cosTheta>=outer?1:0):Math.max(0,Math.min(1,(cosTheta-outer)/(inner-outer)));
+7007:       if(cone<=0)return {kind:'local',direction:dir,distance:dist,radiance:[0,0,0]};
+7008:       attenuation*=cone;
+
+===== around line 7004 =====
+7001:     if(light.type==='spot'){
+7002:       const fromLight=RayMath.mul(dir,-1);
+7003:       const cosTheta=RayMath.dot(light.direction,fromLight);
+7004:       const outer=Math.cos(light.coneAngle*.5);
+7005:       const inner=Math.cos(light.coneAngle*.5*(1-light.penumbra));
+7006:       const cone=inner<=outer?(cosTheta>=outer?1:0):Math.max(0,Math.min(1,(cosTheta-outer)/(inner-outer)));
+7007:       if(cone<=0)return {kind:'local',direction:dir,distance:dist,radiance:[0,0,0]};
+7008:       attenuation*=cone;
+7009:     }
+
+===== around line 7005 =====
+7002:       const fromLight=RayMath.mul(dir,-1);
+7003:       const cosTheta=RayMath.dot(light.direction,fromLight);
+7004:       const outer=Math.cos(light.coneAngle*.5);
+7005:       const inner=Math.cos(light.coneAngle*.5*(1-light.penumbra));
+7006:       const cone=inner<=outer?(cosTheta>=outer?1:0):Math.max(0,Math.min(1,(cosTheta-outer)/(inner-outer)));
+7007:       if(cone<=0)return {kind:'local',direction:dir,distance:dist,radiance:[0,0,0]};
+7008:       attenuation*=cone;
+7009:     }
+7010: 
+
+===== around line 7014 =====
+7011:     // Area emitters use center-point evaluation in Group 6.
+7012:     // Group 7 replaces this with actual surface sampling + visibility.
+7013:     const areaScale=
+7014:       light.type==='rectangle'?Math.max(.01,light.width*light.height):
+7015:       light.type==='disc'?Math.max(.01,Math.PI*light.size*light.size*.25):
+7016:       light.type==='sphere'?Math.max(.01,4*Math.PI*Math.pow(light.size*.5,2)):
+7017:       light.type==='mesh'?Math.max(.01,light.width*light.height):
+7018:       1;
+7019: 
+
+===== around line 7015 =====
+7012:     // Group 7 replaces this with actual surface sampling + visibility.
+7013:     const areaScale=
+7014:       light.type==='rectangle'?Math.max(.01,light.width*light.height):
+7015:       light.type==='disc'?Math.max(.01,Math.PI*light.size*light.size*.25):
+7016:       light.type==='sphere'?Math.max(.01,4*Math.PI*Math.pow(light.size*.5,2)):
+7017:       light.type==='mesh'?Math.max(.01,light.width*light.height):
+7018:       1;
+7019: 
+7020:     if(['rectangle','disc','sphere','mesh'].includes(light.type))attenuation*=Math.sqrt(areaScale);
+
+===== around line 7016 =====
+7013:     const areaScale=
+7014:       light.type==='rectangle'?Math.max(.01,light.width*light.height):
+7015:       light.type==='disc'?Math.max(.01,Math.PI*light.size*light.size*.25):
+7016:       light.type==='sphere'?Math.max(.01,4*Math.PI*Math.pow(light.size*.5,2)):
+7017:       light.type==='mesh'?Math.max(.01,light.width*light.height):
+7018:       1;
+7019: 
+7020:     if(['rectangle','disc','sphere','mesh'].includes(light.type))attenuation*=Math.sqrt(areaScale);
+7021: 
+
+===== around line 7017 =====
+7014:       light.type==='rectangle'?Math.max(.01,light.width*light.height):
+7015:       light.type==='disc'?Math.max(.01,Math.PI*light.size*light.size*.25):
+7016:       light.type==='sphere'?Math.max(.01,4*Math.PI*Math.pow(light.size*.5,2)):
+7017:       light.type==='mesh'?Math.max(.01,light.width*light.height):
+7018:       1;
+7019: 
+7020:     if(['rectangle','disc','sphere','mesh'].includes(light.type))attenuation*=Math.sqrt(areaScale);
+7021: 
+7022:     return {
+
+===== around line 7020 =====
+7017:       light.type==='mesh'?Math.max(.01,light.width*light.height):
+7018:       1;
+7019: 
+7020:     if(['rectangle','disc','sphere','mesh'].includes(light.type))attenuation*=Math.sqrt(areaScale);
+7021: 
+7022:     return {
+7023:       kind:'local',
+7024:       direction:dir,
+7025:       distance:dist,
+
+===== around line 7026 =====
+7023:       kind:'local',
+7024:       direction:dir,
+7025:       distance:dist,
+7026:       radiance:RenderColor.mul(light.color,light.intensity*attenuation)
+7027:     };
+7028:   }
+7029: });
+7030: 
+7031: function updateSelectedLightPanel(){
+
+===== around line 7031 =====
+7028:   }
+7029: });
+7030: 
+7031: function updateSelectedLightPanel(){
+7032:   const section=document.getElementById('lightModifySection');
+7033:   if(!section)return;
+7034:   const obj=selected;
+7035:   const isLight=EditorLightSystem.isLightObject(obj);
+7036:   section.style.display=isLight?'':'none';
+
+===== around line 7032 =====
+7029: });
+7030: 
+7031: function updateSelectedLightPanel(){
+7032:   const section=document.getElementById('lightModifySection');
+7033:   if(!section)return;
+7034:   const obj=selected;
+7035:   const isLight=EditorLightSystem.isLightObject(obj);
+7036:   section.style.display=isLight?'':'none';
+7037:   if(!isLight)return;
+
+===== around line 7035 =====
+7032:   const section=document.getElementById('lightModifySection');
+7033:   if(!section)return;
+7034:   const obj=selected;
+7035:   const isLight=EditorLightSystem.isLightObject(obj);
+7036:   section.style.display=isLight?'':'none';
+7037:   if(!isLight)return;
+7038: 
+7039:   const l=obj.userData.renderLight;
+7040:   const set=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v};
+
+===== around line 7036 =====
+7033:   if(!section)return;
+7034:   const obj=selected;
+7035:   const isLight=EditorLightSystem.isLightObject(obj);
+7036:   section.style.display=isLight?'':'none';
+7037:   if(!isLight)return;
+7038: 
+7039:   const l=obj.userData.renderLight;
+7040:   const set=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v};
+7041:   set('lightTypeReadout',l.type);
+
+===== around line 7037 =====
+7034:   const obj=selected;
+7035:   const isLight=EditorLightSystem.isLightObject(obj);
+7036:   section.style.display=isLight?'':'none';
+7037:   if(!isLight)return;
+7038: 
+7039:   const l=obj.userData.renderLight;
+7040:   const set=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v};
+7041:   set('lightTypeReadout',l.type);
+7042:   set('lightIntensity',l.intensity);
+
+===== around line 7039 =====
+7036:   section.style.display=isLight?'':'none';
+7037:   if(!isLight)return;
+7038: 
+7039:   const l=obj.userData.renderLight;
+7040:   const set=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v};
+7041:   set('lightTypeReadout',l.type);
+7042:   set('lightIntensity',l.intensity);
+7043:   set('lightColor',l.color);
+7044:   set('lightRange',l.range);
+
+===== around line 7041 =====
+7038: 
+7039:   const l=obj.userData.renderLight;
+7040:   const set=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v};
+7041:   set('lightTypeReadout',l.type);
+7042:   set('lightIntensity',l.intensity);
+7043:   set('lightColor',l.color);
+7044:   set('lightRange',l.range);
+7045:   set('lightSize',l.size);
+7046:   set('lightWidth',l.width);
+
+===== around line 7042 =====
+7039:   const l=obj.userData.renderLight;
+7040:   const set=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v};
+7041:   set('lightTypeReadout',l.type);
+7042:   set('lightIntensity',l.intensity);
+7043:   set('lightColor',l.color);
+7044:   set('lightRange',l.range);
+7045:   set('lightSize',l.size);
+7046:   set('lightWidth',l.width);
+7047:   set('lightHeight',l.height);
+
+===== around line 7043 =====
+7040:   const set=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v};
+7041:   set('lightTypeReadout',l.type);
+7042:   set('lightIntensity',l.intensity);
+7043:   set('lightColor',l.color);
+7044:   set('lightRange',l.range);
+7045:   set('lightSize',l.size);
+7046:   set('lightWidth',l.width);
+7047:   set('lightHeight',l.height);
+7048:   set('lightConeAngle',l.coneAngle);
+
+===== around line 7044 =====
+7041:   set('lightTypeReadout',l.type);
+7042:   set('lightIntensity',l.intensity);
+7043:   set('lightColor',l.color);
+7044:   set('lightRange',l.range);
+7045:   set('lightSize',l.size);
+7046:   set('lightWidth',l.width);
+7047:   set('lightHeight',l.height);
+7048:   set('lightConeAngle',l.coneAngle);
+7049:   set('lightPenumbra',l.penumbra);
+
+===== around line 7045 =====
+7042:   set('lightIntensity',l.intensity);
+7043:   set('lightColor',l.color);
+7044:   set('lightRange',l.range);
+7045:   set('lightSize',l.size);
+7046:   set('lightWidth',l.width);
+7047:   set('lightHeight',l.height);
+7048:   set('lightConeAngle',l.coneAngle);
+7049:   set('lightPenumbra',l.penumbra);
+7050:   const en=document.getElementById('lightEnabled');if(en)en.checked=l.enabled!==false;
+
+===== around line 7046 =====
+7043:   set('lightColor',l.color);
+7044:   set('lightRange',l.range);
+7045:   set('lightSize',l.size);
+7046:   set('lightWidth',l.width);
+7047:   set('lightHeight',l.height);
+7048:   set('lightConeAngle',l.coneAngle);
+7049:   set('lightPenumbra',l.penumbra);
+7050:   const en=document.getElementById('lightEnabled');if(en)en.checked=l.enabled!==false;
+7051:   const sh=document.getElementById('lightCastShadows');if(sh)sh.checked=l.castShadows!==false;
+
+===== around line 7047 =====
+7044:   set('lightRange',l.range);
+7045:   set('lightSize',l.size);
+7046:   set('lightWidth',l.width);
+7047:   set('lightHeight',l.height);
+7048:   set('lightConeAngle',l.coneAngle);
+7049:   set('lightPenumbra',l.penumbra);
+7050:   const en=document.getElementById('lightEnabled');if(en)en.checked=l.enabled!==false;
+7051:   const sh=document.getElementById('lightCastShadows');if(sh)sh.checked=l.castShadows!==false;
+7052: }
+
+===== around line 7048 =====
+7045:   set('lightSize',l.size);
+7046:   set('lightWidth',l.width);
+7047:   set('lightHeight',l.height);
+7048:   set('lightConeAngle',l.coneAngle);
+7049:   set('lightPenumbra',l.penumbra);
+7050:   const en=document.getElementById('lightEnabled');if(en)en.checked=l.enabled!==false;
+7051:   const sh=document.getElementById('lightCastShadows');if(sh)sh.checked=l.castShadows!==false;
+7052: }
+7053: 
+
+===== around line 7049 =====
+7046:   set('lightWidth',l.width);
+7047:   set('lightHeight',l.height);
+7048:   set('lightConeAngle',l.coneAngle);
+7049:   set('lightPenumbra',l.penumbra);
+7050:   const en=document.getElementById('lightEnabled');if(en)en.checked=l.enabled!==false;
+7051:   const sh=document.getElementById('lightCastShadows');if(sh)sh.checked=l.castShadows!==false;
+7052: }
+7053: 
+7054: function markRenderLightDirty(){
+
+===== around line 7050 =====
+7047:   set('lightHeight',l.height);
+7048:   set('lightConeAngle',l.coneAngle);
+7049:   set('lightPenumbra',l.penumbra);
+7050:   const en=document.getElementById('lightEnabled');if(en)en.checked=l.enabled!==false;
+7051:   const sh=document.getElementById('lightCastShadows');if(sh)sh.checked=l.castShadows!==false;
+7052: }
+7053: 
+7054: function markRenderLightDirty(){
+7055:   window.__3DLiteLightRevision=(window.__3DLiteLightRevision||0)+1;
+
+===== around line 7051 =====
+7048:   set('lightConeAngle',l.coneAngle);
+7049:   set('lightPenumbra',l.penumbra);
+7050:   const en=document.getElementById('lightEnabled');if(en)en.checked=l.enabled!==false;
+7051:   const sh=document.getElementById('lightCastShadows');if(sh)sh.checked=l.castShadows!==false;
+7052: }
+7053: 
+7054: function markRenderLightDirty(){
+7055:   window.__3DLiteLightRevision=(window.__3DLiteLightRevision||0)+1;
+7056:   requestRender();
+
+===== around line 7054 =====
+7051:   const sh=document.getElementById('lightCastShadows');if(sh)sh.checked=l.castShadows!==false;
+7052: }
+7053: 
+7054: function markRenderLightDirty(){
+7055:   window.__3DLiteLightRevision=(window.__3DLiteLightRevision||0)+1;
+7056:   requestRender();
+7057: }
+7058: 
+7059: function bindLightUI(){
+
+===== around line 7055 =====
+7052: }
+7053: 
+7054: function markRenderLightDirty(){
+7055:   window.__3DLiteLightRevision=(window.__3DLiteLightRevision||0)+1;
+7056:   requestRender();
+7057: }
+7058: 
+7059: function bindLightUI(){
+7060:   document.querySelectorAll('[data-light-create]').forEach(btn=>{
+
+===== around line 7059 =====
+7056:   requestRender();
+7057: }
+7058: 
+7059: function bindLightUI(){
+7060:   document.querySelectorAll('[data-light-create]').forEach(btn=>{
+7061:     btn.addEventListener('click',()=>{
+7062:       EditorLightSystem.create(btn.dataset.lightCreate,{
+7063:         intensity:Number(document.getElementById('newLightIntensity')?.value)||10,
+7064:         color:document.getElementById('newLightColor')?.value||'#ffffff',
+
+===== around line 7060 =====
+7057: }
+7058: 
+7059: function bindLightUI(){
+7060:   document.querySelectorAll('[data-light-create]').forEach(btn=>{
+7061:     btn.addEventListener('click',()=>{
+7062:       EditorLightSystem.create(btn.dataset.lightCreate,{
+7063:         intensity:Number(document.getElementById('newLightIntensity')?.value)||10,
+7064:         color:document.getElementById('newLightColor')?.value||'#ffffff',
+7065:         size:Number(document.getElementById('newLightSize')?.value)||25,
+
+===== around line 7062 =====
+7059: function bindLightUI(){
+7060:   document.querySelectorAll('[data-light-create]').forEach(btn=>{
+7061:     btn.addEventListener('click',()=>{
+7062:       EditorLightSystem.create(btn.dataset.lightCreate,{
+7063:         intensity:Number(document.getElementById('newLightIntensity')?.value)||10,
+7064:         color:document.getElementById('newLightColor')?.value||'#ffffff',
+7065:         size:Number(document.getElementById('newLightSize')?.value)||25,
+7066:         range:Number(document.getElementById('newLightRange')?.value)||0
+7067:       });
+
+===== around line 7063 =====
+7060:   document.querySelectorAll('[data-light-create]').forEach(btn=>{
+7061:     btn.addEventListener('click',()=>{
+7062:       EditorLightSystem.create(btn.dataset.lightCreate,{
+7063:         intensity:Number(document.getElementById('newLightIntensity')?.value)||10,
+7064:         color:document.getElementById('newLightColor')?.value||'#ffffff',
+7065:         size:Number(document.getElementById('newLightSize')?.value)||25,
+7066:         range:Number(document.getElementById('newLightRange')?.value)||0
+7067:       });
+7068:     });
+
+===== around line 7064 =====
+7061:     btn.addEventListener('click',()=>{
+7062:       EditorLightSystem.create(btn.dataset.lightCreate,{
+7063:         intensity:Number(document.getElementById('newLightIntensity')?.value)||10,
+7064:         color:document.getElementById('newLightColor')?.value||'#ffffff',
+7065:         size:Number(document.getElementById('newLightSize')?.value)||25,
+7066:         range:Number(document.getElementById('newLightRange')?.value)||0
+7067:       });
+7068:     });
+7069:   });
+
+===== around line 7065 =====
+7062:       EditorLightSystem.create(btn.dataset.lightCreate,{
+7063:         intensity:Number(document.getElementById('newLightIntensity')?.value)||10,
+7064:         color:document.getElementById('newLightColor')?.value||'#ffffff',
+7065:         size:Number(document.getElementById('newLightSize')?.value)||25,
+7066:         range:Number(document.getElementById('newLightRange')?.value)||0
+7067:       });
+7068:     });
+7069:   });
+7070: 
+
+===== around line 7066 =====
+7063:         intensity:Number(document.getElementById('newLightIntensity')?.value)||10,
+7064:         color:document.getElementById('newLightColor')?.value||'#ffffff',
+7065:         size:Number(document.getElementById('newLightSize')?.value)||25,
+7066:         range:Number(document.getElementById('newLightRange')?.value)||0
+7067:       });
+7068:     });
+7069:   });
+7070: 
+7071:   const bindings=[
+
+===== around line 7072 =====
+7069:   });
+7070: 
+7071:   const bindings=[
+7072:     ['lightIntensity','intensity','number'],
+7073:     ['lightColor','color','string'],
+7074:     ['lightRange','range','number'],
+7075:     ['lightSize','size','number'],
+7076:     ['lightWidth','width','number'],
+7077:     ['lightHeight','height','number'],
+
+===== around line 7073 =====
+7070: 
+7071:   const bindings=[
+7072:     ['lightIntensity','intensity','number'],
+7073:     ['lightColor','color','string'],
+7074:     ['lightRange','range','number'],
+7075:     ['lightSize','size','number'],
+7076:     ['lightWidth','width','number'],
+7077:     ['lightHeight','height','number'],
+7078:     ['lightConeAngle','coneAngle','number'],
+
+===== around line 7074 =====
+7071:   const bindings=[
+7072:     ['lightIntensity','intensity','number'],
+7073:     ['lightColor','color','string'],
+7074:     ['lightRange','range','number'],
+7075:     ['lightSize','size','number'],
+7076:     ['lightWidth','width','number'],
+7077:     ['lightHeight','height','number'],
+7078:     ['lightConeAngle','coneAngle','number'],
+7079:     ['lightPenumbra','penumbra','number']
+
+===== around line 7075 =====
+7072:     ['lightIntensity','intensity','number'],
+7073:     ['lightColor','color','string'],
+7074:     ['lightRange','range','number'],
+7075:     ['lightSize','size','number'],
+7076:     ['lightWidth','width','number'],
+7077:     ['lightHeight','height','number'],
+7078:     ['lightConeAngle','coneAngle','number'],
+7079:     ['lightPenumbra','penumbra','number']
+7080:   ];
+
+===== around line 7076 =====
+7073:     ['lightColor','color','string'],
+7074:     ['lightRange','range','number'],
+7075:     ['lightSize','size','number'],
+7076:     ['lightWidth','width','number'],
+7077:     ['lightHeight','height','number'],
+7078:     ['lightConeAngle','coneAngle','number'],
+7079:     ['lightPenumbra','penumbra','number']
+7080:   ];
+7081: 
+
+===== around line 7077 =====
+7074:     ['lightRange','range','number'],
+7075:     ['lightSize','size','number'],
+7076:     ['lightWidth','width','number'],
+7077:     ['lightHeight','height','number'],
+7078:     ['lightConeAngle','coneAngle','number'],
+7079:     ['lightPenumbra','penumbra','number']
+7080:   ];
+7081: 
+7082:   for(const [id,key,kind] of bindings){
+
+===== around line 7078 =====
+7075:     ['lightSize','size','number'],
+7076:     ['lightWidth','width','number'],
+7077:     ['lightHeight','height','number'],
+7078:     ['lightConeAngle','coneAngle','number'],
+7079:     ['lightPenumbra','penumbra','number']
+7080:   ];
+7081: 
+7082:   for(const [id,key,kind] of bindings){
+7083:     document.getElementById(id)?.addEventListener('change',e=>{
+
+===== around line 7079 =====
+7076:     ['lightWidth','width','number'],
+7077:     ['lightHeight','height','number'],
+7078:     ['lightConeAngle','coneAngle','number'],
+7079:     ['lightPenumbra','penumbra','number']
+7080:   ];
+7081: 
+7082:   for(const [id,key,kind] of bindings){
+7083:     document.getElementById(id)?.addEventListener('change',e=>{
+7084:       if(!EditorLightSystem.isLightObject(selected))return;
+
+===== around line 7084 =====
+7081: 
+7082:   for(const [id,key,kind] of bindings){
+7083:     document.getElementById(id)?.addEventListener('change',e=>{
+7084:       if(!EditorLightSystem.isLightObject(selected))return;
+7085:       selected.userData.renderLight[key]=kind==='number'?Number(e.target.value):e.target.value;
+7086:       if(key==='size'||key==='color')EditorLightSystem.updateIcon(selected);
+7087:       markRenderLightDirty();
+7088:     });
+7089:   }
+
+===== around line 7085 =====
+7082:   for(const [id,key,kind] of bindings){
+7083:     document.getElementById(id)?.addEventListener('change',e=>{
+7084:       if(!EditorLightSystem.isLightObject(selected))return;
+7085:       selected.userData.renderLight[key]=kind==='number'?Number(e.target.value):e.target.value;
+7086:       if(key==='size'||key==='color')EditorLightSystem.updateIcon(selected);
+7087:       markRenderLightDirty();
+7088:     });
+7089:   }
+7090: 
+
+===== around line 7086 =====
+7083:     document.getElementById(id)?.addEventListener('change',e=>{
+7084:       if(!EditorLightSystem.isLightObject(selected))return;
+7085:       selected.userData.renderLight[key]=kind==='number'?Number(e.target.value):e.target.value;
+7086:       if(key==='size'||key==='color')EditorLightSystem.updateIcon(selected);
+7087:       markRenderLightDirty();
+7088:     });
+7089:   }
+7090: 
+7091:   document.getElementById('lightEnabled')?.addEventListener('change',e=>{
+
+===== around line 7087 =====
+7084:       if(!EditorLightSystem.isLightObject(selected))return;
+7085:       selected.userData.renderLight[key]=kind==='number'?Number(e.target.value):e.target.value;
+7086:       if(key==='size'||key==='color')EditorLightSystem.updateIcon(selected);
+7087:       markRenderLightDirty();
+7088:     });
+7089:   }
+7090: 
+7091:   document.getElementById('lightEnabled')?.addEventListener('change',e=>{
+7092:     if(EditorLightSystem.isLightObject(selected)){
+
+===== around line 7091 =====
+7088:     });
+7089:   }
+7090: 
+7091:   document.getElementById('lightEnabled')?.addEventListener('change',e=>{
+7092:     if(EditorLightSystem.isLightObject(selected)){
+7093:       selected.userData.renderLight.enabled=!!e.target.checked;
+7094:       markRenderLightDirty();
+7095:     }
+7096:   });
+
+===== around line 7092 =====
+7089:   }
+7090: 
+7091:   document.getElementById('lightEnabled')?.addEventListener('change',e=>{
+7092:     if(EditorLightSystem.isLightObject(selected)){
+7093:       selected.userData.renderLight.enabled=!!e.target.checked;
+7094:       markRenderLightDirty();
+7095:     }
+7096:   });
+7097:   document.getElementById('lightCastShadows')?.addEventListener('change',e=>{
+
+===== around line 7093 =====
+7090: 
+7091:   document.getElementById('lightEnabled')?.addEventListener('change',e=>{
+7092:     if(EditorLightSystem.isLightObject(selected)){
+7093:       selected.userData.renderLight.enabled=!!e.target.checked;
+7094:       markRenderLightDirty();
+7095:     }
+7096:   });
+7097:   document.getElementById('lightCastShadows')?.addEventListener('change',e=>{
+7098:     if(EditorLightSystem.isLightObject(selected)){
+
+===== around line 7094 =====
+7091:   document.getElementById('lightEnabled')?.addEventListener('change',e=>{
+7092:     if(EditorLightSystem.isLightObject(selected)){
+7093:       selected.userData.renderLight.enabled=!!e.target.checked;
+7094:       markRenderLightDirty();
+7095:     }
+7096:   });
+7097:   document.getElementById('lightCastShadows')?.addEventListener('change',e=>{
+7098:     if(EditorLightSystem.isLightObject(selected)){
+7099:       selected.userData.renderLight.castShadows=!!e.target.checked;
+
+===== around line 7097 =====
+7094:       markRenderLightDirty();
+7095:     }
+7096:   });
+7097:   document.getElementById('lightCastShadows')?.addEventListener('change',e=>{
+7098:     if(EditorLightSystem.isLightObject(selected)){
+7099:       selected.userData.renderLight.castShadows=!!e.target.checked;
+7100:       markRenderLightDirty();
+7101:     }
+7102:   });
+
+===== around line 7098 =====
+7095:     }
+7096:   });
+7097:   document.getElementById('lightCastShadows')?.addEventListener('change',e=>{
+7098:     if(EditorLightSystem.isLightObject(selected)){
+7099:       selected.userData.renderLight.castShadows=!!e.target.checked;
+7100:       markRenderLightDirty();
+7101:     }
+7102:   });
+7103: }
+
+===== around line 7099 =====
+7096:   });
+7097:   document.getElementById('lightCastShadows')?.addEventListener('change',e=>{
+7098:     if(EditorLightSystem.isLightObject(selected)){
+7099:       selected.userData.renderLight.castShadows=!!e.target.checked;
+7100:       markRenderLightDirty();
+7101:     }
+7102:   });
+7103: }
+7104: 
+
+===== around line 7100 =====
+7097:   document.getElementById('lightCastShadows')?.addEventListener('change',e=>{
+7098:     if(EditorLightSystem.isLightObject(selected)){
+7099:       selected.userData.renderLight.castShadows=!!e.target.checked;
+7100:       markRenderLightDirty();
+7101:     }
+7102:   });
+7103: }
+7104: 
+7105: const RenderGroup6Contract=Object.freeze({
+
+===== around line 7107 =====
+7104: 
+7105: const RenderGroup6Contract=Object.freeze({
+7106:   owns:Object.freeze([
+7107:     'editor render-light objects',
+7108:     'Point/Spot/Rectangle/Disc/Sphere/Sun/Dome/Mesh light data',
+7109:     'light creation UI',
+7110:     'light modify UI',
+7111:     'immutable light snapshot extraction',
+7112:     'renderer light compilation',
+
+===== around line 7108 =====
+7105: const RenderGroup6Contract=Object.freeze({
+7106:   owns:Object.freeze([
+7107:     'editor render-light objects',
+7108:     'Point/Spot/Rectangle/Disc/Sphere/Sun/Dome/Mesh light data',
+7109:     'light creation UI',
+7110:     'light modify UI',
+7111:     'immutable light snapshot extraction',
+7112:     'renderer light compilation',
+7113:     'direct light sampling interface'
+
+===== around line 7109 =====
+7106:   owns:Object.freeze([
+7107:     'editor render-light objects',
+7108:     'Point/Spot/Rectangle/Disc/Sphere/Sun/Dome/Mesh light data',
+7109:     'light creation UI',
+7110:     'light modify UI',
+7111:     'immutable light snapshot extraction',
+7112:     'renderer light compilation',
+7113:     'direct light sampling interface'
+7114:   ]),
+
+===== around line 7110 =====
+7107:     'editor render-light objects',
+7108:     'Point/Spot/Rectangle/Disc/Sphere/Sun/Dome/Mesh light data',
+7109:     'light creation UI',
+7110:     'light modify UI',
+7111:     'immutable light snapshot extraction',
+7112:     'renderer light compilation',
+7113:     'direct light sampling interface'
+7114:   ]),
+7115:   consumes:Object.freeze([
+
+===== around line 7111 =====
+7108:     'Point/Spot/Rectangle/Disc/Sphere/Sun/Dome/Mesh light data',
+7109:     'light creation UI',
+7110:     'light modify UI',
+7111:     'immutable light snapshot extraction',
+7112:     'renderer light compilation',
+7113:     'direct light sampling interface'
+7114:   ]),
+7115:   consumes:Object.freeze([
+7116:     'editor transform system',
+
+===== around line 7112 =====
+7109:     'light creation UI',
+7110:     'light modify UI',
+7111:     'immutable light snapshot extraction',
+7112:     'renderer light compilation',
+7113:     'direct light sampling interface'
+7114:   ]),
+7115:   consumes:Object.freeze([
+7116:     'editor transform system',
+7117:     'Core A RenderScene snapshots',
