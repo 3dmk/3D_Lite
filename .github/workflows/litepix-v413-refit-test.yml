@@ -1,0 +1,31 @@
+name: LitePix v4.13 Refit Test
+on:
+  push:
+    branches: [litepix-v4.13-blas-tlas-refit]
+    paths:
+      - 'tests/litepix-v413-tlas.mjs'
+      - 'litepix/core2-instance-v4.13.js'
+      - '.github/workflows/litepix-v413-refit-test.yml'
+jobs:
+  refit-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Syntax
+        run: node --check litepix/core2-instance-v4.13.js && node --check tests/litepix-v413-tlas.mjs
+      - name: BLAS TLAS transform refit test
+        run: node tests/litepix-v413-tlas.mjs | tee /tmp/v413-refit.json
+      - name: Gate assertions
+        run: |
+          node - <<'NODE'
+          const fs=require('fs');
+          const r=JSON.parse(fs.readFileSync('/tmp/v413-refit.json','utf8'));
+          if(!r.passed)throw new Error('refit test failed');
+          if(r.snapshot.instances!==1024)throw new Error('instance count wrong');
+          if(r.snapshot.uniqueBLAS!==1)throw new Error('BLAS sharing failed');
+          if(r.snapshot.refitCount!==1)throw new Error('refit telemetry failed');
+          console.log('LitePix v4.13 BLAS/TLAS refit gate passed');
+          NODE
