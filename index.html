@@ -23309,5 +23309,8 @@ A.updateConvergence=(key,variance,cost=1,type='pixel')=>{const m=type==='tile'?S
 A.convergenceSummary=()=>{const vals=[...S.convergence.tiles.values()];const stable=vals.filter(v=>v.stable).length;return {tiles:vals.length,stable,active:Math.max(0,vals.length-stable),ratio:vals.length?1-stable/vals.length:1};};
 const base=A.buildNextRenderStrategy.bind(A);A.buildNextRenderStrategy=(cur,h)=>{const x=base(cur,h),c=A.convergenceSummary();x.activeTileRatio=A.clamp(c.ratio,.05,1);x.activePixelRatio=A.clamp(c.ratio*.9+.1,.05,1);x.skipStablePixels=true;x.tilePriority='variance/cost';return x;};
 })();</script>
+<script id="l3n-adaptive-segment-3">
+(()=>{const A=window.ThreeDLiteAdaptiveRender3990;if(!A)return;A.passBudget=(pass,noise)=>{const p=Math.max(1,pass||1);let b=p<=2?1:p<=4?.8:p<=8?.6:p<=16?.4:p<=32?.25:p<=48?.15:.1;if((noise||0)>.08)b=Math.max(b,.5);return A.clamp(b,.08,1);};const base=A.buildNextRenderStrategy.bind(A);A.buildNextRenderStrategy=(cur,h)=>{const x=base(cur,h);x.rayBudget=A.passBudget(cur.pass,cur.noise);x.shadowBudget=A.clamp(.2+.8*x.rayBudget,.15,1);x.secondaryBudget=A.clamp(.15+.85*x.rayBudget,.1,1);return x;};
+})();</script>
 </body>
 </html>
