@@ -1,0 +1,33 @@
+name: L3N v3.98.3 Normalize Light Direction
+on:
+  push:
+    branches: [l3n-dev]
+    paths:
+      - '.l3n-light-direction-v3983-trigger'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: l3n-dev
+      - run: python3 tools/l3n_light_direction_v3983.py
+      - name: Validate
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('index.html').read_text(errors='ignore')
+          assert 'window.__3DLiteLightDefaultDirection3983=true' in s
+          assert 'obj.rotation.x=-Math.PI*.25;' not in s
+          print('default light direction validation passed')
+          PY
+      - name: Commit
+        run: |
+          git config user.name '3dmk'
+          git config user.email 'noneatall2026@gmail.com'
+          git add index.html
+          git diff --cached --quiet && exit 0
+          git commit -m 'L3N v3.98.3: normalize default light direction'
+          git push origin HEAD:l3n-dev
