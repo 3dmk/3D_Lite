@@ -12,12 +12,12 @@
     "triangles": 12
   },
   "fast": {
-    "wallMs": 434,
+    "wallMs": 459,
     "engine": "fast",
     "renderer": "Part 4 Fast Direct",
     "performance": {
-      "totalMs": 355.8999999999942,
-      "traceMs": 239.59999999999854,
+      "totalMs": 390.3000000000029,
+      "traceMs": 258.90000000000146,
       "actualRays": 0,
       "raysPerSecond": 0,
       "samples": 0,
@@ -28,14 +28,14 @@
     "core2": null
   },
   "legacy": {
-    "wallMs": 2166,
+    "wallMs": 2188,
     "engine": "path",
     "renderer": "Group 9 Progressive Path GI",
     "performance": {
-      "totalMs": 2084.5,
-      "traceMs": 2082.7000000000044,
+      "totalMs": 2113.800000000003,
+      "traceMs": 2087.5999999999985,
       "actualRays": 32530,
-      "raysPerSecond": 15619,
+      "raysPerSecond": 15582,
       "samples": 29111,
       "yields": 453,
       "bvhBuildMs": null
@@ -44,14 +44,14 @@
     "core2": null
   },
   "core2": {
-    "wallMs": 2153,
+    "wallMs": 2155,
     "engine": "path",
     "renderer": "Group 9 Progressive Path GI",
     "performance": {
-      "totalMs": 2110.4000000000015,
-      "traceMs": 2108.9000000000015,
+      "totalMs": 2117,
+      "traceMs": 2115,
       "actualRays": 32530,
-      "raysPerSecond": 15425,
+      "raysPerSecond": 15381,
       "samples": 29111,
       "yields": 453,
       "bvhBuildMs": null
@@ -62,21 +62,21 @@
       "provider": "LitePix Core2 SAH BVH",
       "triangles": 12,
       "nodes": 9,
-      "buildMs": 0.5,
+      "buildMs": 0.6,
       "traceRays": 32530,
       "shadowRays": 0,
-      "nodeTests": 50999,
-      "triangleTests": 18710,
+      "nodeTests": 59882,
+      "triangleTests": 15370,
       "hits": 3419,
       "anyHits": 0,
-      "avgNodeTests": 1.568,
-      "avgTriangleTests": 0.575,
-      "traceMs": 24.7,
+      "avgNodeTests": 1.841,
+      "avgTriangleTests": 0.472,
+      "traceMs": 21.4,
       "sah": {
         "nodes": 9,
         "leaves": 5,
         "primitives": 12,
-        "buildMs": 0.5,
+        "buildMs": 0.6000000000058208,
         "maxLeaf": 4,
         "bins": 16,
         "boundsEvaluations": 12,
@@ -87,11 +87,11 @@
   "comparison": {
     "maxPixelDiff": 0,
     "meanPixelDiff": 0,
-    "traceSpeedup": 0.9875764616624795,
-    "legacyTraceMs": 2082.7000000000044,
-    "core2TraceMs": 2108.9000000000015,
-    "legacyWallMs": 2166,
-    "core2WallMs": 2153
+    "traceSpeedup": 0.9870449172576825,
+    "legacyTraceMs": 2087.5999999999985,
+    "core2TraceMs": 2115,
+    "legacyWallMs": 2188,
+    "core2WallMs": 2155
   },
   "pageErrors": [],
   "consoleErrors": [],
