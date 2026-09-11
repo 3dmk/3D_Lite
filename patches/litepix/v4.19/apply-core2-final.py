@@ -20,19 +20,32 @@ if 'core2-production-v4.19.js' not in s:
     if anchor not in s: raise SystemExit('release-blocking: v4.15 loader missing')
     s=s.replace(anchor,loaders,1)
 if 'LitePixCore2Worker418.prewarm(job?.renderScene)' not in s:
+    # Actual current source may use a render property rather than method shorthand. Inspect exact nearby contexts on failure.
     patterns=[
-      r"(async\s+render\s*\(\s*job\s*,\s*sceneSnapshot\s*,\s*compiled\s*,\s*acceleration\s*,\s*settings\w*\s*\)\s*\{)",
-      r"(render\s*:\s*async\s*(?:function\s*)?\(\s*job\s*,\s*sceneSnapshot\s*,\s*compiled\s*,\s*acceleration\s*,\s*settings\w*\s*\)\s*\{)",
-      r"(async\s*\(\s*job\s*,\s*sceneSnapshot\s*,\s*compiled\s*,\s*acceleration\s*,\s*settings\w*\s*\)\s*=>\s*\{)"
+      r"(async\s+render\s*\([^)]*\)\s*\{)",
+      r"(render\s*:\s*async\s*(?:function\s*)?\([^)]*\)\s*\{)",
+      r"(render\s*:\s*async\s*\([^)]*\)\s*=>\s*\{)"
     ]
     matches=[]
     for pat in patterns: matches += list(re.finditer(pat,s))
     if len(matches)!=1:
-        pos=s.find("renderer:'Part 9 Group 9 Progressive Path GI'")
-        print('PATH_META_POS',pos)
-        if pos>=0: print('PATH_CONTEXT',repr(s[max(0,pos-4500):pos+800]))
-        raise SystemExit(f'release-blocking: expected one Path async render signature, found {len(matches)}')
-    m=matches[0];ins=m.group(1)+"\n    if(window.__LitePixCore2Worker418Enabled!==false&&window.LitePixCore2Worker418?.prewarm)await window.LitePixCore2Worker418.prewarm(job?.renderScene);";s=s[:m.start()]+ins+s[m.end():]
+        for needle in ['PathGIRenderer','Progressive Path','Path GI','tracePixel(job','litePixCore2Partial:job.litePixCore2Partial415']:
+            pos=s.find(needle)
+            print('ANCHOR',needle,'POS',pos)
+            if pos>=0: print('CONTEXT',repr(s[max(0,pos-1800):pos+1800]))
+        rc=[]
+        for m0 in re.finditer(r'\brender\s*(?::\s*)?\(?',s):
+            frag=s[m0.start():m0.start()+260]
+            if 'job' in frag or 'compiled' in frag or 'acceleration' in frag: rc.append(frag)
+        print('RENDER_CANDIDATES',rc[:25])
+        raise SystemExit(f'release-blocking: expected one async render candidate, found {len(matches)}')
+    m=matches[0]
+    # Require the candidate to be the path renderer by checking for path-specific content shortly after it.
+    tail=s[m.start():m.start()+12000]
+    if 'secondaryGI' not in tail and 'Progressive Path' not in tail and 'Path GI' not in tail:
+        print('ASYNC_CANDIDATE',repr(s[m.start():m.start()+1000]))
+        raise SystemExit('release-blocking: async render candidate is not Path renderer')
+    ins=m.group(1)+"\n    if(window.__LitePixCore2Worker418Enabled!==false&&window.LitePixCore2Worker418?.prewarm)await window.LitePixCore2Worker418.prewarm(job?.renderScene);";s=s[:m.start()]+ins+s[m.end():]
 oldroute="if(window.__LitePixCore2Partial415Enabled!==false&&typeof window.LitePixCore2PartialAcceleration415==='function'){\n      acceleration=window.LitePixCore2PartialAcceleration415.wrap(acceleration,job);"
 newroute="if(window.__LitePixCore2Production419Enabled!==false&&typeof window.LitePixCore2Production419==='function'){\n      acceleration=window.LitePixCore2Production419.wrap(acceleration,job);\n    }else if(window.__LitePixCore2Partial415Enabled!==false&&typeof window.LitePixCore2PartialAcceleration415==='function'){\n      acceleration=window.LitePixCore2PartialAcceleration415.wrap(acceleration,job);"
 if 'LitePixCore2Production419.wrap(acceleration,job)' not in s:
