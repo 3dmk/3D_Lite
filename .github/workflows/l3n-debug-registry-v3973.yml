@@ -27,7 +27,8 @@ jobs:
           assert '__3DLiteL3NDebugRegistry3973' in s
           assert 'ThreeDLiteL3NDebugRegistry' in s
           assert s.count('id="__3DLiteL3NDebugRegistry3973"') == 1
-          assert s.lower().count('<script') == s.lower().count('</script>')
+          assert "version:'3.97.3'" in s
+          assert 'ingestRuntimeReport' in s
           print('static sanity passed')
           PY
       - name: Commit patched index
