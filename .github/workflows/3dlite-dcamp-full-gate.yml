@@ -62,7 +62,7 @@ jobs:
             const architecture=await page.evaluate(()=>{
               const core=window.ThreeDLiteMainCore;if(!core)return {missing:true};
               const box={x:1};
-              const off=core.registerCommand('gate.move',{execute(_,v)=>{const before=box.x;box.x=v;return {value:box.x,dirty:['transform'],undo:()=>{box.x=before},redo:()=>{box.x=v}};}});
+              const off=core.registerCommand('gate.move',{execute:(_,v)=>{const before=box.x;box.x=v;return {value:box.x,dirty:['transform'],undo:()=>{box.x=before},redo:()=>{box.x=v}};}});
               const commandValue=core.executeCommand('gate.move',5);const afterCommand=box.x;const undoOK=core.undo(),afterUndo=box.x;const redoOK=core.redo(),afterRedo=box.x;off();
               let computes=0;const d1=core.derive('gate-derived',['transform'],()=>++computes);const d2=core.derive('gate-derived',['transform'],()=>++computes);core.dirty('transform');const d3=core.derive('gate-derived',['transform'],()=>++computes);
               const h1=core.createResource('gate',{value:1});const h2=core.updateResource(h1,{value:2});const stale=core.getResource(h1),fresh=core.getResource(h2);const released=core.releaseResource(h2);
