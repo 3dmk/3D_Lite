@@ -5,23 +5,37 @@ on:
     paths:
       - '.l3n-kernel-inspect-v3980-trigger'
 permissions:
-  contents: read
+  contents: write
 jobs:
   inspect:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Inspect renderer ownership and APIs
+      - name: Extract focused renderer source
         shell: python
         run: |
           from pathlib import Path
           import re
           s=Path('index.html').read_text(encoding='utf-8')
-          terms=['LiteTraceExecutionContext','RenderTileScheduler16','BasicDirectRenderer','RenderCore1','RenderCore2','RenderCoreE','class BVH','BVH','traceRay','traceGI','intersect','renderTile','PathState','GGX','MIS','materialIndex','renderPass']
+          terms=['LiteTraceExecutionContext','RenderTileScheduler16','BasicDirectRenderer','RenderCore1','RenderCore2','RenderCoreE','class BVH','function buildBVH','buildBVH','traceRay','traceGI','intersect','renderTile','PathState','GGX','MIS','materialIndex','renderPass','sampleLight','shadowRay','roughness','refraction']
+          chunks=[]
+          seen=[]
           for term in terms:
-              print('\n===== TERM',term,'=====')
               matches=list(re.finditer(re.escape(term),s,re.I))
-              print('COUNT',len(matches))
-              for m in matches[:12]:
-                  a=max(0,m.start()-1200); b=min(len(s),m.end()+2200)
-                  print('\n---',m.start(),'---\n',s[a:b].replace('\r',''))
+              chunks.append(f'\n===== TERM {term} COUNT {len(matches)} =====\n')
+              for m in matches[:10]:
+                  a=max(0,m.start()-1800); b=min(len(s),m.end()+4200)
+                  if any(abs(m.start()-p)<2500 for p in seen):
+                      continue
+                  seen.append(m.start())
+                  chunks.append(f'\n--- OFFSET {m.start()} ---\n{s[a:b]}\n')
+          Path('tmp').mkdir(exist_ok=True)
+          Path('tmp/v3980_renderer_excerpt.txt').write_text(''.join(chunks),encoding='utf-8')
+      - name: Commit focused renderer source
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tmp/v3980_renderer_excerpt.txt
+          git diff --cached --quiet && exit 0
+          git commit -m 'Temporary v3.98.0 renderer source excerpt'
+          git push
