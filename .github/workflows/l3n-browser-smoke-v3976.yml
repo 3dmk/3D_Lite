@@ -1,0 +1,77 @@
+name: L3N v3.97.6 Browser Smoke
+on:
+  push:
+    branches: [l3n-dev]
+    paths:
+      - '.l3n-browser-smoke-v3976-trigger'
+permissions:
+  contents: read
+jobs:
+  browser-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: l3n-dev
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null
+      - name: Start server
+        run: |
+          python3 -m http.server 8000 >/tmp/3dlite-http.log 2>&1 &
+          sleep 2
+      - name: Runtime smoke
+        run: |
+          node <<'JS'
+          const { chromium } = require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--use-angle=swiftshader','--enable-webgl','--ignore-gpu-blocklist']});
+            const page=await browser.newPage();
+            const pageErrors=[];const rendererErrors=[];
+            page.on('pageerror',e=>pageErrors.push(String(e)));
+            page.on('console',m=>{const t=m.text();if(t.includes('[3DLite Renderer] validation'))rendererErrors.push(t);});
+            const r=await page.goto('http://127.0.0.1:8000/index.html',{waitUntil:'domcontentloaded',timeout:60000});
+            if(!r||!r.ok())throw new Error('HTTP load failed');
+            await page.waitForTimeout(5000);
+            const result=await page.evaluate(()=>{
+              const d=window.ThreeDLiteL3NCompleteRenderDebugger;
+              const sync=window.ThreeDLiteL3NRuntimeReportSync;
+              if(!d||!sync)throw new Error('missing v3.97.6 diagnostics');
+              const merged=sync.merge({schema:1,version:'3.93.0',baselineVersion:'3.93.0',method:'L3N Runtime Learning',l3nEvidence:5,tests:[]});
+              const unknown=d.record('RND-9999',{message:'unknown smoke',status:'resolved'});
+              const material=d.classify('material index out of range','render');
+              const uv=d.classify('invalid UV coordinates','render');
+              const snap=d.snapshot();
+              return {
+                title:document.title,
+                publicVersion:window.ThreeDLiteVersion?.version,
+                apiVersion:window.ThreeDLiteBrowserTestAPI?.version,
+                liveVersion:window.__3DLiteLiveBuild?.version,
+                buildVersion:window.ThreeDLiteBuildIdentity?.version,
+                debugVersion:d.version,syncVersion:sync.version,
+                mergedVersion:merged.version,mergedBaseline:merged.baselineVersion,mergedDebug:merged.renderDebug?.version,
+                versionSynchronized:merged.versionSynchronized,rndEvidence:Array.isArray(merged.rndEvidence),
+                has1194:!!window.ThreeDLiteRenderErrorCodes?.['RND-1194'],unknownCode:unknown.code,material,uv,
+                samples:Array.isArray(snap.samples),renders:!!snap.renders,
+                viewportReady:document.documentElement.dataset.viewportReady==='true',
+                canvas:!!document.querySelector('#viewport canvas'),three:!!window.THREE,frames:window.ThreeDLiteRuntimeTelemetry?.metrics?.frames||0,
+                regression:window.ThreeDLiteL3NIntegration?.regression?.()
+              };
+            });
+            console.log(JSON.stringify(result,null,2));
+            if(!result.title.includes('3DLite v3.97.6'))throw new Error('wrong title '+result.title);
+            for(const [k,v] of Object.entries({publicVersion:result.publicVersion,apiVersion:result.apiVersion,liveVersion:result.liveVersion,buildVersion:result.buildVersion,debugVersion:result.debugVersion,syncVersion:result.syncVersion,mergedVersion:result.mergedVersion,mergedBaseline:result.mergedBaseline,mergedDebug:result.mergedDebug})) if(v!=='3.97.6') throw new Error(k+' wrong '+v);
+            if(!result.versionSynchronized||!result.rndEvidence||!result.has1194||result.unknownCode!=='RND-1194')throw new Error('sync/RND registry failed '+JSON.stringify(result));
+            if(result.material!=='RND-0501'||result.uv!=='RND-0602')throw new Error('classification failed '+JSON.stringify(result));
+            if(!result.samples||!result.renders||!result.viewportReady||!result.canvas||!result.three||result.frames<1)throw new Error('runtime readiness failed '+JSON.stringify(result));
+            if(pageErrors.length)throw new Error('page errors: '+pageErrors.join(' | '));
+            if(rendererErrors.length)throw new Error('renderer validation errors: '+rendererErrors.join(' | '));
+            if(result.regression&&result.regression.passed===false)throw new Error('L3N regression failed '+JSON.stringify(result.regression));
+            await browser.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          JS
