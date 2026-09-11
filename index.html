@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>3DLite v3.98.2 L3N Diagnostic Learning</title>
+<title>3DLite v3.98.3 Light Energy Normalization</title>
 <style>
 :root{
   --bg:#202020;--panel:#2a2a2a;--panel2:#303030;--line:#444;--line2:#555;
@@ -968,7 +968,7 @@ input[type="number"].numericDragging{
     <button class="menuBtn" data-menu="render" id="renderMenuBtn">Render</button>
     <button class="menuBtn" data-menu="help">Help</button>
     <div style="flex:1"></div>
-    <span class="small" id="threeDLitePublicVersion">3DLite 3.98.2</span>
+    <span class="small" id="threeDLitePublicVersion">3DLite 3.98.3</span>
   </div>
   
   <div id="renderMenuPopup" class="render-menu-popup" aria-hidden="true">
@@ -1611,7 +1611,7 @@ input[type="number"].numericDragging{
 <div id="lightModifySection" class="section" style="display:none">
   <div class="sectionTitle">Light</div>
   <div class="row"><label>Type</label><input id="lightTypeReadout" class="fieldGrow" type="text" readonly></div>
-  <div class="row"><label>Intensity</label><input id="lightIntensity" type="number" min="0" step="0.1" value="10"></div>
+  <div class="row"><label>Intensity</label><input id="lightIntensity" type="number" min="0" step="0.1" value="1"></div>
   <div class="row"><label>Color</label><input id="lightColor" type="color" value="#ffffff"></div>
   <div class="row"><label>Range</label><input id="lightRange" type="number" min="0" step="1" value="0"></div>
   <div class="row"><label>Size</label><input id="lightSize" type="number" min="0.01" step="0.1" value="25"></div>
@@ -4185,7 +4185,7 @@ function validateArchitectureCore(){
   return {ok:errors.length===0,errors};
 }
 
-const ThreeDLiteVersion=Object.freeze({name:'3DLite',version:'3.98.2'});
+const ThreeDLiteVersion=Object.freeze({name:'3DLite',version:'3.98.3'});
 const LiteTraceVersion=Object.freeze({name:'LiteTrace Renderer',version:'1.1 RC1'});
 window.ThreeDLiteVersion=ThreeDLiteVersion;
 window.LiteTraceVersion=LiteTraceVersion;
@@ -6597,7 +6597,7 @@ var RenderTileScheduler16=Object.freeze({
 });
 window.RenderTileScheduler16=RenderTileScheduler16;
 
-/* 3DLite v3.98.2 — LiteTrace execution-context dependency repair */
+/* 3DLite v3.98.3 — LiteTrace execution-context dependency repair */
 var LiteTraceExecutionContext=(function(){
   const existing=window.LiteTraceExecutionContext;
   if(existing&&typeof existing==='object')return existing;
@@ -6811,15 +6811,43 @@ Object.assign(window,{
 const LightTypes=Object.freeze(['point','spot','rectangle','disc','sphere','sun','dome','mesh']);
 
 const LightDefaults=Object.freeze({
-  point:Object.freeze({intensity:10,size:2,range:0,coneAngle:45,penumbra:.15}),
-  spot:Object.freeze({intensity:25,size:2,range:0,coneAngle:45,penumbra:.15}),
-  rectangle:Object.freeze({intensity:15,size:25,width:50,height:50,range:0,coneAngle:90,penumbra:0}),
-  disc:Object.freeze({intensity:15,size:25,range:0,coneAngle:90,penumbra:0}),
-  sphere:Object.freeze({intensity:15,size:25,range:0,coneAngle:180,penumbra:0}),
-  sun:Object.freeze({intensity:3,size:.5,range:0,coneAngle:.53,penumbra:0}),
+  point:Object.freeze({intensity:1,size:2,range:0,coneAngle:45,penumbra:.15}),
+  spot:Object.freeze({intensity:1,size:2,range:0,coneAngle:45,penumbra:.15}),
+  rectangle:Object.freeze({intensity:1,size:25,width:50,height:50,range:0,coneAngle:90,penumbra:0}),
+  disc:Object.freeze({intensity:1,size:25,range:0,coneAngle:90,penumbra:0}),
+  sphere:Object.freeze({intensity:1,size:25,range:0,coneAngle:180,penumbra:0}),
+  sun:Object.freeze({intensity:1,size:.5,range:0,coneAngle:.53,penumbra:0}),
   dome:Object.freeze({intensity:1,size:100,range:0,coneAngle:180,penumbra:0}),
-  mesh:Object.freeze({intensity:10,size:25,range:0,coneAngle:180,penumbra:0})
+  mesh:Object.freeze({intensity:1,size:25,range:0,coneAngle:180,penumbra:0})
 });
+
+// v3.98.3: one artistic intensity scale for every light type.
+// Intensity=1 is the common baseline. Local lights use a gentle scene-unit falloff
+// so they remain useful instead of becoming nearly black from raw 1/r^2 at cm-scale distances.
+const LightEnergyPolicy=Object.freeze({
+  referenceDistance:100,
+  distanceAttenuation(light,distance){
+    const d=Math.max(0,Number(distance)||0);
+    const ref=this.referenceDistance;
+    let a=1/(1+(d/ref)*(d/ref));
+    const range=Math.max(0,Number(light?.range)||0);
+    if(range>0){
+      if(d>=range)return 0;
+      const t=Math.max(0,Math.min(1,1-d/range));
+      // smooth finite-range fade without changing the shared intensity unit.
+      a*=t*t*(3-2*t);
+    }
+    return a;
+  },
+  radiance(light,factor=1){
+    const intensity=Math.max(0,Number(light?.intensity)||0);
+    return RenderColor.mul(light.color,intensity*Math.max(0,Number(factor)||0));
+  }
+});
+window.LightEnergyPolicy=LightEnergyPolicy;
+window.__3DLiteLightEnergy3983=true;
+window.__3DLiteLightDefaultDirection3983=true;
+window.ThreeDLiteLightEnergy3983=Object.freeze({version:'3.98.3',baselineIntensity:1,referenceDistance:100});
 
 var EditorLightSystem={
   nextId:1,
@@ -6893,7 +6921,7 @@ var EditorLightSystem={
       depthTest:false,depthWrite:false,toneMapped:false
     });
     const obj=new THREE.LineSegments(geometry,material);
-    obj.userData.lightViewportIcon={theme:'editor-neutral',pixels:22,version:'3.98.2'};
+    obj.userData.lightViewportIcon={theme:'editor-neutral',pixels:22,version:'3.98.3'};
     obj.onBeforeRender=(renderer,_scene,camera)=>this.updateViewportIconScale(obj,camera,renderer);
     obj.renderOrder=1000;
     obj.name=(type[0].toUpperCase()+type.slice(1))+' Light '+this.nextId++;
@@ -6914,9 +6942,6 @@ var EditorLightSystem={
     };
     obj.userData.isRenderLight=true;
     obj.position.set(0,0,Math.max(20,size));
-    if(type==='sun'||type==='spot'||type==='rectangle'||type==='disc'||type==='mesh'){
-      obj.rotation.x=-Math.PI*.25;
-    }
     scene.add(obj);objects.push(obj);
     window.__3DLiteLightRevision=(window.__3DLiteLightRevision||0)+1;
     selectOnly(obj);
@@ -6963,7 +6988,7 @@ var EditorLightSystem={
   }
 };
 
-window.ThreeDLiteLightViewportIcons3982=Object.freeze({version:'3.98.2',types:LightTypes.slice(),mode:'minimal-ui-themed-viewport-icons',theme:'#aeb4bc',screenPixels:22});
+window.ThreeDLiteLightViewportIcons3982=Object.freeze({version:'3.98.3',types:LightTypes.slice(),mode:'minimal-ui-themed-viewport-icons',theme:'#aeb4bc',screenPixels:22});
 window.__3DLiteLightViewportIcons3982=true;
 
 var LightSnapshotTools=Object.freeze({
@@ -7033,22 +7058,17 @@ var SceneLightCompiler=Object.freeze({
 const DirectLightSampler=Object.freeze({
   sample(light,point){
     if(light.type==='dome'){
-      return {kind:'ambient',direction:null,distance:Infinity,radiance:RenderColor.mul(light.color,light.intensity)};
+      return {kind:'ambient',direction:null,distance:Infinity,radiance:LightEnergyPolicy.radiance(light)};
     }
     if(light.type==='sun'){
-      return {kind:'directional',direction:RayMath.mul(light.direction,-1),distance:Infinity,radiance:RenderColor.mul(light.color,light.intensity)};
+      return {kind:'directional',direction:RayMath.mul(light.direction,-1),distance:Infinity,radiance:LightEnergyPolicy.radiance(light)};
     }
 
     const to=RayMath.sub(light.position,point);
     const dist=Math.max(RayMath.length(to),1e-4);
     const dir=RayMath.mul(to,1/dist);
-    let attenuation=1/(dist*dist);
-
-    if(light.range>0){
-      if(dist>=light.range)return {kind:'local',direction:dir,distance:dist,radiance:[0,0,0]};
-      const f=Math.max(0,1-dist/light.range);
-      attenuation*=f*f;
-    }
+    let attenuation=LightEnergyPolicy.distanceAttenuation(light,dist);
+    if(attenuation<=0)return {kind:'local',direction:dir,distance:dist,radiance:[0,0,0]};
 
     if(light.type==='spot'){
       const fromLight=RayMath.mul(dir,-1);
@@ -7060,22 +7080,11 @@ const DirectLightSampler=Object.freeze({
       attenuation*=cone;
     }
 
-    // Area emitters use center-point evaluation in Group 6.
-    // Group 7 replaces this with actual surface sampling + visibility.
-    const areaScale=
-      light.type==='rectangle'?Math.max(.01,light.width*light.height):
-      light.type==='disc'?Math.max(.01,Math.PI*light.size*light.size*.25):
-      light.type==='sphere'?Math.max(.01,4*Math.PI*Math.pow(light.size*.5,2)):
-      light.type==='mesh'?Math.max(.01,light.width*light.height):
-      1;
-
-    if(['rectangle','disc','sphere','mesh'].includes(light.type))attenuation*=Math.sqrt(areaScale);
-
     return {
       kind:'local',
       direction:dir,
       distance:dist,
-      radiance:RenderColor.mul(light.color,light.intensity*attenuation)
+      radiance:LightEnergyPolicy.radiance(light,attenuation)
     };
   }
 });
@@ -7135,7 +7144,7 @@ function bindLightUI(){
     document.getElementById(id)?.addEventListener('change',e=>{
       if(!EditorLightSystem.isLightObject(selected))return;
       selected.userData.renderLight[key]=kind==='number'?Number(e.target.value):e.target.value;
-      /* v3.98.2 viewport icon is independent of physical size/color */
+      /* v3.98.3 viewport icon is independent of physical size/color */
       markRenderLightDirty();
     });
   }
@@ -7202,7 +7211,9 @@ function runRenderGroup6SelfTests(){
     castShadows:true,position:[0,0,10],direction:[0,0,-1]
   });
   const sp=DirectLightSampler.sample(spot,[0,0,0]);
-  if(sp.radiance.some(x=>!Number.isFinite(x)||x<0))errors.push('Spot light sample failed');
+  if(sp.radiance.some(x=>!Number.isFinite(x)||x<0)||sp.radiance.every(x=>x<=0))errors.push('Spot light on-axis sample failed');
+  const spOutside=DirectLightSampler.sample(spot,[10,0,0]);
+  if(spOutside.radiance.some(x=>!Number.isFinite(x))||spOutside.radiance.some(x=>x!==0))errors.push('Spot light outside-cone cutoff failed');
 
   return {ok:errors.length===0,errors};
 }
@@ -7285,7 +7296,7 @@ const EnvironmentSampler=Object.freeze({
   findDome(lights){return (lights||[]).find(l=>l.enabled!==false&&l.type==='dome')||null;},
   radiance(light,direction){
     if(!light||light.enabled===false||light.type!=='dome')return [0,0,0];
-    return RenderColor.mul(light.color,light.intensity);
+    return LightEnergyPolicy.radiance(light);
   },
   background(renderScene,settings,lights,rayDirection){
     const dome=this.findDome(lights);
@@ -7339,11 +7350,7 @@ const AreaLightSampler=Object.freeze({
       return {kind:'local',direction:dir,distance:dist,radiance:[0,0,0],lightPoint,area};
     }
 
-    let attenuation=1/(dist*dist);
-    if(light.range>0){
-      const f=Math.max(0,1-dist/light.range);
-      attenuation*=f*f;
-    }
+    let attenuation=LightEnergyPolicy.distanceAttenuation(light,dist);
 
     let emitterCos=1;
     if(emitterNormal){
@@ -7358,7 +7365,8 @@ const AreaLightSampler=Object.freeze({
       kind:'local',
       direction:dir,
       distance:dist,
-      radiance:RenderColor.mul(light.color,light.intensity*attenuation*emitterCos/safeArea),
+      // Size changes sampling footprint/softness only; intensity remains the same user-facing unit.
+      radiance:LightEnergyPolicy.radiance(light,attenuation*emitterCos),
       lightPoint,
       area:safeArea,
       emitterCos
@@ -7807,7 +7815,7 @@ const LightTreePolicy=Object.freeze({
   },
   power(light){
     const base=Math.max(1e-8,this.luminance(light.color||[1,1,1])*(light.intensity||0));
-    return base*Math.sqrt(this.area(light));
+    return base;
   }
 });
 
@@ -21399,7 +21407,7 @@ queueMicrotask(()=>{
    ============================================================ */
 
 const ThreeDLiteRuntimeLearningConfig = Object.freeze({
-  version:'3.98.2',
+  version:'3.98.3',
   reportSchema:1,
   baselineKey:'3DLite.RuntimeLearning.Baseline.v1',
   reportKey:'3DLite.RuntimeLearning.LastReport.v1',
@@ -21963,14 +21971,14 @@ window.ThreeDLiteRuntimeLearningUI=ThreeDLiteRuntimeLearningUI;
 queueMicrotask(()=>{
   try{
     ThreeDLiteRuntimeLearningUI.install();
-    ThreeDLiteSubsystemHealth?.set?.('runtimeLearning','READY','v3.98.2 runtime learning installed');
+    ThreeDLiteSubsystemHealth?.set?.('runtimeLearning','READY','v3.98.3 runtime learning installed');
   }catch(error){
     ThreeDLiteRuntimeTelemetry?.error?.('runtime-learning-ui-install',error);
   }
 });
 
 window.__3DLiteRuntimeLearning = Object.freeze({
-  version:'3.98.2',
+  version:'3.98.3',
   testCount:ThreeDLiteRuntimeWorkflowTests.list().length,
   capabilities:Object.freeze([
     'operation-profiler',
@@ -21984,7 +21992,7 @@ window.__3DLiteRuntimeLearning = Object.freeze({
   ])
 });
 document.documentElement.dataset.l3nLearningVersion='6';
-document.documentElement.dataset.runtimeLearningVersion='3.98.2';
+document.documentElement.dataset.runtimeLearningVersion='3.98.3';
 
 
 /* ============================================================
@@ -21993,7 +22001,7 @@ document.documentElement.dataset.runtimeLearningVersion='3.98.2';
    ============================================================ */
 
 const ThreeDLiteBrowserTestAPI = Object.freeze({
-  version:'3.98.2',
+  version:'3.98.3',
 
   async runAll(){
     return await ThreeDLiteRuntimeLearningEngine.run();
@@ -22167,7 +22175,7 @@ queueMicrotask(()=>{
       });
     }
 
-    ThreeDLiteSubsystemHealth?.set?.('browserTestAPI','READY','v3.98.2 GitHub Pages runtime bridge installed');
+    ThreeDLiteSubsystemHealth?.set?.('browserTestAPI','READY','v3.98.3 GitHub Pages runtime bridge installed');
   }catch(error){
     ThreeDLiteRuntimeTelemetry?.error?.('browser-test-api-install',error);
   }
@@ -22175,7 +22183,7 @@ queueMicrotask(()=>{
 
 /* Stable global metadata for browser automation / Pages checks. */
 window.__3DLiteLiveBuild = Object.freeze({
-  version:'3.98.2',
+  version:'3.98.3',
   channel:'github-pages-dev',
   testApi:'ThreeDLiteBrowserTestAPI',
   reportNode:'#l3nRuntimeMachineReport',
@@ -22186,7 +22194,7 @@ document.documentElement.dataset.browserTestApi='1';
 
 
 /* ============================================================
-   3DLite v3.98.2 — Central Public Version Synchronizer
+   3DLite v3.98.3 — Central Public Version Synchronizer
    Public UI version is owned by ThreeDLiteVersion.
    Historical subsystem versions remain unchanged intentionally.
    ============================================================ */
@@ -22254,7 +22262,7 @@ queueMicrotask(()=>{
   const transactionLog=[];
   const TransactionService=Object.freeze({run(label,apply,rollback){const started=now();try{const value=apply();transactionLog.push(Object.freeze({label:String(label),ok:true,ms:now()-started,at:Date.now()}));if(transactionLog.length>128)transactionLog.shift();return value;}catch(error){try{if(typeof rollback==='function')rollback(error);}catch(rollbackError){console.error('3DLite rollback failed',rollbackError);}transactionLog.push(Object.freeze({label:String(label),ok:false,ms:now()-started,error:String(error?.message||error),at:Date.now()}));if(transactionLog.length>128)transactionLog.shift();throw error;}},inspect(){return Object.freeze([...transactionLog]);}});
   const RendererIsolation=Object.freeze({inspect(){const canvas=document.querySelector('#viewport canvas');const renderer=window.renderer||window.ThreeDLiteRenderer||null;return Object.freeze({canvasPresent:!!canvas,rendererPresent:!!renderer,contextLost:!!(canvas&&canvas.isContextLost?.())});},requestRender(reason='l3n'){if(typeof window.invalidateViewport==='function'){window.invalidateViewport(reason);return true;}if(typeof window.markViewportDirty==='function'){window.markViewportDirty(reason);return true;}return false;}});
-  const BuildIdentity=Object.freeze({version:'3.98.2',method:'L3N',targets:15,stage:'deep-integrated-development'});
+  const BuildIdentity=Object.freeze({version:'3.98.3',method:'L3N',targets:15,stage:'deep-integrated-development'});
   document.documentElement.dataset.threeDLiteVersion=BuildIdentity.version;
   const targetNames=Object.freeze(['runtime telemetry','startup hardening','release gate','dead-code cleanup','event ownership','viewport performance','selection','mesh correctness','target weld','undo transactions','renderer isolation','mesh validation repair','performance diagnostics','versioning','L3N learning']);
   const targetState=targetNames.map((name,i)=>({id:i+1,name,status:i===0?'implemented':'infrastructure-ready',notes:[]}));
@@ -22312,9 +22320,9 @@ L.startup();window.__3DLiteL3NIntegrationSnapshot=L.regression();})();
 </script>
 
 \n<script id="__3DLiteL3NDebugRegistry3973">
-/* 3DLite v3.98.2 — L3N Diagnostic Registry + categorized debugging learning */
+/* 3DLite v3.98.3 — L3N Diagnostic Registry + categorized debugging learning */
 (()=>{
-  const VERSION='3.98.2';
+  const VERSION='3.98.3';
   const STORAGE_KEY='3dlite.l3n.debug.v1';
   const MAX_ISSUES=400;
   const MAX_LESSONS=200;
@@ -22416,9 +22424,9 @@ L.startup();window.__3DLiteL3NIntegrationSnapshot=L.regression();})();
 })();
 </script>\n
 <script id="__3DLiteMaterialIndexGuard3974">
-/* 3DLite v3.98.2 — material slot integrity guard */
+/* 3DLite v3.98.3 — material slot integrity guard */
 (()=>{
-  const VERSION='3.98.2';
+  const VERSION='3.98.3';
   function slotsFor(obj){return Math.max(1,Array.isArray(obj?.material)?obj.material.length:(obj?.material?1:1));}
   function inspect(obj){
     const groups=obj?.geometry?.groups||[];
@@ -22455,9 +22463,9 @@ L.startup();window.__3DLiteL3NIntegrationSnapshot=L.regression();})();
 </script>
 
 <script id="__3DLiteL3NRenderDebugger3975">
-/* 3DLite v3.98.2 — L3N Rendering Debugger + permanent RND error-code registry */
+/* 3DLite v3.98.3 — L3N Rendering Debugger + permanent RND error-code registry */
 (()=>{
-  const VERSION='3.98.2';
+  const VERSION='3.98.3';
   const STALL_MS=8000;
   const MAX_REPORTS=120;
   const CODES=Object.freeze({
@@ -22640,9 +22648,9 @@ L.startup();window.__3DLiteL3NIntegrationSnapshot=L.regression();})();
 </script>
 
 <script id="__3DLiteL3NRuntimeRenderDebug3976">
-/* 3DLite v3.98.2 — Runtime Learning synchronization + complete L3N render diagnostics */
+/* 3DLite v3.98.3 — Runtime Learning synchronization + complete L3N render diagnostics */
 (()=>{
-  const VERSION='3.98.2';
+  const VERSION='3.98.3';
   const MAX_EVENTS=600;
   const MAX_SAMPLES=600;
   const base=()=>window.ThreeDLiteL3NRenderDebugger||null;
@@ -22825,9 +22833,9 @@ L.startup();window.__3DLiteL3NIntegrationSnapshot=L.regression();})();
 </script>
 
 <script id="__3DLiteRenderDebugList3977">
-/* 3DLite v3.98.2 — selectable/copyable render-debug list in editor render window */
+/* 3DLite v3.98.3 — selectable/copyable render-debug list in editor render window */
 (()=>{
-  const VERSION='3.98.2';
+  const VERSION='3.98.3';
   const STATE={timer:null,lastText:'',opened:false};
   const safe=v=>{try{return JSON.parse(JSON.stringify(v));}catch(_){return null;}};
   const esc=v=>String(v??'').replace(/\r?\n/g,' ');
@@ -22960,10 +22968,10 @@ L.startup();window.__3DLiteL3NIntegrationSnapshot=L.regression();})();
 </script>
 
 <script id="__3DLiteRenderWindowLive3979">
-/* 3DLite v3.98.2 — movable/zoomable live render framebuffer + bucket/progressive progress */
+/* 3DLite v3.98.3 — movable/zoomable live render framebuffer + bucket/progressive progress */
 (()=>{
   'use strict';
-  const VERSION='3.98.2';
+  const VERSION='3.98.3';
   const state={panX:0,panY:0,drag:false,lastX:0,lastY:0,space:false,bucketCount:0,bucketTotal:0,lastStage:'Idle',stageRatio:0,lastJobId:null,installed:false};
   const $=id=>document.getElementById(id);
   const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
@@ -23118,7 +23126,7 @@ L.startup();window.__3DLiteL3NIntegrationSnapshot=L.regression();})();
 <script id="__3DLiteKernel3980">
 (()=>{
   const info=Object.freeze({
-    version:'3.98.2',
+    version:'3.98.3',
     architecture:'existing-renderer-in-place',
     bvh:'SAH-12bin-normalized-leafcost-nearfirst',
     ggx:'visible-normal-sampling+matched-vndf-pdf',
@@ -23127,6 +23135,11 @@ L.startup();window.__3DLiteL3NIntegrationSnapshot=L.regression();})();
   });
   window.ThreeDLiteKernel3980=info;
 })();
+</script>
+
+<script id="__3DLiteSpotRenderFix3983">
+window.__3DLiteSpotRenderFix3983=true;
+window.ThreeDLiteSpotRenderFix3983=Object.freeze({version:'3.98.3',defaultDirection:'-Z',issue:'spot-black-render'});
 </script>
 </body>
 </html>
