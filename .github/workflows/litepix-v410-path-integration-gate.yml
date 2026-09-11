@@ -1,0 +1,90 @@
+name: LitePix v4.10 Native Path Integration Gate
+
+on:
+  push:
+    branches: [litepix-v4.10-path-integration]
+    paths:
+      - 'litepix/path-integration-v4.10.js'
+      - 'patches/litepix/v4.10/**'
+      - '.github/workflows/litepix-v410-path-integration-gate.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  path-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: litepix-v4.10-path-integration
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Native bridge syntax gate
+        run: node --check litepix/path-integration-v4.10.js
+      - name: Apply v4.10 path integration
+        run: python3 patches/litepix/v4.10/apply-path-integration.py
+      - name: Structural release gate
+        run: |
+          node <<'NODE'
+          const fs=require('fs'),h=fs.readFileSync('index.html','utf8'),f=[];
+          if(!h.includes('<title>LitePix v4.10.0 Native Path Integration</title>'))f.push('v4.10 title missing');
+          if(!h.includes("const LitePixVersion=Object.freeze({name:'LitePix',version:'4.10.0'});"))f.push('v4.10 central version missing');
+          for(const x of ['path-integration-v4.10.js','new LitePixPathExecution410(width,height','litePixPath410.record(i,x,y,sample,ph,accumulator)','litePixPath410.completePass(accumulator)','litePixNativePath:litePixPath410?.snapshot?.()||null'])if(!h.includes(x))f.push('missing '+x);
+          const ids=[...h.matchAll(/\bid\s*=\s*["']([^"']+)["']/gi)].map(m=>m[1]),seen=new Set(),dups=[];for(const id of ids){if(seen.has(id))dups.push(id);else seen.add(id)}if(dups.length)f.push('duplicate ids '+[...new Set(dups)].join(','));
+          const ext=[...h.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].filter(m=>/\bsrc\s*=/.test(m[1])&&(m[2]||'').trim());if(ext.length)f.push('external script inline bodies '+ext.length);
+          const loops=(h.match(/requestAnimationFrame\s*\(\s*animate\s*\)/g)||[]).length;if(loops!==1)f.push('animation loop owners '+loops);
+          if(f.length){console.error(f.join('\n'));process.exit(1)}
+          console.log('LitePix v4.10 structural gate passed');
+          NODE
+      - name: Install Chromium
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null
+      - name: Browser Fast + Path integration regression
+        run: |
+          python3 -m http.server 8000 >/tmp/lp410-http.log 2>&1 &
+          PID=$!
+          trap 'kill $PID || true' EXIT
+          node <<'NODE' | tee /tmp/lp410.json
+          const {chromium}=require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--use-gl=swiftshader','--enable-webgl','--ignore-gpu-blocklist']});
+            const page=await browser.newPage({viewport:{width:1280,height:900}}),pageErrors=[],consoleErrors=[];
+            page.on('pageerror',e=>pageErrors.push(String(e?.stack||e)));
+            page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
+            const response=await page.goto('http://127.0.0.1:8000/index.html',{waitUntil:'domcontentloaded',timeout:120000});
+            await page.waitForTimeout(4000);
+            const core=await page.evaluate(()=>({title:document.title,version:window.LitePixVersion?.version||null,marker:window.__LitePixPathIntegration410===true,bridgeType:typeof window.LitePixPathExecution410}));
+            const set=engine=>page.evaluate(engine=>{const sv=(id,v)=>{const e=document.getElementById(id);if(!e)return;e.value=String(v);e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));};sv('rsEngine',engine);sv('rsWidth',96);sv('rsHeight',54);sv('rsBounces',3);sv('rsMinSamples',1);sv('rsMaxSamples',2);sv('rsNoise',.2);sv('rsExposure',0);},engine);
+            const render=async engine=>{await set(engine);const prior=await page.evaluate(()=>window.RenderFramework?.jobs?.lastJob?.id||0);const t=Date.now();await page.evaluate(()=>document.getElementById('renderNowBtn').click());await page.waitForFunction(prior=>{const j=window.RenderFramework?.jobs?.lastJob;return !!j&&j.id!==prior&&j.finished&&j.performance;},prior,{timeout:120000,polling:100});return page.evaluate(wall=>{const j=window.RenderFramework.jobs.lastJob;return{wallMs:Date.now()-wall,engine:j.settings.engine,renderer:j.beautyFrame?.metadata?.renderer||null,native:j.beautyFrame?.metadata?.litePixNativePath||j.litePixPathStats410||null,secondaryGI:j.beautyFrame?.metadata?.secondaryGI||null,performance:j.performance};},t)};
+            const fast=await render('fast');
+            const path=await render('path');
+            const f=[];
+            if(response?.status()!==200)f.push('HTTP != 200');
+            if(core.title!=='LitePix v4.10.0 Native Path Integration'||core.version!=='4.10.0'||!core.marker||core.bridgeType!=='function')f.push('v4.10 identity/bridge mismatch');
+            if(fast.engine!=='fast'||fast.renderer!=='Part 4 Fast Direct')f.push('Fast regression failed');
+            if(path.engine!=='path'||!String(path.renderer||'').includes('Path GI'))f.push('Path regression failed');
+            if(!path.native||path.native.version!=='4.10.0'||!(path.native.samples>0)||!(path.native.passes>0)||!(path.native.guideWrites>=0))f.push('native path bridge did not execute');
+            if(path.secondaryGI!=='Light Cache')f.push('Light Cache not active');
+            if(pageErrors.length)f.push('page errors '+pageErrors.length);
+            if(consoleErrors.length)f.push('console errors '+consoleErrors.length);
+            const out={passed:!f.length,core,fast,path,pageErrors,consoleErrors,failures:f};console.log(JSON.stringify(out,null,2));
+            await browser.close();if(f.length)process.exit(1);
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+      - name: Save v4.10 report
+        run: |
+          mkdir -p reports/litepix
+          cp /tmp/lp410.json reports/litepix/v4.10-path-integration-report.json
+      - name: Commit gated v4.10 build
+        run: |
+          git config user.name 'LitePix v4.10 Gate'
+          git config user.email 'actions@users.noreply.github.com'
+          git add index.html reports/litepix/v4.10-path-integration-report.json
+          git commit -m 'Gate LitePix v4.10 native path integration' || exit 0
+          git push origin HEAD:litepix-v4.10-path-integration
