@@ -1,0 +1,32 @@
+name: L3N v3.98.1 Cleanup
+on:
+  push:
+    branches: [l3n-dev]
+    paths:
+      - '.l3n-cleanup-v3981-trigger'
+permissions:
+  contents: write
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Remove temporary v3.98.1 machinery
+        run: |
+          rm -f tools/l3n_light_gizmo_v3981.py
+          rm -f .github/workflows/l3n-light-gizmo-v3981.yml
+          rm -f .github/workflows/l3n-light-gizmo-inspect-v3981.yml
+          rm -f .github/workflows/l3n-browser-smoke-v3981.yml
+          rm -f .l3n-light-gizmo-v3981-trigger
+          rm -f .l3n-light-gizmo-inspect-v3981-trigger
+          rm -f .l3n-browser-smoke-v3981-trigger
+          rm -f tmp/v3981_light_context.txt
+          rm -f .l3n-cleanup-v3981-trigger
+      - name: Commit clean development tree
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m 'Clean temporary v3.98.1 light gizmo machinery'
+          git push
