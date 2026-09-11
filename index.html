@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>3DLite v3.99.4 L3N GitHub Runtime</title>
+<title>3DLite v3.99.5 L3N GitHub Runtime</title>
 <style>
 :root{
   --bg:#202020;--panel:#2a2a2a;--panel2:#303030;--line:#444;--line2:#555;
@@ -4185,7 +4185,7 @@ function validateArchitectureCore(){
   return {ok:errors.length===0,errors};
 }
 
-const ThreeDLiteVersion=Object.freeze({name:'3DLite',version:'3.99.4'});
+const ThreeDLiteVersion=Object.freeze({name:'3DLite',version:'3.99.5'});
 const LiteTraceVersion=Object.freeze({name:'LiteTrace Renderer',version:'1.1 RC1'});
 window.ThreeDLiteVersion=ThreeDLiteVersion;
 window.LiteTraceVersion=LiteTraceVersion;
@@ -6175,7 +6175,10 @@ const PhysicalBSDF=Object.freeze({
 const SurfaceInterpolator=Object.freeze({
   normal(acceleration,hit){
     const s=acceleration.store,t=hit.triangleIndex,k=t*3;
-    if(!s.normals||s.normals.length!==s.positions.length)return hit.geometricNormal;
+    // v3.99.5: shading normals must follow the ray-oriented hit side, not raw triangle winding.
+    // Otherwise valid back-face hits can force N.L to zero and make lit objects render black.
+    const faceNormal=hit.orientedGeometricNormal||hit.geometricNormal||[0,0,1];
+    if(!s.normals||s.normals.length!==s.positions.length)return faceNormal;
     const ia=s.triangles[k],ib=s.triangles[k+1],ic=s.triangles[k+2];
     const w=1-hit.u-hit.v;
     const read=i=>[s.normals[i*3],s.normals[i*3+1],s.normals[i*3+2]];
@@ -6185,8 +6188,8 @@ const SurfaceInterpolator=Object.freeze({
       a[1]*w+b[1]*hit.u+c[1]*hit.v,
       a[2]*w+b[2]*hit.u+c[2]*hit.v
     ]);
-    if(!n.every(Number.isFinite)||RayMath.length(n)<1e-10)n=hit.geometricNormal;
-    if(RayMath.dot(n,hit.geometricNormal)<0)n=RayMath.mul(n,-1);
+    if(!n.every(Number.isFinite)||RayMath.length(n)<1e-10)n=faceNormal;
+    if(RayMath.dot(n,faceNormal)<0)n=RayMath.mul(n,-1);
     return n;
   },
   uv(acceleration,hit){
@@ -23420,7 +23423,7 @@ window.ThreeDLiteRenderDataCode3991={version:'3.99.1',snapshot:()=>A.renderDataS
 <script id="l3n-litetrace-telemetry-3992">
 (()=>{
 'use strict';
-const VERSION='3.99.4';
+const VERSION='3.99.5';
 const root=window;
 const A=root.ThreeDLiteAdaptiveRender3990||null;
 const jobs=()=>root.RenderFramework?.jobs||null;
@@ -23505,6 +23508,7 @@ try{if(root.ThreeDLiteVersion&&typeof root.ThreeDLiteVersion==='object')root.Thr
 document.documentElement.dataset.liteTraceTelemetryVersion=VERSION;
 root.__3DLiteLiteTraceTelemetry3994=true;
 root.__3DLiteLiteTraceTelemetry3992=true;
+root.__3DLiteFastDirectLighting3995=true;
 })();
 </script>
 </body>
