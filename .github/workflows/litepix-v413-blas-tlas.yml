@@ -1,0 +1,36 @@
+name: LitePix v4.13 BLAS TLAS Gate
+on:
+  push:
+    branches: [litepix-v4.13-blas-tlas-refit]
+permissions:
+  contents: write
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply v4.13 integration
+        run: python patches/litepix/v4.13/apply-blas-tlas.py
+      - name: Structural gate
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('index.html').read_text()
+          req=['LitePix v4.13.0 BLAS TLAS + Transform Refit',"version:'4.13.0'",'core2-instance-v4.13.js','core2-path-v4.12.js','root.__3DLiteMaterialLinearColor3996=true;']
+          miss=[x for x in req if x not in s]
+          if miss: raise SystemExit('missing '+repr(miss))
+          js=Path('litepix/core2-instance-v4.13.js').read_text()
+          for x in ['LitePixBLAS413','LitePixTLAS413','updateTransform','refit()','uniqueBLAS','occluded(ray)']:
+            if x not in js: raise SystemExit('missing '+x)
+          print('v4.13 structural gate passed')
+          PY
+      - name: JS syntax gate
+        run: node --check litepix/core2-instance-v4.13.js
+      - name: Commit integrated index
+        run: |
+          if git diff --quiet -- index.html; then exit 0; fi
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add index.html
+          git commit -m 'Integrate LitePix v4.13 BLAS TLAS + transform refit'
+          git push
