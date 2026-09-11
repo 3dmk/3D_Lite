@@ -1,0 +1,27 @@
+name: L3N v3.98.0 Kernel Inspect
+on:
+  push:
+    branches: [l3n-dev]
+    paths:
+      - '.l3n-kernel-inspect-v3980-trigger'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect renderer ownership and APIs
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          s=Path('index.html').read_text(encoding='utf-8')
+          terms=['LiteTraceExecutionContext','RenderTileScheduler16','BasicDirectRenderer','RenderCore1','RenderCore2','RenderCoreE','class BVH','BVH','traceRay','traceGI','intersect','renderTile','PathState','GGX','MIS','materialIndex','renderPass']
+          for term in terms:
+              print('\n===== TERM',term,'=====')
+              matches=list(re.finditer(re.escape(term),s,re.I))
+              print('COUNT',len(matches))
+              for m in matches[:12]:
+                  a=max(0,m.start()-1200); b=min(len(s),m.end()+2200)
+                  print('\n---',m.start(),'---\n',s[a:b].replace('\r',''))
