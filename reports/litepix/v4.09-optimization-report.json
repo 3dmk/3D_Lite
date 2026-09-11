@@ -1,0 +1,354 @@
+{
+  "version": "4.09.0",
+  "passed": true,
+  "basis": "v4.08 runtime render test + deterministic A/B core benchmark",
+  "v408Observed": {
+    "bvhMs": 26.5,
+    "gbufferMs": 9.8,
+    "giMs": 40.9,
+    "fastWallMs": 261,
+    "pathWallMs": 409,
+    "pathTraceMs": 382.6,
+    "pathRaysPerSecond": 27099
+  },
+  "benchmark": {
+    "passed": true,
+    "before": {
+      "bvhMs": 132.125475,
+      "gbufferMs": 79.45812799999999,
+      "giMs": 111.31694700000003,
+      "bvh": {
+        "nodes": 383,
+        "leaves": 192,
+        "primitives": 1000,
+        "buildMs": 118.3348660000047,
+        "maxLeaf": 8,
+        "bins": 16
+      },
+      "gi": {
+        "activeBlocks": 0,
+        "finalizedBlocks": 65536,
+        "refinedBlocks": 87296,
+        "cache": {
+          "records": 0,
+          "hits": 0,
+          "misses": 0,
+          "hitRate": 0
+        }
+      }
+    },
+    "after": {
+      "bvhMs": 8.183040999999776,
+      "gbufferMs": 9.996706000000358,
+      "giMs": 108.46346700000004,
+      "bvh": {
+        "nodes": 383,
+        "leaves": 192,
+        "primitives": 1000,
+        "buildMs": 5.791415999992751,
+        "maxLeaf": 8,
+        "bins": 16,
+        "boundsEvaluations": 1000,
+        "cachedBounds": true
+      },
+      "gi": {
+        "activeBlocks": 0,
+        "finalizedBlocks": 65536,
+        "refinedBlocks": 87296,
+        "createdBlocks": 87360,
+        "cache": {
+          "records": 0,
+          "hits": 0,
+          "misses": 0,
+          "hitRate": 0,
+          "candidateTests": 0,
+          "cells": 0,
+          "spatialHash": true
+        }
+      }
+    },
+    "comparison": {
+      "bvhPct": -93.80661375105764,
+      "gbufferPct": -87.41890068187818,
+      "giPct": -2.5633832735279647
+    }
+  },
+  "browserRender": {
+    "passed": true,
+    "core": {
+      "version": "4.09.0",
+      "legacy": "4.09.0",
+      "marker": true,
+      "nativeVersion": "4.09.0",
+      "core2": "4.09.0",
+      "core3": "4.09.0",
+      "core4": "4.09.0"
+    },
+    "fast": {
+      "engine": "fast",
+      "wallMs": 263,
+      "performance": {
+        "totalMs": 111.80000000000291,
+        "traceMs": 109.80000000000291,
+        "actualRays": 0,
+        "raysPerSecond": 0,
+        "samples": 0,
+        "yields": 24,
+        "bvhBuildMs": null
+      },
+      "renderer": "Part 4 Fast Direct",
+      "telemetry": {
+        "schema": 2,
+        "version": "3.99.6",
+        "generatedAt": "2026-09-11T19:12:01.132Z",
+        "renderer": "Part 4 Fast Direct",
+        "status": "Finished",
+        "progress": {
+          "status": "Finished",
+          "percent": 100,
+          "currentSamples": 24,
+          "maximumSamples": 24,
+          "noise": null,
+          "threads": 3,
+          "resolution": [
+            96,
+            54
+          ],
+          "gi": "Direct",
+          "elapsedMs": 111.80000000000291,
+          "raysPerSecond": 0,
+          "bvhBuildMs": null
+        },
+        "fastDiagnostics": {
+          "renderer": "Fast Direct",
+          "lights": 2,
+          "lightTypes": {
+            "sun": 1,
+            "dome": 1
+          },
+          "materials": 0,
+          "triangles": 0,
+          "globalIllumination": false
+        },
+        "giDiagnostics": null,
+        "rendererPerformance": {
+          "cameraRays": 0,
+          "pathRays": 0,
+          "shadowRays": 0,
+          "probeRays": 0,
+          "totalRays": 0,
+          "samples": 0,
+          "yields": 24,
+          "raysPerSecond": 0,
+          "stageMs": {
+            "snapshot": 0.8000000000029104,
+            "geometry": 0,
+            "worker": 0.3000000000029104,
+            "bvh": 0.09999999999126885,
+            "shading": 0.20000000001164153,
+            "lightCache": 0,
+            "render": 106,
+            "denoise": 0,
+            "toneMap": 0,
+            "post": 0
+          }
+        },
+        "finalPerformance": {
+          "totalMs": 111.80000000000291,
+          "traceMs": 109.80000000000291,
+          "actualRays": 0,
+          "raysPerSecond": 0,
+          "samples": 0,
+          "yields": 24,
+          "bvhBuildMs": null
+        },
+        "workerStats": {
+          "configuredSize": 3,
+          "autoSize": 3,
+          "available": true,
+          "generation": 1,
+          "workers": 0,
+          "idle": 0,
+          "queued": 0,
+          "active": 0,
+          "paused": false,
+          "failures": 0,
+          "completed": 0,
+          "cancelled": 0,
+          "timeouts": 0,
+          "states": []
+        },
+        "execution": {
+          "activeJobId": null,
+          "performanceAttached": false,
+          "controllerHasActiveJob": true,
+          "controllerHasLastJob": true
+        }
+      }
+    },
+    "path": {
+      "engine": "path",
+      "wallMs": 425,
+      "performance": {
+        "totalMs": 383.8000000000029,
+        "traceMs": 383.3000000000029,
+        "actualRays": 10368,
+        "raysPerSecond": 27049,
+        "samples": 10368,
+        "yields": 82,
+        "bvhBuildMs": null
+      },
+      "renderer": "Group 9 Progressive Path GI",
+      "telemetry": {
+        "schema": 2,
+        "version": "3.99.6",
+        "generatedAt": "2026-09-11T19:12:01.561Z",
+        "renderer": "Group 9 Progressive Path GI",
+        "status": "Finished",
+        "progress": {
+          "status": "Finished",
+          "percent": 100,
+          "currentSamples": 2,
+          "maximumSamples": 2,
+          "noise": 0,
+          "threads": 3,
+          "resolution": [
+            96,
+            54
+          ],
+          "gi": "Brute Force + Light Cache",
+          "elapsedMs": 383.8000000000029,
+          "raysPerSecond": 27049,
+          "bvhBuildMs": null
+        },
+        "fastDiagnostics": null,
+        "giDiagnostics": {
+          "renderer": "Group 9 Progressive Path GI",
+          "engine": "path",
+          "globalIllumination": true,
+          "primaryGI": "Brute Force",
+          "secondaryGI": "Light Cache",
+          "samplesPerPixel": 2,
+          "passes": 2,
+          "maxBounces": 3,
+          "estimator": "Path GI + direct NEE + power-heuristic MIS",
+          "mis": true,
+          "russianRoulette": true,
+          "importanceSampling": "GGX + cosine mixture",
+          "noise": 0,
+          "transmission": true,
+          "progressive": true,
+          "adaptive": true,
+          "minSamples": 1,
+          "maxSamples": 2,
+          "noiseThreshold": 0.2,
+          "lightCache": {
+            "records": 0,
+            "hits": 0,
+            "misses": 0,
+            "inserts": 0,
+            "rejected": 0,
+            "retraces": 0,
+            "refreshes": 0,
+            "radius": 0.03125
+          },
+          "emissiveTriangleLights": 0,
+          "rendererDiagnostics": {
+            "renderer": "Path GI",
+            "maxBounces": 3,
+            "materials": 0,
+            "lights": 2,
+            "triangles": 0,
+            "estimator": "Brute Force + direct NEE",
+            "samplesPerPixel": 1,
+            "mis": false,
+            "adaptive": false,
+            "progressive": false,
+            "russianRoulette": false,
+            "ggxImportanceSampling": false,
+            "transmission": false
+          },
+          "cameraRays": 10368,
+          "pathRays": 0,
+          "shadowRays": 0,
+          "probeRays": 0,
+          "totalRays": 10368,
+          "samples": 10368,
+          "raysPerSecond": 27056,
+          "stageMs": {
+            "snapshot": 0.3000000000029104,
+            "geometry": 0,
+            "worker": 0.19999999999708962,
+            "bvh": 0,
+            "shading": 0,
+            "lightCache": 0,
+            "render": 381.1000000000058,
+            "denoise": 0,
+            "toneMap": 0,
+            "post": 0
+          },
+          "pathGuiding": false,
+          "lightTree": false,
+          "acceleration": "BVH"
+        },
+        "rendererPerformance": {
+          "cameraRays": 10368,
+          "pathRays": 0,
+          "shadowRays": 0,
+          "probeRays": 0,
+          "totalRays": 10368,
+          "samples": 10368,
+          "yields": 82,
+          "raysPerSecond": 27056,
+          "stageMs": {
+            "snapshot": 0.3000000000029104,
+            "geometry": 0,
+            "worker": 0.19999999999708962,
+            "bvh": 0,
+            "shading": 0,
+            "lightCache": 0,
+            "render": 381.1000000000058,
+            "denoise": 0,
+            "toneMap": 0,
+            "post": 0
+          }
+        },
+        "finalPerformance": {
+          "totalMs": 383.8000000000029,
+          "traceMs": 383.3000000000029,
+          "actualRays": 10368,
+          "raysPerSecond": 27049,
+          "samples": 10368,
+          "yields": 82,
+          "bvhBuildMs": null
+        },
+        "workerStats": {
+          "configuredSize": 3,
+          "autoSize": 3,
+          "available": true,
+          "generation": 1,
+          "workers": 0,
+          "idle": 0,
+          "queued": 0,
+          "active": 0,
+          "paused": false,
+          "failures": 0,
+          "completed": 0,
+          "cancelled": 0,
+          "timeouts": 0,
+          "states": []
+        },
+        "execution": {
+          "activeJobId": null,
+          "performanceAttached": false,
+          "controllerHasActiveJob": true,
+          "controllerHasLastJob": true
+        }
+      }
+    },
+    "pageErrors": [],
+    "consoleErrors": [],
+    "failures": []
+  },
+  "generatedAt": 1789153921
+}
