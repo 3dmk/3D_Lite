@@ -1,0 +1,100 @@
+name: v3.99.4 Fast and GI Runtime Gate
+
+on:
+  push:
+    branches: [v3.99.4-gi-telemetry-gate]
+    paths:
+      - '.github/workflows/v3994-dual-runtime-gate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install browser probe
+        run: |
+          npm init -y >/dev/null 2>&1
+          npm install playwright@1.55.0 >/dev/null 2>&1
+          npx playwright install --with-deps chromium >/dev/null
+      - name: Run Fast and Path GI renders
+        shell: bash
+        run: |
+          python3 -m http.server 8000 >/tmp/3dlite-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID || true' EXIT
+          node <<'NODE'
+          const {chromium}=require('playwright');
+          (async()=>{
+            const browser=await chromium.launch({headless:true,args:['--use-gl=swiftshader','--enable-webgl','--ignore-gpu-blocklist']});
+            const page=await browser.newPage({viewport:{width:1440,height:1000}});
+            const pageErrors=[],consoleErrors=[];
+            page.on('pageerror',e=>pageErrors.push(String(e?.stack||e)));
+            page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
+            const response=await page.goto('http://127.0.0.1:8000/index.html',{waitUntil:'domcontentloaded',timeout:120000});
+            await page.waitForTimeout(5000);
+            const startup=await page.evaluate(()=>({
+              title:document.title,
+              version:window.ThreeDLiteVersion?.version||null,
+              appVersion:window.__3DLiteAppVersion||null,
+              telemetryVersion:window.ThreeDLiteLiteTraceTelemetry3994?.version||null,
+              legacyAliasSame:window.ThreeDLiteLiteTraceTelemetry3992===window.ThreeDLiteLiteTraceTelemetry3994,
+              jobs:!!window.RenderFramework?.jobs,
+              canvases:document.querySelectorAll('canvas').length
+            }));
+            const setControls=async(engine)=>page.evaluate(engine=>{
+              const set=(id,value)=>{const e=document.getElementById(id);if(!e)return;e.value=String(value);e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));};
+              const check=(id,value)=>{const e=document.getElementById(id);if(!e)return;e.checked=!!value;e.dispatchEvent(new Event('change',{bubbles:true}));};
+              set('rsEngine',engine);set('rsWidth',96);set('rsHeight',54);set('rsBounces',3);set('rsMinSamples',1);set('rsMaxSamples',4);set('rsNoise',0.1);set('rsSecondaryGI','Light Cache');
+              check('rsGI',true);check('rsProgressive',true);check('rsAdaptive',true);
+            },engine);
+            const render=async(engine)=>{
+              await setControls(engine);
+              const prior=await page.evaluate(()=>window.RenderFramework?.jobs?.lastJob?.id||0);
+              await page.evaluate(()=>{const b=document.getElementById('renderNowBtn');if(!b)throw new Error('renderNowBtn missing');b.click();});
+              await page.waitForFunction(prior=>{const j=window.RenderFramework?.jobs?.lastJob;return !!j&&j.id!==prior&&!!j.finished&&!!j.performance;},prior,{timeout:120000,polling:200});
+              await page.waitForTimeout(300);
+              return await page.evaluate(()=>{
+                const j=window.RenderFramework.jobs.lastJob;
+                const t=window.ThreeDLiteLiteTraceTelemetry3994.snapshot();
+                return {job:{id:j.id,finished:j.finished,status:j.status,settings:j.settings,performance:j.performance,metadata:j.beautyFrame?.metadata||null},telemetry:t,title:document.title};
+              });
+            };
+            const fast=await render('fast');
+            const path=await render('path');
+            console.log(JSON.stringify({status:response?.status(),startup,fast,path,pageErrors,consoleErrors},null,2));
+            const f=[];
+            if(response?.status()!==200)f.push('HTTP != 200');
+            if(startup.title!=='3DLite v3.99.4 L3N GitHub Runtime')f.push('startup title mismatch');
+            if(startup.version!=='3.99.4'||startup.appVersion!=='3.99.4'||startup.telemetryVersion!=='3.99.4')f.push('version mismatch');
+            if(!startup.legacyAliasSame)f.push('v3.99.2 telemetry compatibility alias broken');
+            if(!startup.jobs||startup.canvases<1)f.push('startup framework/viewport missing');
+            if(fast.job.settings.engine!=='fast'||!fast.job.finished)f.push('Fast render failed');
+            if(!fast.telemetry.fastDiagnostics)f.push('Fast diagnostics missing');
+            if(fast.telemetry.giDiagnostics!==null)f.push('GI diagnostics leaked into Fast');
+            if(!fast.telemetry.rendererPerformance||!fast.telemetry.finalPerformance)f.push('Fast performance telemetry missing');
+            if(path.job.settings.engine!=='path'||!path.job.finished)f.push('Path render failed');
+            if(path.telemetry.fastDiagnostics!==null)f.push('Fast diagnostics leaked into Path');
+            if(!path.telemetry.giDiagnostics)f.push('GI diagnostics missing');
+            if(!path.telemetry.rendererPerformance||!path.telemetry.finalPerformance)f.push('Path performance telemetry missing');
+            const gi=path.telemetry.giDiagnostics;
+            if(gi&&gi.engine!=='path')f.push('GI engine marker wrong');
+            if(gi&&gi.globalIllumination!==true)f.push('GI enable marker wrong');
+            if(gi&&gi.primaryGI!=='Brute Force')f.push('Primary GI mismatch');
+            if(gi&&gi.secondaryGI!=='Light Cache')f.push('Secondary GI mismatch');
+            if(gi&&gi.maxBounces!==3)f.push('GI max bounce telemetry mismatch');
+            if(gi&&gi.mis!==true)f.push('MIS telemetry missing');
+            if(gi&&gi.russianRoulette!==true)f.push('Russian roulette telemetry missing');
+            if(!path.job.metadata?.renderer?.includes('Path GI'))f.push('Path renderer metadata mismatch');
+            if(pageErrors.length)f.push('page errors='+pageErrors.length);
+            if(consoleErrors.length)f.push('console errors='+consoleErrors.length);
+            if(f.length){console.error('v3.99.4 DUAL RUNTIME GATE FAILED\n'+f.join('\n'));process.exitCode=1;}else console.log('v3.99.4 DUAL RUNTIME GATE PASSED');
+            await browser.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE

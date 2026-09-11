@@ -1,0 +1,58 @@
+name: v3.99.4 GI Telemetry Gate
+
+on:
+  push:
+    branches: [v3.99.4-gi-telemetry-gate]
+    paths:
+      - '.github/workflows/v3994-gi-inspect.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: v3.99.4-gi-telemetry-gate
+          fetch-depth: 0
+      - name: Apply GI telemetry patch
+        run: python3 patches/v3.99.4/gi-telemetry-patch.py
+      - name: Validate structure
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs=require('fs');
+          const h=fs.readFileSync('index.html','utf8');
+          const f=[];
+          for(const x of [
+            "const ThreeDLiteVersion=Object.freeze({name:'3DLite',version:'3.99.4'});",
+            '<title>3DLite v3.99.4 L3N GitHub Runtime</title>',
+            "const VERSION='3.99.4';",
+            "job?.settings?.engine==='path'",
+            'giDiagnostics:clone(giDiagnostics)',
+            'metadata?.samplesPerPixel','metadata?.passes','metadata?.maxBounces',
+            'metadata?.lightCache','metadata?.diagnostics','rendererPerformance?.pathRays',
+            'root.ThreeDLiteLiteTraceTelemetry3994',
+            'root.ThreeDLiteLiteTraceTelemetry3992=root.ThreeDLiteLiteTraceTelemetry3994'
+          ]) if(!h.includes(x))f.push('missing '+x);
+          const ids=[...h.matchAll(/\bid\s*=\s*["']([^"']+)["']/gi)].map(x=>x[1]);
+          const seen=new Set(),dup=[];for(const id of ids){if(seen.has(id))dup.push(id);else seen.add(id)}
+          if(dup.length)f.push('duplicate ids '+[...new Set(dup)].join(','));
+          const ext=[...h.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].filter(m=>/\bsrc\s*=/.test(m[1])&&(m[2]||'').trim());
+          if(ext.length)f.push('external script inline bodies '+ext.length);
+          const loops=(h.match(/requestAnimationFrame\s*\(\s*animate\s*\)/g)||[]).length;
+          if(loops!==1)f.push('animation loop owners '+loops);
+          if(f.length){console.error(f.join('\n'));process.exit(1)}
+          console.log('v3.99.4 GI telemetry structural gate passed');
+          NODE
+      - name: Commit gated update
+        shell: bash
+        run: |
+          if git diff --quiet -- index.html; then exit 0; fi
+          git config user.name '3DLite Gate'
+          git config user.email 'actions@users.noreply.github.com'
+          git add index.html
+          git commit -m 'Gate 3DLite v3.99.4 GI telemetry'
+          git push origin HEAD:v3.99.4-gi-telemetry-gate
