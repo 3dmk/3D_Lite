@@ -1,0 +1,40 @@
+name: LitePix v4.11 BVH Inspect
+on:
+  push:
+    branches: [litepix-v4.11-core2-bvh-path]
+    paths: ['.github/workflows/litepix-v411-bvh-inspect.yml']
+permissions:
+  contents: write
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: litepix-v4.11-core2-bvh-path
+          fetch-depth: 0
+      - run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path('index.html').read_text(encoding='utf-8').splitlines()
+          terms=['class RenderBVH','const RenderBVH','intersect(ray','intersectAny','traceClosest','class PathIntegrator','const PathIntegrator','PathIntegrator=','acceleration.intersect','acceleration.closest','RenderTriangle']
+          out=[]; seen=set()
+          for term in terms:
+            for i,line in enumerate(s):
+              if term in line:
+                lo=max(0,i-30); hi=min(len(s),i+90)
+                key=(lo,hi)
+                if key not in seen:
+                  out.append('\n===== '+term+f' @ {i+1} =====')
+                  out.extend(f'{j+1}: {s[j]}' for j in range(lo,hi))
+                  seen.add(key)
+                break
+          Path('reports/litepix').mkdir(parents=True,exist_ok=True)
+          Path('reports/litepix/v4.11-bvh-inspect.txt').write_text('\n'.join(out),encoding='utf-8')
+          PY
+      - run: |
+          git config user.name 'LitePix v4.11 Inspect'
+          git config user.email 'actions@users.noreply.github.com'
+          git add reports/litepix/v4.11-bvh-inspect.txt
+          git commit -m 'Inspect v4.11 BVH/path traversal anchors' || exit 0
+          git push origin HEAD:litepix-v4.11-core2-bvh-path
