@@ -23303,5 +23303,11 @@ window.ThreeDLiteAdaptiveRender3990=A;window.__3DLiteAdaptiveRender3990=true;
 function bind(){const rf=window.RenderFramework;if(!rf)return false;if(rf.__adaptive3990)return true;rf.__adaptive3990=true;const old=rf.ui?.updateProgress?.bind(rf.ui);if(old)rf.ui.updateProgress=(p)=>{const r=old(p);try{A.observe(p||{});}catch(_){}return r;};const rec=rf.recordCompleted?.bind(rf);if(rec)rf.recordCompleted=(job)=>{const r=rec(job);try{A.state.renderCount++;A.observe(job?.progress?.snapshot?.()||job?.progress||{});}catch(_){}return r;};return true;}
 if(!bind())window.addEventListener('load',()=>bind(),{once:true});
 })();</script>
+<script id="l3n-adaptive-segment-2">
+(()=>{const A=window.ThreeDLiteAdaptiveRender3990;if(!A)return;const S=A.state;S.convergence={pixels:new Map(),tiles:new Map(),stableThreshold:.0025};
+A.updateConvergence=(key,variance,cost=1,type='pixel')=>{const m=type==='tile'?S.convergence.tiles:S.convergence.pixels;const old=m.get(key)||{variance:1,samples:0,cost:0,stable:false};old.variance=.75*old.variance+.25*Math.max(0,variance||0);old.samples++;old.cost+=cost;old.stable=old.samples>2&&old.variance<S.convergence.stableThreshold;m.set(key,old);return old;};
+A.convergenceSummary=()=>{const vals=[...S.convergence.tiles.values()];const stable=vals.filter(v=>v.stable).length;return {tiles:vals.length,stable,active:Math.max(0,vals.length-stable),ratio:vals.length?1-stable/vals.length:1};};
+const base=A.buildNextRenderStrategy.bind(A);A.buildNextRenderStrategy=(cur,h)=>{const x=base(cur,h),c=A.convergenceSummary();x.activeTileRatio=A.clamp(c.ratio,.05,1);x.activePixelRatio=A.clamp(c.ratio*.9+.1,.05,1);x.skipStablePixels=true;x.tilePriority='variance/cost';return x;};
+})();</script>
 </body>
 </html>
