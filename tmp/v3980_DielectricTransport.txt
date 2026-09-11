@@ -1,0 +1,24 @@
+const DielectricTransport=Object.freeze({
+  fresnelDielectric(cosI,etaI,etaT){
+    cosI=Math.max(-1,Math.min(1,cosI));
+    let entering=cosI>0;
+    if(!entering){const t=etaI;etaI=etaT;etaT=t;cosI=Math.abs(cosI);}
+    const sinI=Math.sqrt(Math.max(0,1-cosI*cosI));
+    const sinT=etaI/etaT*sinI;
+    if(sinT>=1)return 1;
+    const cosT=Math.sqrt(Math.max(0,1-sinT*sinT));
+    const rs=((etaT*cosI)-(etaI*cosT))/((etaT*cosI)+(etaI*cosT));
+    const rp=((etaI*cosI)-(etaT*cosT))/((etaI*cosI)+(etaT*cosT));
+    return Math.max(0,Math.min(1,(rs*rs+rp*rp)*.5));
+  },
+  refract(i,n,eta){
+    const cosi=Math.max(-1,Math.min(1,RayMath.dot(i,n)));
+    const k=1-eta*eta*(1-cosi*cosi);
+    if(k<0)return null;
+    return RayMath.normalize(RayMath.sub(RayMath.mul(i,eta),RayMath.mul(n,eta*cosi+Math.sqrt(k))));
+  },
+  beerLambert(color,distance,attenuationDistance){
+    if(!Number.isFinite(attenuationDistance)||attenuationDistance<=0||distance<=0)return [1,1,1];
+    return color.map(c=>Math.pow(Math.max(1e-6,c),distance/attenuationDistance));
+  }
+}
