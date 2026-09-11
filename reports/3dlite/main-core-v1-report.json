@@ -1,0 +1,77 @@
+{
+  "passed": true,
+  "result": {
+    "missing": false,
+    "marker": true,
+    "version": "1.0.0",
+    "mode": "compatibility-migration",
+    "value": 42,
+    "before": {
+      "scene": 0,
+      "geometry": 0,
+      "topology": 0,
+      "transform": 0,
+      "selection": 0,
+      "material": 0,
+      "renderScene": 0,
+      "viewport": 0
+    },
+    "after": {
+      "scene": 0,
+      "geometry": 0,
+      "topology": 0,
+      "transform": 1,
+      "selection": 0,
+      "material": 0,
+      "renderScene": 1,
+      "viewport": 1
+    },
+    "beforeLegacy": 0,
+    "afterLegacy": 0,
+    "rollbackCaught": true,
+    "rollbackValue": 1,
+    "nestedRejected": true,
+    "status": {
+      "name": "3DLite Main Core",
+      "version": "1.0.0",
+      "mode": "compatibility-migration",
+      "authoritativeDomains": [
+        "scene",
+        "geometry",
+        "topology",
+        "transform",
+        "selection",
+        "material",
+        "renderScene",
+        "viewport"
+      ],
+      "activeTransaction": null,
+      "generations": {
+        "scene": 0,
+        "geometry": 0,
+        "topology": 0,
+        "transform": 1,
+        "selection": 0,
+        "material": 0,
+        "renderScene": 1,
+        "viewport": 1
+      },
+      "historyCount": 3,
+      "diagnosticsCount": 0
+    },
+    "stamp": {
+      "version": "1.0.0",
+      "scene": 0,
+      "geometry": 0,
+      "topology": 0,
+      "transform": 1,
+      "material": 0,
+      "renderScene": 1
+    },
+    "canvasCount": 2,
+    "title": "3D Lite — LitePix v4.45.0 Adaptive Ray Budget"
+  },
+  "pageErrors": [],
+  "consoleErrors": [],
+  "failures": []
+}
