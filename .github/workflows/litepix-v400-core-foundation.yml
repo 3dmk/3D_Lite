@@ -1,0 +1,86 @@
+name: LitePix v4.00.0 Core Foundation Gate
+
+on:
+  push:
+    branches: [litepix-v4.00.0-core-foundation]
+    paths:
+      - '.github/workflows/litepix-v400-core-foundation.yml'
+      - 'patches/v4.00.0/litepix-core-foundation.py'
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: litepix-v4.00.0-core-foundation
+          fetch-depth: 0
+
+      - name: Apply LitePix core foundation
+        run: python3 patches/v4.00.0/litepix-core-foundation.py
+
+      - name: Structural and architecture gate
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs=require('fs');
+          const h=fs.readFileSync('index.html','utf8');
+          const failures=[];
+          const must=[
+            '<title>LitePix v4.00.0 Core Foundation</title>',
+            "const LitePixVersion=Object.freeze({name:'LitePix',version:'4.00.0'",
+            'const ThreeDLiteVersion=LitePixVersion;',
+            'class LitePixEventBus',
+            'class LitePixResourceScope',
+            'class LitePixCancellationToken',
+            'class LitePixRenderJob',
+            'class LitePixRenderQueue',
+            'class LitePixTelemetryHub',
+            'globalThis.__LitePixCore400=true;',
+            'root.__3DLiteMaterialLinearColor3996=true;'
+          ];
+          for(const x of must)if(!h.includes(x))failures.push('missing '+x);
+          const ids=[...h.matchAll(/\bid\s*=\s*["']([^"']+)["']/gi)].map(m=>m[1]);
+          const seen=new Set(),dups=[];for(const id of ids){if(seen.has(id))dups.push(id);else seen.add(id)}
+          if(dups.length)failures.push('duplicate ids '+[...new Set(dups)].join(','));
+          const ext=[...h.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].filter(m=>/\bsrc\s*=/.test(m[1])&&(m[2]||'').trim());
+          if(ext.length)failures.push('external script inline bodies '+ext.length);
+          const loops=(h.match(/requestAnimationFrame\s*\(\s*animate\s*\)/g)||[]).length;
+          if(loops!==1)failures.push('animation loop owners '+loops);
+          if(failures.length){console.error(failures.join('\n'));process.exit(1)}
+          console.log('LitePix v4.00.0 structural architecture gate passed');
+          NODE
+
+      - name: Isolated LitePix core behavior tests
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import re, pathlib
+          s=pathlib.Path('index.html').read_text(encoding='utf-8')
+          checks={
+            'event_bus':'class LitePixEventBus' in s and "emit(type,payload)" in s,
+            'resource_scope':'class LitePixResourceScope' in s and 'close(){' in s,
+            'cancel_token':'class LitePixCancellationToken' in s,
+            'job_schema':'class LitePixRenderJob' in s and "this.status='queued'" in s,
+            'queue_async':'async runNext' in s and 'async drain' in s,
+            'telemetry_observer':'class LitePixTelemetryHub' in s and "'job:complete'" in s,
+            'legacy_bridge':'const ThreeDLiteVersion=LitePixVersion;' in s,
+            'color_fix_preserved':'root.__3DLiteMaterialLinearColor3996=true;' in s,
+          }
+          failed=[k for k,v in checks.items() if not v]
+          for k,v in checks.items(): print(('PASS ' if v else 'FAIL ')+k)
+          if failed: raise SystemExit('behavior gate failures: '+','.join(failed))
+          PY
+
+      - name: Commit gated LitePix update
+        shell: bash
+        run: |
+          if git diff --quiet -- index.html; then exit 0; fi
+          git config user.name 'LitePix Gate'
+          git config user.email 'actions@users.noreply.github.com'
+          git add index.html
+          git commit -m 'Gate LitePix v4.00.0 core foundation'
+          git push origin HEAD:litepix-v4.00.0-core-foundation
