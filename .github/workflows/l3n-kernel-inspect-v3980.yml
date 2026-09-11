@@ -42,14 +42,9 @@ jobs:
                   i+=1
               return 'UNTERMINATED '+marker
           specs={
-            'RenderBVH':'var RenderBVH = class RenderBVH',
-            'PhysicalBSDF':'const PhysicalBSDF=Object.freeze(',
-            'GGXImportanceSampler':'const GGXImportanceSampler=Object.freeze(',
-            'PathSampler':'const PathSampler=Object.freeze(',
-            'DirectLightingIntegrator':'const DirectLightingIntegrator=Object.freeze(',
-            'Group9DirectMIS':'const Group9DirectMIS=Object.freeze(',
-            'PathIntegrator':'var PathIntegrator=Object.freeze(',
-            'RenderMIS':'const RenderMIS=Object.freeze('
+            'PathBSDFSampler':'const PathBSDFSampler=Object.freeze(',
+            'RenderMIS':'const RenderMIS=Object.freeze(',
+            'DielectricTransport':'const DielectricTransport=Object.freeze('
           }
           for name,marker in specs.items():
               Path(f'tmp/v3980_{name}.txt').write_text(block(marker),encoding='utf-8')
@@ -59,5 +54,5 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add tmp/v3980_*.txt
           git diff --cached --quiet && exit 0
-          git commit -m 'Temporary v3.98.0 exact renderer blocks'
+          git commit -m 'Temporary v3.98.0 path sampler inspection'
           git push
