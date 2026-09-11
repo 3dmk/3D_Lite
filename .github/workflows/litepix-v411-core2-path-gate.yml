@@ -58,6 +58,19 @@ jobs:
             const response=await page.goto('http://127.0.0.1:8000/index.html',{waitUntil:'domcontentloaded',timeout:120000});
             await page.waitForTimeout(4000);
             const core=await page.evaluate(()=>({title:document.title,version:window.LitePixVersion?.version||null,marker:window.__LitePixCore2Path411===true,adapterType:typeof window.LitePixCore2PathAcceleration411}));
+            const sceneSetup=await page.evaluate(()=>{
+              const mesh=new THREE.Mesh(new THREE.BoxGeometry(80,80,80),new THREE.MeshStandardMaterial({color:0xb8b8b8,roughness:.7,metalness:0}));
+              mesh.name='LitePix411BenchmarkBox';
+              mesh.position.set(0,0,0);
+              mesh.userData.primitiveType='box';
+              mesh.userData.baseColor=0xb8b8b8;
+              scene.add(mesh);objects.push(mesh);
+              camera.position.set(180,-180,140);camera.up.set(0,0,1);camera.lookAt(0,0,0);camera.updateMatrixWorld(true);camera.updateProjectionMatrix();
+              window.__3DLiteGeometryRevision=(window.__3DLiteGeometryRevision||0)+1;
+              window.__3DLiteSceneRevision=(window.__3DLiteSceneRevision||0)+1;
+              RenderAccelerationCache16?.clear?.();
+              return {objects:objects.length,name:mesh.name,triangles:mesh.geometry.index?mesh.geometry.index.count/3:mesh.geometry.attributes.position.count/3};
+            });
             const set=engine=>page.evaluate(engine=>{const sv=(id,v)=>{const e=document.getElementById(id);if(!e)return;e.value=String(v);e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));};sv('rsEngine',engine);sv('rsWidth',160);sv('rsHeight',90);sv('rsBounces',4);sv('rsMinSamples',1);sv('rsMaxSamples',3);sv('rsNoise',.05);sv('rsExposure',0);},engine);
             const render=async(engine,useCore2)=>{await set(engine);await page.evaluate(v=>window.__LitePixCore2Path411Enabled=v,useCore2);const prior=await page.evaluate(()=>window.RenderFramework?.jobs?.lastJob?.id||0);const t=Date.now();await page.evaluate(()=>document.getElementById('renderNowBtn').click());await page.waitForFunction(prior=>{const j=window.RenderFramework?.jobs?.lastJob;return !!j&&j.id!==prior&&j.finished&&j.performance;},prior,{timeout:120000,polling:100});return page.evaluate(wall=>{const j=window.RenderFramework.jobs.lastJob,rgba=j.beautyFrame?.rgba||j.beautyFrame?.data||null;return{wallMs:Date.now()-wall,engine:j.settings.engine,renderer:j.beautyFrame?.metadata?.renderer||null,performance:j.performance,secondaryGI:j.beautyFrame?.metadata?.secondaryGI||null,core2:j.beautyFrame?.metadata?.litePixCore2BVH||j.litePixCore2Acceleration411?.snapshot?.()||null,rgba:rgba?Array.from(rgba):null};},t)};
             const fast=await render('fast',true);
@@ -69,14 +82,15 @@ jobs:
             const f=[];
             if(response?.status()!==200)f.push('HTTP != 200');
             if(core.version!=='4.11.0'||!core.marker||core.adapterType!=='function')f.push('v4.11 identity/adapter mismatch');
+            if(!(sceneSetup.triangles>0))f.push('benchmark geometry missing');
             if(fast.engine!=='fast'||fast.renderer!=='Part 4 Fast Direct')f.push('Fast regression failed');
             if(legacy.engine!=='path'||core2.engine!=='path')f.push('Path regression failed');
-            if(!core2.core2||core2.core2.version!=='4.11.0'||!(core2.core2.traceRays>0)||!(core2.core2.nodeTests>0)||!(core2.core2.triangleTests>0))f.push('Core2 BVH did not own real path traversal');
+            if(!core2.core2||core2.core2.version!=='4.11.0'||!(core2.core2.triangles>0)||!(core2.core2.traceRays>0)||!(core2.core2.nodeTests>0)||!(core2.core2.triangleTests>0))f.push('Core2 BVH did not own real path traversal');
             if(core2.secondaryGI!=='Light Cache')f.push('Light Cache not active');
             if(!(maxDiff<=1&&meanDiff<=0.02))f.push('Core2 image mismatch max='+maxDiff+' mean='+meanDiff);
             if(pageErrors.length)f.push('page errors '+pageErrors.length);
             if(consoleErrors.length)f.push('console errors '+consoleErrors.length);
-            const out={passed:!f.length,core,fast,legacy,core2,comparison:{maxPixelDiff:maxDiff,meanPixelDiff:meanDiff,traceSpeedup:speedup,legacyTraceMs:legacy.performance?.traceMs||null,core2TraceMs:core2.performance?.traceMs||null,legacyWallMs:legacy.wallMs,core2WallMs:core2.wallMs},pageErrors,consoleErrors,failures:f};console.log(JSON.stringify(out,null,2));
+            const out={passed:!f.length,core,sceneSetup,fast,legacy,core2,comparison:{maxPixelDiff:maxDiff,meanPixelDiff:meanDiff,traceSpeedup:speedup,legacyTraceMs:legacy.performance?.traceMs||null,core2TraceMs:core2.performance?.traceMs||null,legacyWallMs:legacy.wallMs,core2WallMs:core2.wallMs},pageErrors,consoleErrors,failures:f};console.log(JSON.stringify(out,null,2));
             await browser.close();if(f.length)process.exit(1);
           })().catch(e=>{console.error(e);process.exit(1)});
           NODE
