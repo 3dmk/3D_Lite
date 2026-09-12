@@ -40,6 +40,8 @@ jobs:
           test -f rewrite/src/core/geometry-commands.mjs
           test -f rewrite/src/core/evaluation-graph.mjs
           test -f rewrite/src/core/evaluator.mjs
+          test -f rewrite/src/core/modifier-stack.mjs
+          test -f rewrite/src/core/modifier-commands.mjs
           test -f rewrite/src/ports/render-scene-port.mjs
           test -f rewrite/index.html
           test "$(grep -R "new ThreeDLiteMainCore" -n rewrite/src | wc -l)" -eq 1
@@ -47,3 +49,4 @@ jobs:
           ! grep -R "\.scene\.register\|\.scene\.reparent\|\.scene\.unregister" -n rewrite/src --exclude='main-core.mjs'
           ! grep -R "\.geometry\.create\|\.geometry\.update\|\.geometry\.destroy" -n rewrite/src --exclude='main-core.mjs' --exclude='geometry-store.mjs'
           ! grep -R "positions\[[^]]*\][[:space:]]*=" -n rewrite/src --exclude='main-core.mjs' --exclude='geometry-store.mjs' --exclude='geometry-commands.mjs' --exclude='editable-mesh.mjs'
+          ! grep -R "modifiers\.push\|modifiers\.splice\|modifiers\[[^]]*\][[:space:]]*=" -n rewrite/src --exclude='modifier-commands.mjs' --exclude='modifier-stack.mjs'
