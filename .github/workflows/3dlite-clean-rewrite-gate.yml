@@ -31,6 +31,8 @@ jobs:
         run: node rewrite/tests/litepix-port-smoke.mjs
       - name: Async task and worker smoke gate
         run: node rewrite/tests/async-task-smoke.mjs
+      - name: Project serialization smoke gate
+        run: node rewrite/tests/project-serialization-smoke.mjs
       - name: Architecture gate
         run: |
           set -euo pipefail
@@ -40,6 +42,8 @@ jobs:
           test -f rewrite/src/core/resource-store.mjs
           test -f rewrite/src/core/task-system.mjs
           test -f rewrite/src/core/worker-pool.mjs
+          test -f rewrite/src/core/project-migrations.mjs
+          test -f rewrite/src/core/project-serializer.mjs
           test -f rewrite/src/core/scene-entity.mjs
           test -f rewrite/src/core/scene-graph.mjs
           test -f rewrite/src/core/editable-mesh.mjs
@@ -71,3 +75,4 @@ jobs:
           ! grep -R "\.entities\.update\|\.entities\.create\|\.entities\.destroy" -n rewrite/src/ports
           ! grep -R "LitePixSceneCompiler\|LitePixCore8Production443" -n rewrite/src --exclude='litepix-renderer-port.mjs'
           ! grep -R "postMessage\|new Worker" -n rewrite/src/core --exclude='worker-pool.mjs'
+          ! grep -R "\.#[A-Za-z].*=" -n rewrite/src/core/project-serializer.mjs rewrite/src/core/project-migrations.mjs
