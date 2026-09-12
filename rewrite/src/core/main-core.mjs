@@ -2,6 +2,7 @@ import { GenerationRegistry } from './generation-registry.mjs';
 import { ResourceStore } from './resource-store.mjs';
 import { CommandStack } from './command-stack.mjs';
 import { SceneGraph } from './scene-graph.mjs';
+import { GeometryStore } from './geometry-store.mjs';
 import { createSceneEntity, validateSceneEntity, normalizeTransform } from './scene-entity.mjs';
 
 const DOMAINS = [
@@ -15,6 +16,7 @@ export class ThreeDLiteMainCore {
   constructor({ validator } = {}) {
     this.generations = new GenerationRegistry(DOMAINS);
     this.entities = new ResourceStore();
+    this.geometry = new GeometryStore();
     this.commands = new CommandStack();
     this.scene = new SceneGraph(handle => this.entities.has(handle));
     this.#validator = validator ?? (() => true);
@@ -22,7 +24,7 @@ export class ThreeDLiteMainCore {
       sceneName: 'Untitled',
       activeCamera: null,
       selection: Object.freeze([]),
-      metadata: Object.freeze({ schema: 2 })
+      metadata: Object.freeze({ schema: 3 })
     });
   }
 
@@ -57,8 +59,30 @@ export class ThreeDLiteMainCore {
   undo() { return this.commands.undo(this); }
   redo() { return this.commands.redo(this); }
 
+  createGeometry(input = {}) {
+    const handle = this.geometry.create(input);
+    this.generations.bumpMany(['geometry','topology','evaluation','renderScene']);
+    return handle;
+  }
+
+  updateGeometry(handle, updater) {
+    const updated = this.geometry.update(handle, updater);
+    if (updated) this.generations.bumpMany(['geometry','topology','evaluation','renderScene']);
+    return updated;
+  }
+
+  destroyGeometry(handle) {
+    if (!this.geometry.has(handle)) return false;
+    const inUse = this.entities.values().some(entity => sameHandle(entity.geometry, handle));
+    if (inUse) return false;
+    const destroyed = this.geometry.destroy(handle);
+    if (destroyed) this.generations.bumpMany(['geometry','topology','evaluation','renderScene']);
+    return destroyed;
+  }
+
   createEntity(entity = {}, { parent = null } = {}) {
     const normalized = createSceneEntity(entity);
+    if (normalized.geometry && !this.geometry.has(normalized.geometry)) throw new Error('Entity references stale geometry');
     if (!validateSceneEntity(normalized)) throw new Error('Invalid scene entity');
     if (!this.#validator(normalized, { label: 'createEntity', core: this })) {
       throw new Error('Entity validation failed');
@@ -81,6 +105,7 @@ export class ThreeDLiteMainCore {
     const next = structuredClone(current);
     updater(next);
     next.transform = normalizeTransform(next.transform);
+    if (next.geometry && !this.geometry.has(next.geometry)) throw new Error('Entity references stale geometry');
     if (!validateSceneEntity(next)) throw new Error('Invalid scene entity update');
     if (!this.#validator(next, { label: 'updateEntity', core: this, handle })) {
       throw new Error('Entity validation failed');
@@ -88,6 +113,16 @@ export class ThreeDLiteMainCore {
     this.entities.update(handle, deepFreeze(next));
     this.generations.bumpMany(dirtyDomains);
     return true;
+  }
+
+  assignGeometry(entityHandle, geometryHandle = null) {
+    const entity = this.entities.get(entityHandle);
+    if (!entity) return false;
+    if (geometryHandle && !this.geometry.has(geometryHandle)) throw new Error('Cannot assign stale geometry');
+    if (geometryHandle && entity.type !== 'mesh') throw new Error('Geometry can only be assigned to mesh entities');
+    return this.updateEntity(entityHandle, draft => {
+      draft.geometry = geometryHandle ? { ...geometryHandle } : null;
+    }, ['scene','geometry','renderScene']);
   }
 
   reparentEntity(handle, parent = null) {
@@ -136,6 +171,10 @@ export class ThreeDLiteMainCore {
   renderSceneStamp() {
     return this.generations.stamp(['scene','geometry','topology','transform','material','renderScene']);
   }
+}
+
+function sameHandle(a, b) {
+  return !!a && !!b && a.index === b.index && a.generation === b.generation;
 }
 
 function handleKey(handle) {
