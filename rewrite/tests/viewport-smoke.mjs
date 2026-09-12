@@ -49,7 +49,7 @@ assert.throws(() => viewport.applyPick(createEntityPick({index:999,generation:1}
 assert.throws(() => viewport.setTool('paint'),/unsupported viewport tool/i);
 
 const frame = viewport.frame();
-assert.equal(frame.scene.schema,6);
+assert.equal(frame.scene.schema,7);
 assert.deepEqual(frame.scene.entityHandles[0],entity);
 assert.equal(frame.scene.objects[0].id,'viewport-mesh');
 
