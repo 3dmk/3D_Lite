@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>3DLite WebGL Editor</title>
+<style>
+:root{
+  --bg:#1e2023;--panel:#292c30;--panel2:#32363b;--line:#474c53;
+  --text:#e4e6e8;--muted:#9ca3aa;--accent:#ff8a00;--field:#17191c;
+}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+font:12px "Segoe UI",Arial,sans-serif}
+#app{height:100vh;display:grid;grid-template-rows:28px 38px 1fr 22px}
+.bar{display:flex;align-items:center;background:#24272a;border-bottom:1px solid var(--line)}
+#menu{padding:0 6px;gap:2px}
+.menuItem{padding:6px 10px}
+.menuItem:hover{background:#3a3e44}
+#toolbar{padding:4px 8px;gap:6px}
+button{background:#35393e;color:var(--text);border:1px solid #51565e;border-radius:3px;padding:5px 9px}
+button:hover{background:#41464d}
+button.active{background:#555c64;border-color:#707983}
+#main{min-height:0;display:grid;grid-template-columns:210px 1fr 250px}
+.side{background:var(--panel);min-height:0}
+#left{border-right:1px solid var(--line)}
+#right{border-left:1px solid var(--line)}
+.title{height:30px;display:flex;align-items:center;padding:0 10px;background:var(--panel2);border-bottom:1px solid var(--line);font-weight:600}
+#scene{padding:6px}
+.item{padding:6px 8px;border-radius:3px;cursor:pointer}
+.item:hover{background:#383c42}
+.item.sel{background:#4b5058;border-left:3px solid var(--accent)}
+#view{position:relative;min-width:0;min-height:0;background:#151719}
+canvas{width:100%;height:100%;display:block}
+#hud{position:absolute;left:10px;top:10px;background:rgba(20,22,24,.75);padding:7px 9px;border-radius:4px;pointer-events:none}
+#hint{position:absolute;right:10px;bottom:10px;background:rgba(20,22,24,.75);padding:6px 8px;border-radius:4px;color:#cfd3d8;pointer-events:none}
+.props{padding:10px}
+.row{display:grid;grid-template-columns:80px 1fr;gap:8px;align-items:center;margin-bottom:8px}
+input[type=number]{width:100%;background:var(--field);color:var(--text);border:1px solid #555b62;border-radius:3px;padding:5px}
+#status{display:flex;align-items:center;justify-content:space-between;padding:0 8px;background:#24272a;border-top:1px solid var(--line);color:#c8cbd0}
+#error{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:#1b1d20;color:#ffb3b3;font-size:14px;padding:30px;text-align:center;z-index:5}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="menu" class="bar">
+    <div class="menuItem">File</div>
+    <div class="menuItem">Edit</div>
+    <div class="menuItem">Tools</div>
+    <div class="menuItem">View</div>
+    <div class="menuItem">Create</div>
+    <div class="menuItem">Help</div>
+  </div>
+
+  <div id="toolbar" class="bar">
+    <button id="selectTool" class="active">Select</button>
+    <button id="moveTool">Move</button>
+    <button id="rotateTool">Rotate</button>
+    <button id="scaleTool">Scale</button>
+    <span style="width:1px;height:22px;background:#50555c"></span>
+    <button id="frameBtn">Frame</button>
+    <button id="resetBtn">Reset View</button>
+    <span style="margin-left:auto">Viewport:</span>
+    <button id="litBtn" class="active">Lit</button>
+    <button id="wireBtn">Wireframe</button>
+  </div>
+
+  <div id="main">
+    <aside id="left" class="side">
+      <div class="title">Scene Explorer</div>
+      <div id="scene"></div>
+    </aside>
+
+    <section id="view">
+      <canvas id="canvas"></canvas>
+      <div id="error"></div>
+      <div id="hud">
+        <b>3DLite WebGL Viewport</b><br>
+        FPS: <span id="fps">0</span><br>
+        Selected: <span id="selName">Cube</span>
+      </div>
+      <div id="hint">Alt + LMB Orbit • MMB Pan • Wheel Zoom</div>
+    </section>
+
+    <aside id="right" class="side">
+      <div class="title">Properties</div>
+      <div class="props">
+        <div class="row"><label>X</label><input id="x" type="number" step="0.1"></div>
+        <div class="row"><label>Y</label><input id="y" type="number" step="0.1"></div>
+        <div class="row"><label>Z</label><input id="z" type="number" step="0.1"></div>
+        <div class="row"><label>Scale</label><input id="scale" type="number" step="0.1" min="0.1"></div>
+        <div class="row"><label>Sun</label><input id="sun" type="number" min="0" max="4" step="0.1" value="1.2"></div>
+      </div>
+    </aside>
+  </div>
+
+  <div id="status">
+    <span id="statusText">Starting WebGL…</span>
+    <span id="sizeText">0 × 0</span>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+const $ = id => document.getElementById(id);
+const canvas = $("canvas");
+const errorBox = $("error");
+const statusText = $("statusText");
+const fpsText = $("fps");
+const sizeText = $("sizeText");
+
+function fail(msg){
+  errorBox.style.display="flex";
+  errorBox.textContent="WebGL startup error: " + msg;
+  statusText.textContent="Failed";
+}
+
+let gl;
+try{
+  gl = canvas.getContext("webgl", {antialias:true, alpha:false, depth:true});
+  if(!gl) throw new Error("This browser/device did not provide a WebGL context.");
+}catch(e){
+  fail(e.message);
+  return;
+}
+
+const VERT = `
+attribute vec3 aPosition;
+attribute vec3 aNormal;
+uniform mat4 uMVP;
+uniform mat4 uModel;
+varying vec3 vNormal;
+void main(){
+  vNormal = mat3(uModel) * aNormal;
+  gl_Position = uMVP * vec4(aPosition,1.0);
+}`;
+
+const FRAG = `
+precision mediump float;
+varying vec3 vNormal;
+uniform vec3 uColor;
+uniform vec3 uLight;
+uniform float uSun;
+void main(){
+  vec3 N = normalize(vNormal);
+  float diffuse = max(dot(N, normalize(-uLight)), 0.0);
+  float hemi = 0.32 + 0.18 * max(N.y,0.0);
+  vec3 c = uColor * (hemi + diffuse * uSun);
+  gl_FragColor = vec4(c,1.0);
+}`;
+
+function compile(type,src){
+  const s=gl.createShader(type);
+  gl.shaderSource(s,src);
+  gl.compileShader(s);
+  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))
+    throw new Error(gl.getShaderInfoLog(s) || "shader compile error");
+  return s;
+}
+
+let program;
+try{
+  program=gl.createProgram();
+  gl.attachShader(program,compile(gl.VERTEX_SHADER,VERT));
+  gl.attachShader(program,compile(gl.FRAGMENT_SHADER,FRAG));
+  gl.linkProgram(program);
+  if(!gl.getProgramParameter(program,gl.LINK_STATUS))
+    throw new Error(gl.getProgramInfoLog(program) || "program link error");
+}catch(e){
+  fail(e.message);
+  return;
+}
+
+gl.useProgram(program);
+
+const loc={
+  pos:gl.getAttribLocation(program,"aPosition"),
+  normal:gl.getAttribLocation(program,"aNormal"),
+  mvp:gl.getUniformLocation(program,"uMVP"),
+  model:gl.getUniformLocation(program,"uModel"),
+  color:gl.getUniformLocation(program,"uColor"),
+  light:gl.getUniformLocation(program,"uLight"),
+  sun:gl.getUniformLocation(program,"uSun")
+};
+
+function ident(){
+  return new Float32Array([
+    1,0,0,0,
+    0,1,0,0,
+    0,0,1,0,
+    0,0,0,1
+  ]);
+}
+
+function multiply(a,b){
+  const o=new Float32Array(16);
+  for(let c=0;c<4;c++){
+    for(let r=0;r<4;r++){
+      o[c*4+r] =
+        a[0*4+r]*b[c*4+0] +
+        a[1*4+r]*b[c*4+1] +
+        a[2*4+r]*b[c*4+2] +
+        a[3*4+r]*b[c*4+3];
+    }
+  }
+  return o;
+}
+
+function perspective(fov,aspect,near,far){
+  const f=1/Math.tan(fov/2), nf=1/(near-far);
+  const o=new Float32Array(16);
+  o[0]=f/aspect; o[5]=f;
+  o[10]=(far+near)*nf;
+  o[11]=-1;
+  o[14]=(2*far*near)*nf;
+  return o;
+}
+
+function lookAt(eye,target,up){
+  let zx=eye[0]-target[0], zy=eye[1]-target[1], zz=eye[2]-target[2];
+  let len=Math.hypot(zx,zy,zz)||1; zx/=len; zy/=len; zz/=len;
+
+  let xx=up[1]*zz-up[2]*zy;
+  let xy=up[2]*zx-up[0]*zz;
+  let xz=up[0]*zy-up[1]*zx;
+  len=Math.hypot(xx,xy,xz)||1; xx/=len; xy/=len; xz/=len;
+
+  let yx=zy*xz-zz*xy;
+  let yy=zz*xx-zx*xz;
+  let yz=zx*xy-zy*xx;
+
+  return new Float32Array([
+    xx,yx,zx,0,
+    xy,yy,zy,0,
+    xz,yz,zz,0,
+    -(xx*eye[0]+xy*eye[1]+xz*eye[2]),
+    -(yx*eye[0]+yy*eye[1]+yz*eye[2]),
+    -(zx*eye[0]+zy*eye[1]+zz*eye[2]),
+    1
+  ]);
+}
+
+function modelMatrix(p,s){
+  const m=ident();
+  m[0]=s[0]; m[5]=s[1]; m[10]=s[2];
+  m[12]=p[0]; m[13]=p[1]; m[14]=p[2];
+  return m;
+}
+
+function createMesh(vertices){
+  const buffer=gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER,buffer);
+  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(vertices),gl.STATIC_DRAW);
+  return {buffer,count:vertices.length/6};
+}
+
+function cubeMesh(){
+  const p=[
+    [-1,-1, 1],[ 1,-1, 1],[ 1, 1, 1],[-1, 1, 1],
+    [-1,-1,-1],[ 1,-1,-1],[ 1, 1,-1],[-1, 1,-1]
+  ];
+  const faces=[
+    [0,1,2,3,[0,0,1]],[5,4,7,6,[0,0,-1]],
+    [4,0,3,7,[-1,0,0]],[1,5,6,2,[1,0,0]],
+    [3,2,6,7,[0,1,0]],[4,5,1,0,[0,-1,0]]
+  ];
+  const out=[];
+  for(const f of faces){
+    const idx=[f[0],f[1],f[2],f[0],f[2],f[3]];
+    const n=f[4];
+    for(const i of idx) out.push(...p[i],...n);
+  }
+  return createMesh(out);
+}
+
+function sphereMesh(segments,rings){
+  const out=[];
+  function P(u,v){
+    const th=u*Math.PI*2, ph=v*Math.PI;
+    return [Math.sin(ph)*Math.cos(th), Math.cos(ph), Math.sin(ph)*Math.sin(th)];
+  }
+  for(let y=0;y<rings;y++){
+    for(let x=0;x<segments;x++){
+      const a=P(x/segments,y/rings);
+      const b=P((x+1)/segments,y/rings);
+      const c=P((x+1)/segments,(y+1)/rings);
+      const d=P(x/segments,(y+1)/rings);
+      for(const q of [a,b,c,a,c,d]) out.push(...q,...q);
+    }
+  }
+  return createMesh(out);
+}
+
+function coneMesh(segments){
+  const out=[];
+  for(let i=0;i<segments;i++){
+    const a=i/segments*Math.PI*2;
+    const b=(i+1)/segments*Math.PI*2;
+    const p1=[Math.cos(a),-1,Math.sin(a)];
+    const p2=[Math.cos(b),-1,Math.sin(b)];
+    const top=[0,1,0];
+    let n=[Math.cos((a+b)/2),0.65,Math.sin((a+b)/2)];
+    let l=Math.hypot(n[0],n[1],n[2]); n=n.map(v=>v/l);
+    for(const q of [top,p1,p2]) out.push(...q,...n);
+    for(const q of [[0,-1,0],p2,p1]) out.push(...q,0,-1,0);
+  }
+  return createMesh(out);
+}
+
+const meshes={
+  cube:cubeMesh(),
+  sphere:sphereMesh(24,16),
+  cone:coneMesh(24)
+};
+
+const objects=[
+  {name:"Cube",mesh:"cube",p:[-2,1,0],s:[1,1,1],color:[0.65,0.69,0.75]},
+  {name:"Gold Sphere",mesh:"sphere",p:[0.3,1,0],s:[1,1,1],color:[0.95,0.56,0.08]},
+  {name:"Glass Sphere",mesh:"sphere",p:[2.7,1,0],s:[1,1,1],color:[0.22,0.58,0.82]},
+  {name:"Cone",mesh:"cone",p:[0,1,2.7],s:[1,1,1],color:[0.72,0.28,0.18]}
+];
+
+let selected=0;
+let wire=false;
+let sun=1.2;
+let yaw=-0.55;
+let pitch=0.35;
+let distance=9;
+let target=[0,1,0];
+let pan=[0,0];
+
+const scene=$("scene");
+const selName=$("selName");
+const xInput=$("x");
+const yInput=$("y");
+const zInput=$("z");
+const scaleInput=$("scale");
+const sunInput=$("sun");
+
+function rebuildScene(){
+  scene.innerHTML="";
+  objects.forEach((o,i)=>{
+    const d=document.createElement("div");
+    d.className="item"+(i===selected?" sel":"");
+    d.textContent=o.name;
+    d.onclick=()=>selectObject(i);
+    scene.appendChild(d);
+  });
+}
+
+function syncProps(){
+  const o=objects[selected];
+  xInput.value=o.p[0];
+  yInput.value=o.p[1];
+  zInput.value=o.p[2];
+  scaleInput.value=o.s[0];
+  selName.textContent=o.name;
+}
+
+function selectObject(i){
+  selected=i;
+  rebuildScene();
+  syncProps();
+}
+
+xInput.oninput=()=>objects[selected].p[0]=+xInput.value;
+yInput.oninput=()=>objects[selected].p[1]=+yInput.value;
+zInput.oninput=()=>objects[selected].p[2]=+zInput.value;
+scaleInput.oninput=()=>{
+  const v=Math.max(0.1,+scaleInput.value||1);
+  objects[selected].s=[v,v,v];
+};
+sunInput.oninput=()=>sun=Math.max(0,+sunInput.value||0);
+
+$("litBtn").onclick=()=>{
+  wire=false;
+  $("litBtn").classList.add("active");
+  $("wireBtn").classList.remove("active");
+};
+$("wireBtn").onclick=()=>{
+  wire=true;
+  $("wireBtn").classList.add("active");
+  $("litBtn").classList.remove("active");
+};
+$("resetBtn").onclick=()=>{
+  yaw=-0.55; pitch=0.35; distance=9; target=[0,1,0]; pan=[0,0];
+};
+$("frameBtn").onclick=()=>{
+  target=[...objects[selected].p];
+  distance=5;
+};
+
+let lastX=0,lastY=0,orbiting=false,panning=false;
+canvas.addEventListener("mousedown",e=>{
+  lastX=e.clientX; lastY=e.clientY;
+  orbiting=(e.button===0 && e.altKey);
+  panning=(e.button===1);
+  e.preventDefault();
+});
+window.addEventListener("mouseup",()=>{orbiting=false;panning=false});
+window.addEventListener("mousemove",e=>{
+  const dx=e.clientX-lastX, dy=e.clientY-lastY;
+  lastX=e.clientX; lastY=e.clientY;
+  if(orbiting){
+    yaw+=dx*0.007;
+    pitch=Math.max(-1.45,Math.min(1.45,pitch+dy*0.007));
+  }
+  if(panning){
+    pan[0]+=dx*0.006*distance;
+    pan[1]-=dy*0.006*distance;
+  }
+});
+canvas.addEventListener("wheel",e=>{
+  distance=Math.max(2.0,Math.min(30,distance*(1+e.deltaY*0.001)));
+  e.preventDefault();
+},{passive:false});
+
+function resize(){
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  const w=Math.max(1,canvas.clientWidth);
+  const h=Math.max(1,canvas.clientHeight);
+  const W=Math.floor(w*dpr), H=Math.floor(h*dpr);
+  if(canvas.width!==W || canvas.height!==H){
+    canvas.width=W; canvas.height=H;
+  }
+  gl.viewport(0,0,canvas.width,canvas.height);
+  sizeText.textContent=canvas.width+" × "+canvas.height;
+}
+
+function bindMesh(mesh){
+  gl.bindBuffer(gl.ARRAY_BUFFER,mesh.buffer);
+  gl.enableVertexAttribArray(loc.pos);
+  gl.vertexAttribPointer(loc.pos,3,gl.FLOAT,false,24,0);
+  gl.enableVertexAttribArray(loc.normal);
+  gl.vertexAttribPointer(loc.normal,3,gl.FLOAT,false,24,12);
+}
+
+function drawObject(obj,view,proj){
+  const m=modelMatrix(obj.p,obj.s);
+  const mvp=multiply(proj,multiply(view,m));
+  gl.uniformMatrix4fv(loc.model,false,m);
+  gl.uniformMatrix4fv(loc.mvp,false,mvp);
+  gl.uniform3fv(loc.color,obj.color);
+  gl.uniform3f(loc.light,-0.5,-1.0,-0.35);
+  gl.uniform1f(loc.sun,sun);
+
+  const mesh=meshes[obj.mesh];
+  bindMesh(mesh);
+  gl.drawArrays(wire?gl.LINES:gl.TRIANGLES,0,mesh.count);
+}
+
+let lastTime=performance.now(),frameCount=0,accum=0;
+
+function frame(now){
+  resize();
+
+  const dt=now-lastTime;
+  lastTime=now;
+  accum+=dt;
+  frameCount++;
+  if(accum>=500){
+    fpsText.textContent=Math.round(frameCount*1000/accum);
+    accum=0;
+    frameCount=0;
+  }
+
+  gl.enable(gl.DEPTH_TEST);
+  gl.disable(gl.CULL_FACE);
+  gl.clearColor(0.12,0.13,0.15,1);
+  gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+
+  const cp=Math.cos(pitch), sp=Math.sin(pitch);
+  const cy=Math.cos(yaw), sy=Math.sin(yaw);
+  const center=[target[0]+pan[0],target[1]+pan[1],target[2]];
+  const eye=[
+    center[0]+distance*cp*sy,
+    center[1]+distance*sp,
+    center[2]+distance*cp*cy
+  ];
+
+  const view=lookAt(eye,center,[0,1,0]);
+  const proj=perspective(Math.PI/4,canvas.width/canvas.height,0.1,100);
+
+  const ground={
+    mesh:"cube",
+    p:[0,-0.1,0],
+    s:[8,0.1,8],
+    color:[0.23,0.24,0.26]
+  };
+  drawObject(ground,view,proj);
+
+  for(const o of objects) drawObject(o,view,proj);
+
+  statusText.textContent="WebGL running";
+  requestAnimationFrame(frame);
+}
+
+rebuildScene();
+syncProps();
+requestAnimationFrame(frame);
+
+})();
+</script>
+</body>
+</html>
