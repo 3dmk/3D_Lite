@@ -9,8 +9,17 @@ export class EvaluationGraph {
     if (!key) throw new Error('Evaluation node id is required');
     const deps = [...new Set(dependencies.map(String))];
     if (deps.includes(key)) throw new Error('Evaluation node cannot depend on itself');
+
+    const previous = this.#nodes.get(key);
     this.#nodes.set(key, Object.freeze({ id:key, dependencies:Object.freeze(deps) }));
-    this.#assertAcyclic();
+    try {
+      this.#assertAcyclic();
+    } catch (error) {
+      if (previous) this.#nodes.set(key, previous);
+      else this.#nodes.delete(key);
+      throw error;
+    }
+
     this.#revision++;
     return key;
   }
