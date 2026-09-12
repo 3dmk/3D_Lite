@@ -7,10 +7,8 @@ EventTarget.prototype.addEventListener=function(type,listener,options){
     armed=false;
     EventTarget.prototype.addEventListener=native;
     const wrapped=function(e){
-      const tool=(document.getElementById('toolName')?.textContent||'Select').trim().toLowerCase();
       const viewportNav=(e.altKey&&e.button===0)||e.button===1;
-      const objectSelect=tool==='select'&&e.button===0&&!e.altKey;
-      if(viewportNav||objectSelect)return;
+      if(viewportNav)return;
       return listener.call(this,e);
     };
     document.documentElement.dataset.r3dInputPriority='1';
