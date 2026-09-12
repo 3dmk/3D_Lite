@@ -7,6 +7,7 @@ export class LitePixRendererPort {
   #lastCompiled = null;
 
   constructor(renderScenePort, runtime) {
+    if (!runtime || typeof runtime.compileScene !== 'function') throw new TypeError('LitePixRendererPort requires a renderer runtime');
     this.#adapter = new LitePixSceneAdapter(renderScenePort);
     this.#runtime = runtime;
   }
@@ -26,9 +27,15 @@ export class LitePixRendererPort {
     return this.#runtime.submit(compiled, job);
   }
 
+  dispose() {
+    if (typeof this.#runtime.dispose === 'function') this.#runtime.dispose();
+    this.#lastStamp = null;
+    this.#lastCompiled = null;
+  }
+
   snapshot() {
     return Object.freeze({
-      provider: this.#runtime.name ?? 'LitePix runtime',
+      provider: this.#runtime.name ?? 'LitePix renderer runtime',
       sceneCompiled: !!this.#lastCompiled,
       runtime: typeof this.#runtime.snapshot === 'function' ? this.#runtime.snapshot() : null
     });
@@ -41,7 +48,7 @@ export function createBrowserLitePixRuntime(root = globalThis) {
   const compiler = new SceneCompiler();
   const telemetry = typeof root.LitePixCore8Production443 === 'function' ? new root.LitePixCore8Production443() : null;
   return Object.freeze({
-    name: 'LitePix 4.45 clean bridge',
+    name: 'LitePix 4.45 renderer adapter',
     compileScene(scene) {
       compiler.compile(scene);
       return compiler;
@@ -51,6 +58,10 @@ export function createBrowserLitePixRuntime(root = globalThis) {
       return Object.freeze({ compiler:compiled, job });
     },
     capture(job, extra = {}) { return telemetry?.capture(job, extra) ?? null; },
+    dispose() {
+      compiler.dispose?.();
+      telemetry?.dispose?.();
+    },
     snapshot() { return Object.freeze({ compiler:compiler.snapshot?.() ?? null, telemetry:telemetry?.snapshot?.() ?? null }); }
   });
 }
