@@ -13,15 +13,13 @@ for(const id of ['gl','scene','status','renderBtn','renderSide','rc','modal','se
 for(const m of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)){if(!/\bsrc=/.test(m[1]))fail('inline script body is forbidden');if(m[2].trim())fail('external script tag contains inline body')}
 const scripts=[...html.matchAll(/<script\s+src="([^"]+)"\s*><\/script>/g)].map(m=>m[1]);
 if(JSON.stringify(scripts)!==JSON.stringify(['r3d-editor.js','r3d-renderer.js','r3d-render-watchdog.js','r3d-output-orientation.js','r3d-input-priority-shim.js','r3d-local-orbit.js','r3d-camera-gizmos.js','r3d-bootstrap.js']))fail('script load order changed');
-for(const f of files.filter(f=>f.endsWith('.js'))){
-  try{execFileSync(process.execPath,['--check',path.join(root,f)],{stdio:'pipe'})}catch(e){fail(`${f} syntax error\n${e.stderr?.toString()||e.message}`)}
-  const s=read(f);for(const banned of ['LitePix','3DLite','ThreeDLite'])if(s.includes(banned))fail(`${f} contains banned cross-project term ${banned}`);
-}
+for(const f of files.filter(f=>f.endsWith('.js'))){try{execFileSync(process.execPath,['--check',path.join(root,f)],{stdio:'pipe'})}catch(e){fail(`${f} syntax error\n${e.stderr?.toString()||e.message}`)}const s=read(f);for(const banned of ['LitePix','3DLite','ThreeDLite'])if(s.includes(banned))fail(`${f} contains banned cross-project term ${banned}`)}
 const ed=read('r3d-editor.js'),ren=read('r3d-renderer.js'),watch=read('r3d-render-watchdog.js'),orient=read('r3d-output-orientation.js'),priority=read('r3d-input-priority-shim.js'),orbit=read('r3d-local-orbit.js'),cams=read('r3d-camera-gizmos.js'),boot=read('r3d-bootstrap.js');
-for(const token of ['window.R3DEditor','checkpoint()','doUndo','doRedo','addObject','setTool'])if(!ed.includes(token))fail(`editor contract missing ${token}`);
+for(const token of ['window.R3DEditor','checkpoint()','doUndo','doRedo','addObject','setTool','pan=[0,0,0]','cross(right,f)'])if(!ed.includes(token))fail(`editor contract missing ${token}`);
 for(const token of ['window.R3DRenderer','buildSAH','coneh','coneCPU','GPUBufferUsage','temporal','denoise','reservoir'])if(!ren.includes(token))fail(`renderer contract missing ${token}`);
 for(const token of ['canvasLuma','safeCPU','black-frame watchdog'])if(!watch.includes(token))fail(`watchdog contract missing ${token}`);
-for(const token of ['flipCanvasY','r3dOrientation','r3dRenderOrientation'])if(!orient.includes(token))fail(`orientation contract missing ${token}`);
+for(const token of ['markCanvasUpright','r3dOrientation','r3dRenderOrientation','orientation-neutral'])if(!orient.includes(token))fail(`orientation contract missing ${token}`);
+if(orient.includes('scale(1,-1)')||orient.includes('scale(1, -1)'))fail('blanket final vertical flip returned');
 for(const token of ['viewportNav','r3dInputPriority'])if(!priority.includes(token))fail(`input-priority contract missing ${token}`);
 for(const token of ['R3DLocalOrbit','FACTOR=2.0','r3dLocalOrbit'])if(!orbit.includes(token))fail(`local-orbit contract missing ${token}`);
 for(const token of ['window.R3DCameras','cameraForRender','activeCameraId','drawMoveGizmo','drawRotateGizmo','drawScaleGizmo','copyCamera','deleteCamera','cameraFromView'])if(!cams.includes(token))fail(`camera/gizmo contract missing ${token}`);
