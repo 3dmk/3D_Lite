@@ -4,7 +4,7 @@ import {execFileSync} from 'node:child_process';
 const root=path.dirname(new URL(import.meta.url).pathname);
 const fail=m=>{console.error('R3D RELEASE GATE FAIL:',m);process.exitCode=1};
 const read=f=>fs.readFileSync(path.join(root,f),'utf8');
-const files=['index.html','r3d-editor.js','r3d-renderer.js','r3d-render-watchdog.js','r3d-output-orientation.js','r3d-camera-gizmos.js','r3d-bootstrap.js'];
+const files=['index.html','r3d-editor.js','r3d-renderer.js','r3d-render-watchdog.js','r3d-output-orientation.js','r3d-input-priority-shim.js','r3d-camera-gizmos.js','r3d-bootstrap.js'];
 for(const f of files)if(!fs.existsSync(path.join(root,f)))fail(`missing ${f}`);
 const html=read('index.html');
 const ids=[...html.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]),seen=new Set();
@@ -12,16 +12,17 @@ for(const id of ids){if(seen.has(id))fail(`duplicate id ${id}`);seen.add(id)}
 for(const id of ['gl','scene','status','renderBtn','renderSide','rc','modal','selectTool','moveTool','rotateTool','scaleTool'])if(!seen.has(id))fail(`required id ${id} missing`);
 for(const m of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)){if(!/\bsrc=/.test(m[1]))fail('inline script body is forbidden');if(m[2].trim())fail('external script tag contains inline body')}
 const scripts=[...html.matchAll(/<script\s+src="([^"]+)"\s*><\/script>/g)].map(m=>m[1]);
-if(JSON.stringify(scripts)!==JSON.stringify(['r3d-editor.js','r3d-renderer.js','r3d-render-watchdog.js','r3d-output-orientation.js','r3d-camera-gizmos.js','r3d-bootstrap.js']))fail('script load order changed');
-for(const f of ['r3d-editor.js','r3d-renderer.js','r3d-render-watchdog.js','r3d-output-orientation.js','r3d-camera-gizmos.js','r3d-bootstrap.js']){
+if(JSON.stringify(scripts)!==JSON.stringify(['r3d-editor.js','r3d-renderer.js','r3d-render-watchdog.js','r3d-output-orientation.js','r3d-input-priority-shim.js','r3d-camera-gizmos.js','r3d-bootstrap.js']))fail('script load order changed');
+for(const f of ['r3d-editor.js','r3d-renderer.js','r3d-render-watchdog.js','r3d-output-orientation.js','r3d-input-priority-shim.js','r3d-camera-gizmos.js','r3d-bootstrap.js']){
   try{execFileSync(process.execPath,['--check',path.join(root,f)],{stdio:'pipe'})}catch(e){fail(`${f} syntax error\n${e.stderr?.toString()||e.message}`)}
   const s=read(f);for(const banned of ['LitePix','3DLite','ThreeDLite'])if(s.includes(banned))fail(`${f} contains banned cross-project term ${banned}`);
 }
-const ed=read('r3d-editor.js'),ren=read('r3d-renderer.js'),watch=read('r3d-render-watchdog.js'),orient=read('r3d-output-orientation.js'),cams=read('r3d-camera-gizmos.js'),boot=read('r3d-bootstrap.js');
+const ed=read('r3d-editor.js'),ren=read('r3d-renderer.js'),watch=read('r3d-render-watchdog.js'),orient=read('r3d-output-orientation.js'),priority=read('r3d-input-priority-shim.js'),cams=read('r3d-camera-gizmos.js'),boot=read('r3d-bootstrap.js');
 for(const token of ['window.R3DEditor','checkpoint()','doUndo','doRedo','addObject','setTool'])if(!ed.includes(token))fail(`editor contract missing ${token}`);
 for(const token of ['window.R3DRenderer','buildSAH','coneh','coneCPU','GPUBufferUsage','temporal','denoise','reservoir'])if(!ren.includes(token))fail(`renderer contract missing ${token}`);
 for(const token of ['canvasLuma','safeCPU','black-frame watchdog'])if(!watch.includes(token))fail(`watchdog contract missing ${token}`);
 for(const token of ['flipCanvasY','r3dOrientation','r3dRenderOrientation'])if(!orient.includes(token))fail(`orientation contract missing ${token}`);
+for(const token of ['viewportNav','objectSelect','r3dInputPriority'])if(!priority.includes(token))fail(`input-priority contract missing ${token}`);
 for(const token of ['window.R3DCameras','cameraForRender','activeCameraId','drawMoveGizmo','drawRotateGizmo','drawScaleGizmo','copyCamera','deleteCamera','cameraFromView'])if(!cams.includes(token))fail(`camera/gizmo contract missing ${token}`);
 if(!boot.includes("dataset.r3dBootstrap='1'"))fail('bootstrap completion marker missing');
 if((ed.match(/requestAnimationFrame\(loop\)/g)||[]).length!==2)fail('editor animation loop structure changed');
