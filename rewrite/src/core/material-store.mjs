@@ -8,10 +8,7 @@ export class MaterialStore {
 
   constructor(assetStore) { this.#assets = assetStore; }
 
-  create(input = {}) {
-    return this.#resources.create(normalizeMaterial(input, this.#assets));
-  }
-
+  create(input = {}) { return this.#resources.create(normalizeMaterial(input, this.#assets)); }
   has(handle) { return this.#resources.has(handle); }
   get(handle) { return this.#resources.get(handle); }
   entries() { return this.#resources.entries(); }
@@ -30,7 +27,12 @@ export class MaterialStore {
   compile(handle) {
     const material = this.get(handle);
     if (!material) return null;
-    return material;
+    const textures = {};
+    for (const slot of TEXTURE_SLOTS) {
+      const assetHandle = material.textures[slot];
+      textures[slot] = assetHandle ? Object.freeze({ handle: assetHandle, asset: this.#assets.get(assetHandle) ?? null }) : null;
+    }
+    return deepFreeze({ ...structuredClone(material), textures });
   }
 }
 
