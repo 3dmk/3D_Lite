@@ -38,6 +38,8 @@ jobs:
           test -f rewrite/src/core/geometry-store.mjs
           test -f rewrite/src/core/edit-selection.mjs
           test -f rewrite/src/core/geometry-commands.mjs
+          test -f rewrite/src/core/evaluation-graph.mjs
+          test -f rewrite/src/core/evaluator.mjs
           test -f rewrite/src/ports/render-scene-port.mjs
           test -f rewrite/index.html
           test "$(grep -R "new ThreeDLiteMainCore" -n rewrite/src | wc -l)" -eq 1
