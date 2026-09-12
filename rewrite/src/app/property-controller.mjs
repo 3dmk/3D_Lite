@@ -6,6 +6,12 @@ export class PropertyController {
 
   constructor(core) { this.#core = core; }
 
+  setSceneName(name) {
+    const value = String(name ?? '').trim();
+    if (!value) throw new Error('Scene name cannot be empty');
+    return this.#core.transact('set scene name', draft => { draft.sceneName = value; }, ['scene']);
+  }
+
   setSelectedTransform(patch = {}) {
     const selection = this.#core.state.selection;
     if (selection.length !== 1) throw new Error('Property transform editing requires exactly one selected entity');
