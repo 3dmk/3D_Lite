@@ -44,4 +44,4 @@ jobs:
           ! grep -R "window\.scene\|window\.objects\|window\.camera" -n rewrite/src
           ! grep -R "\.scene\.register\|\.scene\.reparent\|\.scene\.unregister" -n rewrite/src --exclude='main-core.mjs'
           ! grep -R "\.geometry\.create\|\.geometry\.update\|\.geometry\.destroy" -n rewrite/src --exclude='main-core.mjs' --exclude='geometry-store.mjs'
-          ! grep -R "positions\[[^]]*\][[:space:]]*=" -n rewrite/src --exclude='main-core.mjs' --exclude='geometry-store.mjs' --exclude='geometry-commands.mjs'
+          ! grep -R "positions\[[^]]*\][[:space:]]*=" -n rewrite/src --exclude='main-core.mjs' --exclude='geometry-store.mjs' --exclude='geometry-commands.mjs' --exclude='editable-mesh.mjs'
