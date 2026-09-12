@@ -1,3 +1,5 @@
+import { createTranslateEntityCommand } from '../core/entity-commands.mjs';
+
 const PROJECTIONS = new Set(['perspective','orthographic']);
 const TOOLS = new Set(['select','move','rotate','scale']);
 
@@ -59,15 +61,24 @@ export class ViewportPort {
   }
 
   applyPick(result, { additive = false, toggle = false } = {}) {
-    if (!result || result.kind !== 'entity') return this.#core.setSelection([]);
+    if (!result) return this.#core.setSelection([]);
+    if (result.kind === 'component') {
+      const edit = this.#core.state.editSelection;
+      if (!sameHandle(edit.geometry, result.geometry)) throw new Error('Viewport component pick does not match active edit geometry');
+      const current = edit.elements;
+      const index = result.index;
+      const next = toggle
+        ? (current.includes(index) ? current.filter(value => value !== index) : [...current,index])
+        : (additive ? [...current,index] : [index]);
+      return this.#core.setComponentSelection(next);
+    }
+    if (result.kind !== 'entity') return this.#core.setSelection([]);
     const handle = result.handle;
     if (!this.#core.entities.has(handle)) throw new Error('Viewport pick references stale entity');
     const current = this.#core.state.selection;
     if (toggle) {
       const exists = current.some(item => sameHandle(item, handle));
-      return this.#core.setSelection(exists
-        ? current.filter(item => !sameHandle(item, handle))
-        : [...current, handle]);
+      return this.#core.setSelection(exists ? current.filter(item => !sameHandle(item, handle)) : [...current, handle]);
     }
     return this.#core.setSelection(additive ? [...current, handle] : [handle]);
   }
@@ -76,7 +87,7 @@ export class ViewportPort {
     if (this.#state.tool !== 'move') throw new Error('Move tool is required');
     const selected = this.#core.state.selection;
     if (selected.length !== 1) throw new Error('Viewport transform currently requires one selected entity');
-    return this.#core.translateEntity(selected[0], delta);
+    return this.#core.execute(createTranslateEntityCommand(selected[0], delta));
   }
 }
 
@@ -85,6 +96,15 @@ export function createEntityPick(handle, distance = 0, position = null) {
   if (!handle || !Number.isInteger(handle.index) || !Number.isInteger(handle.generation)) throw new TypeError('Pick requires entity handle');
   if (!Number.isFinite(d) || d < 0) throw new RangeError('Pick distance must be non-negative');
   return Object.freeze({ kind:'entity', handle:Object.freeze({ ...handle }), distance:d, position:position ? Object.freeze(vec3(position,[0,0,0])) : null });
+}
+
+export function createComponentPick(geometry, index, distance = 0) {
+  if (!geometry || !Number.isInteger(geometry.index) || !Number.isInteger(geometry.generation)) throw new TypeError('Component pick requires geometry handle');
+  const i = Number(index);
+  const d = Number(distance);
+  if (!Number.isInteger(i) || i < 0) throw new RangeError('Component index must be non-negative integer');
+  if (!Number.isFinite(d) || d < 0) throw new RangeError('Pick distance must be non-negative');
+  return Object.freeze({ kind:'component', geometry:Object.freeze({ ...geometry }), index:i, distance:d });
 }
 
 function sameHandle(a,b){ return !!a && !!b && a.index === b.index && a.generation === b.generation; }
