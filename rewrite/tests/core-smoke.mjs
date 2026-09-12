@@ -43,6 +43,31 @@ assert.equal(core.destroyGeometry(geometry), false, 'referenced geometry must no
 core.setSelection([handle, handle]);
 assert.equal(core.state.selection.length, 1);
 
+core.setEditMode('vertex', geometry);
+core.setComponentSelection([0, 1, 1]);
+assert.equal(core.state.editSelection.mode, 'vertex');
+assert.deepEqual(core.state.editSelection.elements, [0, 1]);
+
+const beforeMove = core.geometry.get(geometry).positions.map(position => position.slice());
+core.moveSelectedVertices([0, 0, 2]);
+assert.equal(core.geometry.get(geometry).positions[0][2], beforeMove[0][2] + 2);
+assert.equal(core.geometry.get(geometry).positions[1][2], beforeMove[1][2] + 2);
+assert.equal(core.undo(), true);
+assert.deepEqual(core.geometry.get(geometry).positions, beforeMove);
+assert.equal(core.redo(), true);
+assert.equal(core.geometry.get(geometry).positions[0][2], beforeMove[0][2] + 2);
+
+core.setEditMode('edge', geometry);
+core.setComponentSelection([0, 2]);
+assert.deepEqual(core.state.editSelection.elements, [0, 2]);
+assert.throws(() => core.setComponentSelection([999]), /out of range/i);
+core.setEditMode('polygon', geometry);
+core.setComponentSelection([0]);
+assert.deepEqual(core.state.editSelection.elements, [0]);
+core.setEditMode('object');
+assert.equal(core.state.editSelection.geometry, null);
+assert.deepEqual(core.state.editSelection.elements, []);
+
 let value = 0;
 const command = {
   do(){ value += 1; },
@@ -66,4 +91,4 @@ core.destroyEntity(handle);
 assert.equal(core.entities.has(handle), false);
 assert.equal(render.compile().objects.length, 0);
 
-console.log('3D Lite Clean Rewrite core + geometry smoke: PASS');
+console.log('3D Lite Clean Rewrite core + geometry + edit mode smoke: PASS');
