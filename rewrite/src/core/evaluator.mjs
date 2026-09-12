@@ -6,8 +6,13 @@ export class DerivedGeometryEvaluator {
   #operators = new Map();
   #hits = 0;
   #misses = 0;
+  #evictions = 0;
+  #maxEntries;
 
-  constructor(core) { this.#core = core; }
+  constructor(core, { maxEntries = 256 } = {}) {
+    this.#core = core;
+    this.#maxEntries = Math.max(8, Math.floor(Number(maxEntries) || 256));
+  }
 
   registerOperator(type, evaluate) {
     if (!type || typeof evaluate !== 'function') throw new TypeError('Evaluation operator requires type and function');
@@ -22,7 +27,12 @@ export class DerivedGeometryEvaluator {
     const revision = Number(context.revision ?? 0);
     const signature = `${scope}|${revision}|${handleKey(handle)}|${JSON.stringify(stamp)}|${JSON.stringify(stack)}`;
     const cached = this.#cache.get(signature);
-    if (cached) { this.#hits++; return cached; }
+    if (cached) {
+      this.#hits++;
+      this.#cache.delete(signature);
+      this.#cache.set(signature, cached);
+      return cached;
+    }
 
     this.#misses++;
     let result = source;
@@ -41,15 +51,33 @@ export class DerivedGeometryEvaluator {
     }
     result = deepFreeze(structuredClone(result));
     this.#cache.set(signature, result);
+    this.#trim();
     return result;
   }
 
   invalidate() { this.#cache.clear(); }
   invalidateScope(scope) {
     const prefix = `${String(scope)}|`;
-    for (const key of this.#cache.keys()) if (key.startsWith(prefix)) this.#cache.delete(key);
+    for (const key of [...this.#cache.keys()]) if (key.startsWith(prefix)) this.#cache.delete(key);
   }
-  stats() { return Object.freeze({ entries:this.#cache.size, hits:this.#hits, misses:this.#misses }); }
+  stats() {
+    return Object.freeze({
+      entries:this.#cache.size,
+      maxEntries:this.#maxEntries,
+      hits:this.#hits,
+      misses:this.#misses,
+      evictions:this.#evictions
+    });
+  }
+
+  #trim() {
+    while (this.#cache.size > this.#maxEntries) {
+      const oldest = this.#cache.keys().next().value;
+      if (oldest === undefined) break;
+      this.#cache.delete(oldest);
+      this.#evictions++;
+    }
+  }
 }
 
 function deepFreeze(value) {
