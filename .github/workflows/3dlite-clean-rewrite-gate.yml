@@ -1,0 +1,38 @@
+name: 3D Lite Clean Rewrite Gate
+
+on:
+  push:
+    branches: [3dlite-clean-rewrite-l3n]
+    paths:
+      - 'rewrite/**'
+      - '.github/workflows/3dlite-clean-rewrite-gate.yml'
+  pull_request:
+    paths:
+      - 'rewrite/**'
+      - '.github/workflows/3dlite-clean-rewrite-gate.yml'
+
+jobs:
+  core-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: JavaScript syntax gate
+        run: |
+          set -euo pipefail
+          find rewrite/src rewrite/tests -type f -name '*.mjs' -print0 | xargs -0 -n1 node --check
+      - name: Main Core smoke gate
+        run: node rewrite/tests/core-smoke.mjs
+      - name: Architecture gate
+        run: |
+          set -euo pipefail
+          test -f rewrite/src/core/main-core.mjs
+          test -f rewrite/src/core/command-stack.mjs
+          test -f rewrite/src/core/generation-registry.mjs
+          test -f rewrite/src/core/resource-store.mjs
+          test -f rewrite/src/ports/render-scene-port.mjs
+          test -f rewrite/index.html
+          test "$(grep -R "new ThreeDLiteMainCore" -n rewrite/src | wc -l)" -eq 1
+          ! grep -R "window\.scene\|window\.objects\|window\.camera" -n rewrite/src
