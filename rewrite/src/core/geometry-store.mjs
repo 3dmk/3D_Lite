@@ -16,6 +16,10 @@ export class GeometryStore {
     return this.#resources.get(handle);
   }
 
+  entries() {
+    return this.#resources.entries();
+  }
+
   update(handle, updater) {
     const current = this.get(handle);
     if (!current) return false;
