@@ -39,6 +39,8 @@ jobs:
         run: node rewrite/tests/diagnostics-recovery-smoke.mjs
       - name: Legacy isolation and consolidation gate
         run: node rewrite/tests/legacy-isolation-smoke.mjs
+      - name: L3N Len3 iteration 1 gate
+        run: node rewrite/tests/l3n-len3-01-smoke.mjs
       - name: Architecture gate
         run: |
           set -euo pipefail
@@ -79,6 +81,7 @@ jobs:
           test -f rewrite/src/app/panel-controller.mjs
           test -f rewrite/src/app/ui-controller.mjs
           test -f rewrite/CLEAN_ARCHITECTURE_CONSOLIDATION.md
+          test -f rewrite/tests/l3n-len3-01-smoke.mjs
           test -f rewrite/index.html
           test "$(grep -R "new ThreeDLiteMainCore" -n rewrite/src | wc -l)" -eq 1
           ! grep -R "window\.scene\|window\.objects\|window\.camera" -n rewrite/src
