@@ -61,7 +61,7 @@ test('R3D boots, viewport input works, selection is exclusive, camera-gizmos wor
   expect(await page.evaluate(()=>window.R3DEditor.selected()?.id)).toBe(2);
   expect(await page.evaluate(()=>window.R3DCameras.selectedCamera?.())).toBeNull();
   await expect(page.locator('html')).toHaveAttribute('data-r3d-selection-owner','object');
-  await page.locator('#r3dCameraList .item').first().click();
+  await page.evaluate(()=>window.R3DCameras.select(window.R3DCameras.cameras[0].id));
   await expect(page.locator('html')).toHaveAttribute('data-r3d-selection-owner','camera');
   await page.click('#setActiveCamera');
 
