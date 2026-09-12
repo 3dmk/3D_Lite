@@ -27,6 +27,8 @@ jobs:
         run: node rewrite/tests/core-smoke.mjs
       - name: Viewport boundary smoke gate
         run: node rewrite/tests/viewport-smoke.mjs
+      - name: LitePix renderer port smoke gate
+        run: node rewrite/tests/litepix-port-smoke.mjs
       - name: Architecture gate
         run: |
           set -euo pipefail
@@ -51,6 +53,8 @@ jobs:
           test -f rewrite/src/ports/render-scene-port.mjs
           test -f rewrite/src/ports/viewport-port.mjs
           test -f rewrite/src/ports/viewport-scene-adapter.mjs
+          test -f rewrite/src/ports/litepix-scene-adapter.mjs
+          test -f rewrite/src/ports/litepix-renderer-port.mjs
           test -f rewrite/index.html
           test "$(grep -R "new ThreeDLiteMainCore" -n rewrite/src | wc -l)" -eq 1
           ! grep -R "window\.scene\|window\.objects\|window\.camera" -n rewrite/src
@@ -61,3 +65,4 @@ jobs:
           ! grep -R "\.materials\.create\|\.materials\.update\|\.materials\.destroy" -n rewrite/src --exclude='main-core.mjs' --exclude='material-store.mjs'
           ! grep -R "\.assets\.create\|\.assets\.update\|\.assets\.destroy" -n rewrite/src --exclude='main-core.mjs' --exclude='asset-store.mjs'
           ! grep -R "\.entities\.update\|\.entities\.create\|\.entities\.destroy" -n rewrite/src/ports
+          ! grep -R "LitePixSceneCompiler\|LitePixCore8Production443" -n rewrite/src --exclude='litepix-renderer-port.mjs'
