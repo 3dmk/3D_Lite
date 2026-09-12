@@ -33,6 +33,7 @@ export class UIController {
     this.intents.on('selection.clear', () => this.#core.setSelection([]));
     this.intents.on('selection.pick', event => this.#viewport.applyPick(event.payload.result, event.payload.options ?? {}));
     this.intents.on('edit.mode', event => this.#core.setEditMode(event.payload.mode, event.payload.geometry ?? null));
+    this.intents.on('scene.rename', event => this.properties.setSceneName(event.payload.name));
     this.intents.on('property.transform', event => this.properties.setSelectedTransform(event.payload));
     this.intents.on('property.visibility', event => this.properties.setSelectedVisibility(event.payload.visible));
     this.intents.on('property.material', event => this.properties.updateSelectedMaterial(event.payload));
