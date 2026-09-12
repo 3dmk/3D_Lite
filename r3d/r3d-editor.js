@@ -26,7 +26,7 @@ function cubeMesh(){const p=[[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1],[-1,-1,-1],[1,-
 function sphereMesh(seg=28,rings=18){const o=[],P=(u,v)=>[Math.sin(v*Math.PI)*Math.cos(u*Math.PI*2),Math.cos(v*Math.PI),Math.sin(v*Math.PI)*Math.sin(u*Math.PI*2)];for(let y=0;y<rings;y++)for(let x=0;x<seg;x++){const a=P(x/seg,y/rings),b=P((x+1)/seg,y/rings),c=P((x+1)/seg,(y+1)/rings),d=P(x/seg,(y+1)/rings);for(const q of[a,b,c,a,c,d])o.push(...q,...q)}return mkMesh(o)}
 function coneMesh(seg=32){const o=[];for(let i=0;i<seg;i++){const a=i/seg*Math.PI*2,b=(i+1)/seg*Math.PI*2,p=[Math.cos(a),-1,Math.sin(a)],q=[Math.cos(b),-1,Math.sin(b)],n=norm([Math.cos((a+b)/2),.5,Math.sin((a+b)/2)]);for(const v of[[0,1,0],p,q])o.push(...v,...n);for(const v of[[0,-1,0],q,p])o.push(...v,0,-1,0)}return mkMesh(o)}
 const meshes={cube:cubeMesh(),sphere:sphereMesh(),cone:coneMesh()};
-let uid=5,selected=0,tool='select',wire=false,yaw=-.55,pitch=.35,dist=9,target=[0,1,0],pan=[0,0],generation=1;
+let uid=5,selected=0,tool='select',wire=false,yaw=-.55,pitch=.35,dist=9,target=[0,1,0],pan=[0,0,0],generation=1;
 const objects=[
 {id:1,name:'Cube',mesh:'cube',p:[-2,1,0],r:[0,0,0],s:1,c:[.68,.72,.78],mat:'diffuse'},
 {id:2,name:'Gold Sphere',mesh:'sphere',p:[.3,1,0],r:[0,0,0],s:1,c:[.95,.57,.08],mat:'metal'},
@@ -41,7 +41,7 @@ function doUndo(){if(!undo.length)return;redo.push(snapshot());restore(undo.pop(
 function doRedo(){if(!redo.length)return;undo.push(snapshot());restore(redo.pop());status('Redo')}
 function status(t){$('status').textContent=t}
 function touch(msg='Scene updated'){generation++;status(msg)}
-function camera(){const cp=Math.cos(pitch),sp=Math.sin(pitch),cy=Math.cos(yaw),sy=Math.sin(yaw),c=[target[0]+pan[0],target[1]+pan[1],target[2]],e=[c[0]+dist*cp*sy,c[1]+dist*sp,c[2]+dist*cp*cy];return{e,c}}
+function camera(){const cp=Math.cos(pitch),sp=Math.sin(pitch),cy=Math.cos(yaw),sy=Math.sin(yaw),base=[target[0]+pan[0],target[1]+pan[1],target[2]+pan[2]],e=[base[0]+dist*cp*sy,base[1]+dist*sp,base[2]+dist*cp*cy];return{e,c:base}}
 const App=window.App3D={objects,sun:1.4,camera,get generation(){return generation},touch,selected:()=>objects[selected]||null};
 function hex(c){return'#'+c.map(v=>Math.round(clamp(v,0,1)*255).toString(16).padStart(2,'0')).join('')}
 function fromHex(h){return[parseInt(h.slice(1,3),16)/255,parseInt(h.slice(3,5),16)/255,parseInt(h.slice(5,7),16)/255]}
@@ -67,15 +67,15 @@ function pick(x,y){const ray=pickRay(x,y);let best=-1,bt=1e9;objects.forEach((o,
 let drag=false,dragMode='',mx=0,my=0,dragStart=null;
 canvas.addEventListener('mousedown',e=>{mx=e.clientX;my=e.clientY;if(e.altKey&&e.button===0){drag=true;dragMode='orbit';return}if(e.button===1){drag=true;dragMode='pan';e.preventDefault();return}if(e.button!==0)return;const hit=pick(e.clientX,e.clientY);if(hit>=0&&hit!==selected){selected=hit;list();sync()}if(hit<0&&tool==='select')return;drag=true;dragMode=tool;dragStart=clone(objects[selected]);if(tool!=='select')checkpoint()});
 window.addEventListener('mouseup',()=>{if(drag&&['move','rotate','scale'].includes(dragMode))sync();drag=false;dragMode='';dragStart=null});
-window.addEventListener('mousemove',e=>{if(!drag)return;const dx=e.clientX-mx,dy=e.clientY-my;mx=e.clientX;my=e.clientY;if(dragMode==='orbit'){yaw-=dx*.008;pitch=clamp(pitch-dy*.008,-1.35,1.35);return}if(dragMode==='pan'){pan[0]-=dx*.012;pan[1]+=dy*.012;return}const o=objects[selected];if(!o)return;if(dragMode==='move'){const C=camera(),f=norm(sub(C.c,C.e)),right=norm(cross(f,[0,1,0])),up=cross(right,f);o.p=add(o.p,add(mul(right,dx*.012*dist/9),mul(up,-dy*.012*dist/9)));touch('Moving')}else if(dragMode==='rotate'){o.r[1]+=dx*.5;o.r[0]+=dy*.5;touch('Rotating')}else if(dragMode==='scale'){o.s=Math.max(.05,o.s*(1+(dx-dy)*.008));touch('Scaling')}});
+window.addEventListener('mousemove',e=>{if(!drag)return;const dx=e.clientX-mx,dy=e.clientY-my;mx=e.clientX;my=e.clientY;if(dragMode==='orbit'){yaw-=dx*.008;pitch=clamp(pitch-dy*.008,-1.35,1.35);return}if(dragMode==='pan'){const C=camera(),f=norm(sub(C.c,C.e)),right=norm(cross(f,[0,1,0])),up=norm(cross(right,f)),speed=.0017*dist;pan=add(pan,add(mul(right,-dx*speed),mul(up,dy*speed)));return}const o=objects[selected];if(!o)return;if(dragMode==='move'){const C=camera(),f=norm(sub(C.c,C.e)),right=norm(cross(f,[0,1,0])),up=cross(right,f);o.p=add(o.p,add(mul(right,dx*.012*dist/9),mul(up,-dy*.012*dist/9)));touch('Moving')}else if(dragMode==='rotate'){o.r[1]+=dx*.5;o.r[0]+=dy*.5;touch('Rotating')}else if(dragMode==='scale'){o.s=Math.max(.05,o.s*(1+(dx-dy)*.008));touch('Scaling')}});
 canvas.addEventListener('wheel',e=>{dist=clamp(dist*Math.exp(e.deltaY*.001),2,50);e.preventDefault()},{passive:false});
 canvas.addEventListener('contextmenu',e=>e.preventDefault());
 $('selectTool').onclick=()=>setTool('select');$('moveTool').onclick=()=>setTool('move');$('rotateTool').onclick=()=>setTool('rotate');$('scaleTool').onclick=()=>setTool('scale');
 $('undoBtn').onclick=doUndo;$('redoBtn').onclick=doRedo;$('addCube').onclick=()=>addObject('cube');$('addSphere').onclick=()=>addObject('sphere');$('addCone').onclick=()=>addObject('cone');$('dupBtn').onclick=duplicate;$('delBtn').onclick=del;
-$('resetBtn').onclick=()=>{yaw=-.55;pitch=.35;dist=9;pan=[0,0];target=[0,1,0];status('View reset')};
-$('frameBtn').onclick=()=>{if(objects[selected]){target=[...objects[selected].p];pan=[0,0];dist=Math.max(3,objects[selected].s*5);status('Framed selection')}};
+$('resetBtn').onclick=()=>{yaw=-.55;pitch=.35;dist=9;pan=[0,0,0];target=[0,1,0];status('View reset')};
+$('frameBtn').onclick=()=>{if(objects[selected]){target=[...objects[selected].p];pan=[0,0,0];dist=Math.max(3,objects[selected].s*5);status('Framed selection')}};
 $('wireBtn').onclick=()=>{wire=!wire;$('wireBtn').classList.toggle('active',wire);$('litBtn').classList.toggle('active',!wire)};$('litBtn').onclick=()=>{wire=false;$('wireBtn').classList.remove('active');$('litBtn').classList.add('active')};
 window.addEventListener('keydown',e=>{if(/INPUT|SELECT/.test(document.activeElement?.tagName||''))return;const k=e.key.toLowerCase();if((e.ctrlKey||e.metaKey)&&k==='z'){e.preventDefault();doUndo()}else if((e.ctrlKey||e.metaKey)&&k==='y'){e.preventDefault();doRedo()}else if((e.ctrlKey||e.metaKey)&&k==='d'){e.preventDefault();duplicate()}else if(k==='delete')del();else if(k==='q')setTool('select');else if(k==='w')setTool('move');else if(k==='e')setTool('rotate');else if(k==='r')setTool('scale');else if(k==='f')$('frameBtn').click()});
 list();sync();setTool('select');requestAnimationFrame(loop);
-window.R3DEditor={version:'1.0.0-rc1',addObject,duplicate,deleteSelected:del,undo:doUndo,redo:doRedo,setTool,snapshot,camera,objects,selected:()=>objects[selected]||null,touch};
+window.R3DEditor={version:'1.0.0-rc2',addObject,duplicate,deleteSelected:del,undo:doUndo,redo:doRedo,setTool,snapshot,camera,objects,selected:()=>objects[selected]||null,touch};
 })();
