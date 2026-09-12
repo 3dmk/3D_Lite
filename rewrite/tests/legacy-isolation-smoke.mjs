@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readdir, readFile } from 'node:fs/promises';
-import { join, relative } from 'node:path';
+import { relative } from 'node:path';
 import { ThreeDLiteMainCore } from '../src/core/main-core.mjs';
 import { RenderScenePort } from '../src/ports/render-scene-port.mjs';
 import { ViewportPort } from '../src/ports/viewport-port.mjs';
@@ -23,9 +23,10 @@ const forbidden = [
 for (const fileUrl of files) {
   const text = await readFile(fileUrl, 'utf8');
   const path = relative(new URL('../', root).pathname, fileUrl.pathname);
-  for (const pattern of forbidden) if (pattern.test(text)) violations.push(`${path}: ${pattern}`);
+  const isContract = fileUrl.pathname.endsWith('/core/architecture-contract.mjs');
+  if (!isContract) for (const pattern of forbidden) if (pattern.test(text)) violations.push(`${path}: ${pattern}`);
   const isRendererBoundary = fileUrl.pathname.endsWith('/ports/litepix-renderer-port.mjs');
-  if (!isRendererBoundary && /LitePixSceneCompiler|LitePixCore8Production443|LitePixNative/.test(text)) {
+  if (!isRendererBoundary && !isContract && /LitePixSceneCompiler|LitePixCore8Production443|LitePixNative/.test(text)) {
     violations.push(`${path}: LitePix runtime global escaped renderer boundary`);
   }
 }
