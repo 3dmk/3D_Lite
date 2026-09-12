@@ -38,4 +38,17 @@ export class ResourceStore {
   values() {
     return this.#slots.filter(slot => slot?.alive).map(slot => slot.value);
   }
+
+  entries() {
+    const result = [];
+    for (let index = 0; index < this.#slots.length; index++) {
+      const slot = this.#slots[index];
+      if (!slot?.alive) continue;
+      result.push(Object.freeze({
+        handle: Object.freeze({ index, generation: slot.generation }),
+        value: slot.value
+      }));
+    }
+    return Object.freeze(result);
+  }
 }
