@@ -4,6 +4,8 @@ import { CommandStack } from './command-stack.mjs';
 import { SceneGraph } from './scene-graph.mjs';
 import { GeometryStore } from './geometry-store.mjs';
 import { createSceneEntity, validateSceneEntity, normalizeTransform } from './scene-entity.mjs';
+import { createEditSelection, normalizeEditSelection, validateEditSelection } from './edit-selection.mjs';
+import { createMoveVerticesCommand, createSetVertexPositionsCommand } from './geometry-commands.mjs';
 
 const DOMAINS = [
   'scene','geometry','topology','transform','selection','material','evaluation','renderScene','viewport'
@@ -24,7 +26,8 @@ export class ThreeDLiteMainCore {
       sceneName: 'Untitled',
       activeCamera: null,
       selection: Object.freeze([]),
-      metadata: Object.freeze({ schema: 3 })
+      editSelection: createEditSelection(),
+      metadata: Object.freeze({ schema: 4 })
     });
   }
 
@@ -41,8 +44,7 @@ export class ThreeDLiteMainCore {
 
   transact(label, mutator, dirtyDomains = ['scene']) {
     if (typeof mutator !== 'function') throw new TypeError('mutator must be a function');
-    const before = this.#state;
-    const draft = structuredClone(before);
+    const draft = structuredClone(this.#state);
     mutator(draft, this);
     if (!this.#validator(draft, { label, core: this })) {
       throw new Error(`Main Core validation failed: ${label}`);
@@ -67,7 +69,14 @@ export class ThreeDLiteMainCore {
 
   updateGeometry(handle, updater) {
     const updated = this.geometry.update(handle, updater);
-    if (updated) this.generations.bumpMany(['geometry','topology','evaluation','renderScene']);
+    if (updated) {
+      const edit = this.#state.editSelection;
+      if (sameHandle(edit.geometry, handle) && !validateEditSelection(edit, this.geometry)) {
+        const repaired = normalizeEditSelection(edit.mode, handle, [], this.geometry);
+        this.#state = deepFreeze({ ...structuredClone(this.#state), editSelection: repaired });
+      }
+      this.generations.bumpMany(['geometry','topology','evaluation','renderScene']);
+    }
     return updated;
   }
 
@@ -76,7 +85,12 @@ export class ThreeDLiteMainCore {
     const inUse = this.entities.values().some(entity => sameHandle(entity.geometry, handle));
     if (inUse) return false;
     const destroyed = this.geometry.destroy(handle);
-    if (destroyed) this.generations.bumpMany(['geometry','topology','evaluation','renderScene']);
+    if (destroyed) {
+      if (sameHandle(this.#state.editSelection.geometry, handle)) {
+        this.#state = deepFreeze({ ...structuredClone(this.#state), editSelection: createEditSelection() });
+      }
+      this.generations.bumpMany(['geometry','topology','selection','evaluation','renderScene']);
+    }
     return destroyed;
   }
 
@@ -156,6 +170,33 @@ export class ThreeDLiteMainCore {
     return this.transact('setSelection', draft => {
       draft.selection = valid.map(handle => ({ ...handle }));
     }, ['selection']);
+  }
+
+  setEditMode(mode = 'object', geometryHandle = null) {
+    const next = normalizeEditSelection(mode, geometryHandle, [], this.geometry);
+    return this.transact('setEditMode', draft => {
+      draft.editSelection = structuredClone(next);
+    }, ['selection','viewport']);
+  }
+
+  setComponentSelection(elements = []) {
+    const current = this.#state.editSelection;
+    if (current.mode === 'object') throw new Error('Component selection requires vertex, edge, or polygon edit mode');
+    const next = normalizeEditSelection(current.mode, current.geometry, elements, this.geometry);
+    return this.transact('setComponentSelection', draft => {
+      draft.editSelection = structuredClone(next);
+    }, ['selection','viewport']);
+  }
+
+  setVertexPositions(geometryHandle, changes) {
+    return this.execute(createSetVertexPositionsCommand(geometryHandle, changes));
+  }
+
+  moveSelectedVertices(delta) {
+    const edit = this.#state.editSelection;
+    if (edit.mode !== 'vertex' || !edit.geometry) throw new Error('Vertex edit mode is required');
+    if (edit.elements.length === 0) return false;
+    return this.execute(createMoveVerticesCommand(edit.geometry, edit.elements, delta));
   }
 
   setActiveCamera(handle = null) {
