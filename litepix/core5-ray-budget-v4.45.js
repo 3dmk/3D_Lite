@@ -1,5 +1,5 @@
 (function(root){'use strict';
-const VERSION='4.45.0',TITLE='3D Lite — LitePix v4.45.0 Adaptive Ray Budget';
+const VERSION='4.45.1-l3n2',TITLE='3D Lite — LitePix v4.45.1 L3N Adaptive Ray Budget';
 const AREA_TYPES=new Set(['rectangle','disc','sphere','mesh']);
 const finite=v=>Number.isFinite(v)?v:0;
 class LitePixRayBudget445{
@@ -7,8 +7,9 @@ class LitePixRayBudget445{
     this.job=job;this.acceleration=acceleration;this.compiled=compiled;this.width=width|0;this.height=height|0;
     this.quality=String(job?.settings?.quality||'Preview');
     this.enabled=root.__LitePixRayBudget445Enabled!==false;
-    this.cache=new Map();this.requestedShadowTests=0;this.tracedShadowRays=0;this.reusedShadowTests=0;
-    this.requestedLightSamples=0;this.selectedLightSamples=0;this.cacheRejects=0;this.maxEntries=262144;
+    this.cache=new Map();this.cacheOrder=[];this.requestedShadowTests=0;this.tracedShadowRays=0;this.reusedShadowTests=0;
+    this.requestedLightSamples=0;this.selectedLightSamples=0;this.cacheRejects=0;this.cacheEvictions=0;
+    this.maxEntries=Math.max(1024,Number(job?.settings?.shadowVisibilityCacheEntries)||262144);
     this.sceneScale=this._sceneScale(acceleration);
     const divisor=this.quality==='Ultra'?384:this.quality==='High'?192:this.quality==='Draft'?64:96;
     this.cellSize=Math.max(1e-5,this.sceneScale/divisor);
@@ -37,20 +38,31 @@ class LitePixRayBudget445{
     if(light?.type==='sun')return `${base}|${this._dirKey(direction)}`;
     return base;
   }
+  _remember(key,value){
+    if(this.cache.has(key)){this.cache.set(key,value);return;}
+    if(this.cache.size>=this.maxEntries){
+      const oldest=this.cacheOrder.shift();
+      if(oldest!==undefined&&this.cache.delete(oldest))this.cacheEvictions++;
+      else this.cacheRejects++;
+    }
+    this.cache.set(key,value);this.cacheOrder.push(key);
+  }
   visible(acceleration,position,direction,distance,light,li,hit,traceFn){
     this.requestedShadowTests++;
-    if(!this.enabled||typeof traceFn!=='function'){this.tracedShadowRays++;return traceFn();}
+    if(typeof traceFn!=='function')throw new TypeError('LitePix ray budget requires a shadow trace function');
+    if(!this.enabled){this.tracedShadowRays++;return traceFn();}
     const key=this._key(position,direction,distance,light,li,hit);
     if(this.cache.has(key)){this.reusedShadowTests++;return this.cache.get(key);}
     this.tracedShadowRays++;
     const value=!!traceFn();
-    if(this.cache.size<this.maxEntries)this.cache.set(key,value);else this.cacheRejects++;
+    this._remember(key,value);
     return value;
   }
+  clear(){this.cache.clear();this.cacheOrder.length=0;}
   snapshot(){
     const req=this.requestedShadowTests,tr=this.tracedShadowRays,re=this.reusedShadowTests;
     return Object.freeze({version:VERSION,provider:'LitePix Core5 adaptive ray budget',enabled:this.enabled,quality:this.quality,
-      requestedShadowTests:req,tracedShadowRays:tr,reusedShadowTests:re,cacheEntries:this.cache.size,cacheRejects:this.cacheRejects,
+      requestedShadowTests:req,tracedShadowRays:tr,reusedShadowTests:re,cacheEntries:this.cache.size,cacheRejects:this.cacheRejects,cacheEvictions:this.cacheEvictions,maxEntries:this.maxEntries,
       cacheHitRate:req?re/req:0,shadowReductionRatio:tr?req/tr:1,requestedLightSamples:this.requestedLightSamples,
       selectedLightSamples:this.selectedLightSamples,lightSampleReductionRatio:this.selectedLightSamples?this.requestedLightSamples/this.selectedLightSamples:1,
       cellSize:this.cellSize,directionBins:this.directionBins});
