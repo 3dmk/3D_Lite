@@ -1,0 +1,14 @@
+3DLite / LitePix v4.46.2 browser validation checklist
+
+1. Hard refresh GitHub Pages.
+2. Confirm Render Debug button opens.
+3. Confirm report header says v4.46.2.
+4. Start a path render.
+5. Confirm [Startup / Execution Order] is present.
+6. Confirm [EXECUTION TIMELINE v4.46.2] is appended.
+7. Confirm stages gain first-seen timestamps while render progresses.
+8. Confirm primary/shadow/secondary stages become observed only after corresponding counters activate.
+9. Confirm final-resolve/display stages appear only after Finished.
+10. Confirm no ORDER WARNINGS for a normal render.
+11. Confirm __3DLiteRenderExecutionTimeline() returns stage rows.
+12. Confirm __3DLiteRenderExecutionTimelineText() returns readable text.
