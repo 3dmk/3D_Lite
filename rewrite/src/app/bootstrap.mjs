@@ -3,10 +3,10 @@ import { RenderScenePort } from '../ports/render-scene-port.mjs';
 import { ViewportPort } from '../ports/viewport-port.mjs';
 import { UIController } from './ui-controller.mjs';
 
-const core = new ThreeDLiteMainCore({ validator:value => value && typeof value === 'object' });
-const renderScene = new RenderScenePort(core);
-const viewport = new ViewportPort(core, renderScene);
-const ui = new UIController(core, viewport);
+export const core = new ThreeDLiteMainCore({ validator:value => value && typeof value === 'object' });
+export const renderScene = new RenderScenePort(core);
+export const viewport = new ViewportPort(core, renderScene);
+export const ui = new UIController(core, viewport);
 
 const geometry = core.createGeometry({
   id:'startup-cube-geometry',
@@ -69,4 +69,3 @@ document.querySelector('#move').addEventListener('click', () => {
 
 resize();
 refresh();
-globalThis.ThreeDLiteRewrite = Object.freeze({ core, renderScene, viewport, ui });
