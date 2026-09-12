@@ -35,6 +35,8 @@ jobs:
         run: node rewrite/tests/project-serialization-smoke.mjs
       - name: UI and tool-controller smoke gate
         run: node rewrite/tests/ui-controller-smoke.mjs
+      - name: Diagnostics and recovery smoke gate
+        run: node rewrite/tests/diagnostics-recovery-smoke.mjs
       - name: Architecture gate
         run: |
           set -euo pipefail
@@ -46,6 +48,9 @@ jobs:
           test -f rewrite/src/core/worker-pool.mjs
           test -f rewrite/src/core/project-migrations.mjs
           test -f rewrite/src/core/project-serializer.mjs
+          test -f rewrite/src/core/diagnostics.mjs
+          test -f rewrite/src/core/recovery-manager.mjs
+          test -f rewrite/src/core/runtime-health.mjs
           test -f rewrite/src/core/scene-entity.mjs
           test -f rewrite/src/core/scene-graph.mjs
           test -f rewrite/src/core/editable-mesh.mjs
