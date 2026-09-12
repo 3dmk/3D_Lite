@@ -5,10 +5,14 @@ on:
     branches: [3dlite-clean-rewrite-l3n]
     paths:
       - 'rewrite/**'
+      - 'litepix/core5-ray-budget-v4.45.js'
+      - 'litepix/core8-production-v4.43.js'
       - '.github/workflows/3dlite-clean-rewrite-gate.yml'
   pull_request:
     paths:
       - 'rewrite/**'
+      - 'litepix/core5-ray-budget-v4.45.js'
+      - 'litepix/core8-production-v4.43.js'
       - '.github/workflows/3dlite-clean-rewrite-gate.yml'
 
 jobs:
@@ -23,6 +27,8 @@ jobs:
         run: |
           set -euo pipefail
           find rewrite/src rewrite/tests -type f -name '*.mjs' -print0 | xargs -0 -n1 node --check
+          node --check litepix/core5-ray-budget-v4.45.js
+          node --check litepix/core8-production-v4.43.js
       - name: Main Core smoke gate
         run: node rewrite/tests/core-smoke.mjs
       - name: Viewport boundary smoke gate
@@ -41,6 +47,8 @@ jobs:
         run: node rewrite/tests/legacy-isolation-smoke.mjs
       - name: L3N Len3 iteration 1 gate
         run: node rewrite/tests/l3n-len3-01-smoke.mjs
+      - name: L3N Len3 iteration 2 renderer gate
+        run: node rewrite/tests/l3n-len3-02-renderer-smoke.mjs
       - name: Architecture gate
         run: |
           set -euo pipefail
@@ -74,6 +82,7 @@ jobs:
           test -f rewrite/src/ports/viewport-port.mjs
           test -f rewrite/src/ports/viewport-scene-adapter.mjs
           test -f rewrite/src/ports/litepix-scene-adapter.mjs
+          test -f rewrite/src/ports/litepix-incremental-plan.mjs
           test -f rewrite/src/ports/litepix-renderer-port.mjs
           test -f rewrite/src/app/ui-intent-bus.mjs
           test -f rewrite/src/app/tool-controller.mjs
@@ -82,6 +91,9 @@ jobs:
           test -f rewrite/src/app/ui-controller.mjs
           test -f rewrite/CLEAN_ARCHITECTURE_CONSOLIDATION.md
           test -f rewrite/tests/l3n-len3-01-smoke.mjs
+          test -f rewrite/tests/l3n-len3-02-renderer-smoke.mjs
+          test -f litepix/core5-ray-budget-v4.45.js
+          test -f litepix/core8-production-v4.43.js
           test -f rewrite/index.html
           test "$(grep -R "new ThreeDLiteMainCore" -n rewrite/src | wc -l)" -eq 1
           ! grep -R "window\.scene\|window\.objects\|window\.camera" -n rewrite/src
