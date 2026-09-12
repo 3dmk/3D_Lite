@@ -25,6 +25,8 @@ jobs:
           find rewrite/src rewrite/tests -type f -name '*.mjs' -print0 | xargs -0 -n1 node --check
       - name: Main Core smoke gate
         run: node rewrite/tests/core-smoke.mjs
+      - name: Viewport boundary smoke gate
+        run: node rewrite/tests/viewport-smoke.mjs
       - name: Architecture gate
         run: |
           set -euo pipefail
@@ -38,6 +40,7 @@ jobs:
           test -f rewrite/src/core/geometry-store.mjs
           test -f rewrite/src/core/edit-selection.mjs
           test -f rewrite/src/core/geometry-commands.mjs
+          test -f rewrite/src/core/entity-commands.mjs
           test -f rewrite/src/core/evaluation-graph.mjs
           test -f rewrite/src/core/evaluator.mjs
           test -f rewrite/src/core/modifier-stack.mjs
@@ -46,6 +49,8 @@ jobs:
           test -f rewrite/src/core/material-store.mjs
           test -f rewrite/src/core/material-commands.mjs
           test -f rewrite/src/ports/render-scene-port.mjs
+          test -f rewrite/src/ports/viewport-port.mjs
+          test -f rewrite/src/ports/viewport-scene-adapter.mjs
           test -f rewrite/index.html
           test "$(grep -R "new ThreeDLiteMainCore" -n rewrite/src | wc -l)" -eq 1
           ! grep -R "window\.scene\|window\.objects\|window\.camera" -n rewrite/src
@@ -55,3 +60,4 @@ jobs:
           ! grep -R "modifiers\.push\|modifiers\.splice\|modifiers\[[^]]*\][[:space:]]*=" -n rewrite/src --exclude='modifier-commands.mjs' --exclude='modifier-stack.mjs'
           ! grep -R "\.materials\.create\|\.materials\.update\|\.materials\.destroy" -n rewrite/src --exclude='main-core.mjs' --exclude='material-store.mjs'
           ! grep -R "\.assets\.create\|\.assets\.update\|\.assets\.destroy" -n rewrite/src --exclude='main-core.mjs' --exclude='asset-store.mjs'
+          ! grep -R "\.entities\.update\|\.entities\.create\|\.entities\.destroy" -n rewrite/src/ports
