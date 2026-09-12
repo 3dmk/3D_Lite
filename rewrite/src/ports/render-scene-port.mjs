@@ -11,7 +11,7 @@ export class RenderScenePort {
 
     const entries = this.core.entities.entries();
     const scene = Object.freeze({
-      schema: 4,
+      schema: 5,
       stamp,
       activeCamera: this.core.state.activeCamera,
       hierarchy: this.core.scene.snapshot(),
@@ -25,7 +25,8 @@ export class RenderScenePort {
           evaluationRevision: this.core.evaluationRevision(entry.handle),
           modifierStack: entity.modifiers ?? Object.freeze([]),
           geometry: entity.geometry ? this.core.evaluateEntityGeometry(entry.handle) : null,
-          material: entity.material ?? null,
+          materialHandle: entity.material ?? null,
+          material: entity.material ? this.core.compileMaterial(entity.material) : null,
           visible: entity.visible !== false
         });
       }))
