@@ -14,6 +14,20 @@ assert.equal(core.geometry.has(geometry), true);
 assert.equal(core.geometry.get(geometry).topology.halfEdges.length, 4);
 assert.equal(core.geometry.get(geometry).triangles.length, 6);
 
+const albedo = core.createAsset({ id:'albedo', type:'texture', uri:'textures/albedo.png', colorSpace:'srgb' });
+const normal = core.createAsset({ id:'normal', type:'texture', uri:'textures/normal.png', colorSpace:'linear' });
+const material = core.createMaterial({
+  id:'mat-a',
+  baseColor:[0.8,0.7,0.6,1],
+  metallic:0.25,
+  roughness:0.4,
+  textures:{ baseColor:albedo, normal }
+});
+assert.equal(core.assets.has(albedo), true);
+assert.equal(core.materials.has(material), true);
+assert.equal(core.compileMaterial(material).textures.baseColor.asset.uri, 'textures/albedo.png');
+assert.equal(core.destroyAsset(albedo), false, 'referenced texture asset must not be destroyed');
+
 core.evaluator.registerOperator('offset', (input, params) => ({
   ...input,
   positions: input.positions.map(p => [p[0] + (params.x ?? 0), p[1], p[2]])
@@ -35,12 +49,32 @@ core.evaluationGraph.register('render', ['modifier']);
 assert.deepEqual(core.evaluationGraph.order(['render']), ['authoring','modifier','render']);
 assert.throws(() => core.evaluationGraph.register('authoring', ['render']), /cycle/i);
 
-const handle = core.createEntity({ id:'a', type:'mesh', geometry, transform:{position:[0,0,0]} });
+const handle = core.createEntity({ id:'a', type:'mesh', geometry, material, transform:{position:[0,0,0]} });
 const secondHandle = core.createEntity({ id:'b', type:'mesh', geometry, transform:{position:[2,0,0]} });
 assert.equal(core.entities.has(handle), true);
 const first = render.compile();
 assert.equal(first.objects.length, 2);
 assert.equal(first.objects[0].geometry.topology.faceCount, 1);
+assert.equal(first.objects[0].material.id, 'mat-a');
+assert.equal(first.objects[0].material.textures.normal.asset.id, 'normal');
+assert.equal(core.destroyMaterial(material), false, 'assigned material must not be destroyed');
+
+const materialStamp = first.stamp.material;
+core.updateMaterial(material, { roughness:0.15 });
+let materialRender = render.compile();
+assert.notEqual(materialRender.stamp.material, materialStamp);
+assert.equal(materialRender.objects[0].material.roughness, 0.15);
+assert.equal(core.undo(), true);
+assert.equal(render.compile().objects[0].material.roughness, 0.4);
+assert.equal(core.redo(), true);
+assert.equal(render.compile().objects[0].material.roughness, 0.15);
+
+core.assignMaterial(secondHandle, material);
+assert.equal(core.entities.get(secondHandle).material.index, material.index);
+assert.equal(core.undo(), true);
+assert.equal(core.entities.get(secondHandle).material, null);
+assert.equal(core.redo(), true);
+assert.equal(core.entities.get(secondHandle).material.index, material.index);
 
 const secondRevisionBeforeModifier = core.evaluationRevision(secondHandle);
 const firstRevisionBeforeModifier = core.evaluationRevision(handle);
@@ -116,10 +150,14 @@ core.setEditMode('polygon', geometry);
 core.setComponentSelection([0]);
 core.setEditMode('object');
 
-assert.throws(() => core.createGeometry({
-  positions:[[0,0,0],[1,0,0],[0,1,0]], faces:[[0,1,4]]
-}), /invalid vertex indices/i);
+assert.throws(() => core.createGeometry({ positions:[[0,0,0],[1,0,0],[0,1,0]], faces:[[0,1,4]] }), /invalid vertex indices/i);
+assert.throws(() => core.createMaterial({ textures:{baseColor:{index:999,generation:1}} }), /stale asset/i);
 
+core.assignMaterial(handle, null);
+core.assignMaterial(secondHandle, null);
+assert.equal(core.destroyMaterial(material), true);
+assert.equal(core.destroyAsset(albedo), true);
+assert.equal(core.destroyAsset(normal), true);
 core.assignGeometry(handle, null);
 core.assignGeometry(secondHandle, null);
 assert.equal(core.destroyGeometry(geometry), true);
@@ -127,4 +165,4 @@ core.destroyEntity(handle);
 core.destroyEntity(secondHandle);
 assert.equal(render.compile().objects.length, 0);
 
-console.log('3D Lite Clean Rewrite modifier stack + per-object evaluation smoke: PASS');
+console.log('3D Lite Clean Rewrite materials + assets + modifiers smoke: PASS');
