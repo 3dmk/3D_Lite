@@ -42,6 +42,9 @@ jobs:
           test -f rewrite/src/core/evaluator.mjs
           test -f rewrite/src/core/modifier-stack.mjs
           test -f rewrite/src/core/modifier-commands.mjs
+          test -f rewrite/src/core/asset-store.mjs
+          test -f rewrite/src/core/material-store.mjs
+          test -f rewrite/src/core/material-commands.mjs
           test -f rewrite/src/ports/render-scene-port.mjs
           test -f rewrite/index.html
           test "$(grep -R "new ThreeDLiteMainCore" -n rewrite/src | wc -l)" -eq 1
@@ -50,3 +53,5 @@ jobs:
           ! grep -R "\.geometry\.create\|\.geometry\.update\|\.geometry\.destroy" -n rewrite/src --exclude='main-core.mjs' --exclude='geometry-store.mjs'
           ! grep -R "positions\[[^]]*\][[:space:]]*=" -n rewrite/src --exclude='main-core.mjs' --exclude='geometry-store.mjs' --exclude='geometry-commands.mjs' --exclude='editable-mesh.mjs'
           ! grep -R "modifiers\.push\|modifiers\.splice\|modifiers\[[^]]*\][[:space:]]*=" -n rewrite/src --exclude='modifier-commands.mjs' --exclude='modifier-stack.mjs'
+          ! grep -R "\.materials\.create\|\.materials\.update\|\.materials\.destroy" -n rewrite/src --exclude='main-core.mjs' --exclude='material-store.mjs'
+          ! grep -R "\.assets\.create\|\.assets\.update\|\.assets\.destroy" -n rewrite/src --exclude='main-core.mjs' --exclude='asset-store.mjs'
