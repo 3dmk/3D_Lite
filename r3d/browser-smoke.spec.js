@@ -1,11 +1,13 @@
 const {test,expect}=require('@playwright/test');
-test('R3D boots, viewport input works, camera-gizmos work and active camera renders',async({page})=>{
+test('R3D boots, viewport input works, selection is exclusive, camera-gizmos work and active camera renders',async({page})=>{
   const errors=[];page.on('pageerror',e=>errors.push(String(e)));
   await page.goto('http://127.0.0.1:4173/r3d/',{waitUntil:'networkidle'});
   await expect(page.locator('html')).toHaveAttribute('data-r3d-bootstrap','1');
   await expect(page.locator('html')).toHaveAttribute('data-r3d-boot','1');
   await expect(page.locator('html')).toHaveAttribute('data-r3d-cameras','1');
   await expect(page.locator('html')).toHaveAttribute('data-r3d-input-priority','1');
+  await expect(page.locator('html')).toHaveAttribute('data-r3d-selection-owner','object');
+  expect(await page.evaluate(()=>window.R3DCameras.selectedCamera?.())).toBeNull();
   await expect(page.locator('#status')).toContainText('Ready');
   await expect(page.locator('#r3dGizmoOverlay')).toHaveCount(1);
 
@@ -21,14 +23,16 @@ test('R3D boots, viewport input works, camera-gizmos work and active camera rend
   expect(Math.hypot(camAfter[0]-camBefore[0],camAfter[1]-camBefore[1],camAfter[2]-camBefore[2])).toBeGreaterThan(.05);
 
   await page.click('#resetBtn');await page.click('#selectTool');
-  const p=await page.evaluate(()=>{
+  const objectScreenPoint=async()=>page.evaluate(()=>{
     const o=window.App3D.objects.find(q=>q.id===2),C=window.App3D.camera(),cv=document.getElementById('gl'),r=cv.getBoundingClientRect();
     const sub=(a,b)=>a.map((v,i)=>v-b[i]),dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2],cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]],norm=a=>{const l=Math.hypot(...a)||1;return a.map(v=>v/l)};
     const f=norm(sub(C.c,C.e)),right=norm(cross(f,[0,1,0])),up=cross(right,f),v=sub(o.p,C.e),z=dot(v,f),tn=Math.tan(Math.PI/8),aspect=r.width/r.height,x=dot(v,right)/(z*tn*aspect),y=dot(v,up)/(z*tn);
     return{x:r.left+(x*.5+.5)*r.width,y:r.top+(.5-y*.5)*r.height};
   });
-  await page.mouse.click(p.x,p.y);
+  let p=await objectScreenPoint();await page.mouse.click(p.x,p.y);
   expect(await page.evaluate(()=>window.R3DEditor.selected()?.id)).toBe(2);
+  expect(await page.evaluate(()=>window.R3DCameras.selectedCamera?.())).toBeNull();
+  await expect(page.locator('html')).toHaveAttribute('data-r3d-selection-owner','object');
 
   const before=await page.locator('#scene .item').count();
   await page.click('#addCube');await expect(page.locator('#scene .item')).toHaveCount(before+1);
@@ -44,12 +48,21 @@ test('R3D boots, viewport input works, camera-gizmos work and active camera rend
 
   const cams0=await page.locator('#r3dCameraList .item').count();
   await page.click('#addCamera');await expect(page.locator('#r3dCameraList .item')).toHaveCount(cams0+1);
+  await expect(page.locator('html')).toHaveAttribute('data-r3d-selection-owner','camera');
+  expect(await page.evaluate(()=>window.R3DCameras.selectedCamera?.())).toBeTruthy();
   await page.click('#copyCamera');await expect(page.locator('#r3dCameraList .item')).toHaveCount(cams0+2);
   await page.click('#setActiveCamera');
   let active=await page.evaluate(()=>window.R3DRenderer.activeCamera?.());expect(active).toBeTruthy();
   await page.fill('#camX','1.25');await page.dispatchEvent('#camX','input');
   active=await page.evaluate(()=>window.R3DCameras.selectedCamera?.());expect(Math.abs(active.p[0]-1.25)).toBeLessThan(0.001);
   await page.click('#deleteCamera');await expect(page.locator('#r3dCameraList .item')).toHaveCount(cams0+1);
+
+  await page.click('#selectTool');p=await objectScreenPoint();await page.mouse.click(p.x,p.y);
+  expect(await page.evaluate(()=>window.R3DEditor.selected()?.id)).toBe(2);
+  expect(await page.evaluate(()=>window.R3DCameras.selectedCamera?.())).toBeNull();
+  await expect(page.locator('html')).toHaveAttribute('data-r3d-selection-owner','object');
+  await page.locator('#r3dCameraList .item').first().click();
+  await expect(page.locator('html')).toHaveAttribute('data-r3d-selection-owner','camera');
   await page.click('#setActiveCamera');
 
   await page.selectOption('#rw','640');await page.selectOption('#rscale','0.5');await page.selectOption('#samples','1');await page.selectOption('#bounces','1');await page.selectOption('#adaptive','0');await page.selectOption('#denoise','0');
