@@ -91,6 +91,15 @@ export function createCoreDiagnostics(core) {
     const ok = nodes.every(node => live.has(keyOf(node.handle)) && (!node.parent || live.has(keyOf(node.parent))));
     return { passed: ok, message: 'Scene hierarchy references stale entities', details: { nodes: nodes.length, entities: live.size } };
   }, { releaseBlocking: true });
+  registry.register('scene.unique-entity-ids', () => {
+    const ids = core.entities.values().map(entity => entity.id);
+    const duplicates = ids.filter((id, index) => ids.indexOf(id) !== index);
+    return {
+      passed: duplicates.length === 0,
+      message: 'Scene contains duplicate entity ids',
+      details: { duplicates:[...new Set(duplicates)] }
+    };
+  }, { releaseBlocking: true });
   registry.register('geometry.references', () => ({
     passed: core.entities.values().every(entity => !entity.geometry || core.geometry.has(entity.geometry)),
     message: 'Entity references stale geometry'
@@ -99,6 +108,23 @@ export function createCoreDiagnostics(core) {
     passed: core.entities.values().every(entity => !entity.material || core.materials.has(entity.material)),
     message: 'Entity references stale material'
   }), { releaseBlocking: true });
+  registry.register('material.asset-references', () => {
+    const stale = [];
+    for (const { handle, value } of core.materials.entries()) {
+      for (const [slot, asset] of Object.entries(value.textures ?? {})) {
+        if (asset && !core.assets.has(asset)) stale.push({ material:keyOf(handle), slot, asset:keyOf(asset) });
+      }
+    }
+    return { passed:stale.length === 0, message:'Material references stale texture assets', details:{ stale } };
+  }, { releaseBlocking: true });
+  registry.register('evaluation.cache-bounds', () => {
+    const stats = core.evaluator?.stats?.() ?? null;
+    return {
+      passed: !stats || stats.entries <= stats.maxEntries,
+      message: 'Derived geometry evaluator cache exceeded configured bound',
+      details: stats
+    };
+  }, { releaseBlocking: true });
   return registry;
 }
 
