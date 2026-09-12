@@ -1,5 +1,5 @@
 const {test,expect}=require('@playwright/test');
-test('R3D boots, edits, undoes and renders visible pixels',async({page})=>{
+test('R3D boots, edits, undoes and renders visible upright pixels',async({page})=>{
   const errors=[];page.on('pageerror',e=>errors.push(String(e)));
   await page.goto('http://127.0.0.1:4173/r3d/',{waitUntil:'networkidle'});
   await expect(page.locator('html')).toHaveAttribute('data-r3d-bootstrap','1');
@@ -14,6 +14,8 @@ test('R3D boots, edits, undoes and renders visible pixels',async({page})=>{
   await page.selectOption('#rw','640');await page.selectOption('#rscale','0.5');await page.selectOption('#samples','1');await page.selectOption('#bounces','1');await page.selectOption('#adaptive','0');await page.selectOption('#denoise','0');
   await page.click('#renderBtn');
   await expect(page.locator('#pct')).toHaveText('100%',{timeout:90000});
+  await expect(page.locator('#rc')).toHaveAttribute('data-r3d-orientation','upright');
+  await expect(page.locator('html')).toHaveAttribute('data-r3d-render-orientation','upright');
   const dims=await page.locator('#rc').evaluate(c=>[c.width,c.height]);
   expect(dims).toEqual([640,400]);
   const luma=await page.locator('#rc').evaluate(c=>{
