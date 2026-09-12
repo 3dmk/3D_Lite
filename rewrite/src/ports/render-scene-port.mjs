@@ -11,10 +11,11 @@ export class RenderScenePort {
 
     const entries = this.core.entities.entries();
     const scene = Object.freeze({
-      schema: 5,
+      schema: 6,
       stamp,
       activeCamera: this.core.state.activeCamera,
       hierarchy: this.core.scene.snapshot(),
+      entityHandles: Object.freeze(entries.map(entry => Object.freeze({ ...entry.handle }))),
       objects: Object.freeze(entries.map((entry, index) => {
         const entity = entry.value;
         return Object.freeze({
