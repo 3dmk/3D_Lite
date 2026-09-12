@@ -1,5 +1,5 @@
 const {test,expect}=require('@playwright/test');
-test('R3D boots, edits, undoes and renders',async({page})=>{
+test('R3D boots, edits, undoes and renders visible pixels',async({page})=>{
   const errors=[];page.on('pageerror',e=>errors.push(String(e)));
   await page.goto('http://127.0.0.1:4173/r3d/',{waitUntil:'networkidle'});
   await expect(page.locator('html')).toHaveAttribute('data-r3d-bootstrap','1');
@@ -16,5 +16,12 @@ test('R3D boots, edits, undoes and renders',async({page})=>{
   await expect(page.locator('#pct')).toHaveText('100%',{timeout:90000});
   const dims=await page.locator('#rc').evaluate(c=>[c.width,c.height]);
   expect(dims).toEqual([640,400]);
+  const luma=await page.locator('#rc').evaluate(c=>{
+    const x=c.getContext('2d',{willReadFrequently:true}),d=x.getImageData(0,0,c.width,c.height).data;
+    let sum=0,n=0;const step=Math.max(4,Math.floor((c.width*c.height)/4096));
+    for(let i=0;i<d.length;i+=4*step){sum+=(d[i]+d[i+1]+d[i+2])/3;n++}
+    return n?sum/n:0;
+  });
+  expect(luma).toBeGreaterThan(2);
   expect(errors).toEqual([]);
 });
