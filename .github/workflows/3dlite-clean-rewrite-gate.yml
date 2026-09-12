@@ -37,10 +37,13 @@ jobs:
         run: node rewrite/tests/ui-controller-smoke.mjs
       - name: Diagnostics and recovery smoke gate
         run: node rewrite/tests/diagnostics-recovery-smoke.mjs
+      - name: Legacy isolation and consolidation gate
+        run: node rewrite/tests/legacy-isolation-smoke.mjs
       - name: Architecture gate
         run: |
           set -euo pipefail
           test -f rewrite/src/core/main-core.mjs
+          test -f rewrite/src/core/architecture-contract.mjs
           test -f rewrite/src/core/command-stack.mjs
           test -f rewrite/src/core/generation-registry.mjs
           test -f rewrite/src/core/resource-store.mjs
@@ -75,6 +78,7 @@ jobs:
           test -f rewrite/src/app/property-controller.mjs
           test -f rewrite/src/app/panel-controller.mjs
           test -f rewrite/src/app/ui-controller.mjs
+          test -f rewrite/CLEAN_ARCHITECTURE_CONSOLIDATION.md
           test -f rewrite/index.html
           test "$(grep -R "new ThreeDLiteMainCore" -n rewrite/src | wc -l)" -eq 1
           ! grep -R "window\.scene\|window\.objects\|window\.camera" -n rewrite/src
@@ -85,7 +89,9 @@ jobs:
           ! grep -R "\.materials\.create\|\.materials\.update\|\.materials\.destroy" -n rewrite/src --exclude='main-core.mjs' --exclude='material-store.mjs'
           ! grep -R "\.assets\.create\|\.assets\.update\|\.assets\.destroy" -n rewrite/src --exclude='main-core.mjs' --exclude='asset-store.mjs'
           ! grep -R "\.entities\.update\|\.entities\.create\|\.entities\.destroy" -n rewrite/src/ports
-          ! grep -R "LitePixSceneCompiler\|LitePixCore8Production443" -n rewrite/src --exclude='litepix-renderer-port.mjs'
+          ! grep -R "LitePixSceneCompiler\|LitePixCore8Production443" -n rewrite/src --exclude='litepix-renderer-port.mjs' --exclude='architecture-contract.mjs'
           ! grep -R "postMessage\|new Worker" -n rewrite/src/core --exclude='worker-pool.mjs'
           ! grep -R "\.#[A-Za-z].*=" -n rewrite/src/core/project-serializer.mjs rewrite/src/core/project-migrations.mjs
           ! grep -R "\.transact\|\.updateEntity" -n rewrite/src/app/bootstrap.mjs
+          ! grep -R "ThreeDLiteRewrite\|ThreeDLiteMainCoreV1\|LegacyMigrationBridge\|MaxPix" -n rewrite/src --exclude='architecture-contract.mjs'
+          ! grep -R "clean bridge" -n rewrite/src rewrite/tests
