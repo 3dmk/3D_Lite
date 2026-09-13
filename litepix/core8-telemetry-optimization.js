@@ -20,7 +20,8 @@ function loadExtensions(){if(typeof document==='undefined')return;
   const health=()=>{if(root.LitePixRenderHealthDebugger)timeline();else appendScript('./litepix/render-health-v4.46.1.js','litepix-render-health-461',timeline);};
   const extra=()=>appendScript('./litepix/l3n-render-integration-extra-v4.48.js','litepix-l3n-render-integration-extra-448',health);
   const bridge=()=>appendScript('./litepix/l3n-render-integration-v4.48.js','litepix-l3n-render-integration-448',extra);
-  appendScript('./litepix/l3n-rendering-v4.48.js','litepix-l3n-rendering-448',bridge);
+  const optimizer=()=>appendScript('./litepix/l3n-render-optimizer-v4.48.js','litepix-l3n-render-optimizer-448',bridge);
+  appendScript('./litepix/l3n-rendering-v4.48.js','litepix-l3n-rendering-448',optimizer);
 }
 if(typeof document!=='undefined'){if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',loadExtensions,{once:true});else loadExtensions();}
 })(typeof globalThis!=='undefined'?globalThis:window);
