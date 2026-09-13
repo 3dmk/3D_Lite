@@ -14,7 +14,8 @@ LP.Core8={MetricAccumulator,StageTimer,RayTelemetry,CacheTelemetry,NoiseTelemetr
 root.LitePixTelemetryV2=LitePixTelemetryV2;
 function appendScript(src,id,onload){if(document.getElementById(id)){if(onload)onload();return;}const s=document.createElement('script');s.id=id;s.src=src;s.async=false;if(onload)s.onload=onload;s.onerror=()=>console.error('[LitePix] failed to load '+src);(document.head||document.documentElement).appendChild(s);}
 function loadExtensions(){if(typeof document==='undefined')return;
-  const gate=()=>appendScript('./litepix/l3n-render-gate-v4.48.js','litepix-l3n-render-gate-448');
+  const session=()=>appendScript('./litepix/l3n-render-session-v4.48.js','litepix-l3n-render-session-448');
+  const gate=()=>appendScript('./litepix/l3n-render-gate-v4.48.js','litepix-l3n-render-gate-448',session);
   const l3nHealth=()=>appendScript('./litepix/l3n-render-health-v4.48.js','litepix-l3n-render-health-448',gate);
   const timeline=()=>appendScript('./litepix/render-health-timeline-v4.46.2.js','litepix-render-health-timeline-462',l3nHealth);
   const health=()=>{if(root.LitePixRenderHealthDebugger)timeline();else appendScript('./litepix/render-health-v4.46.1.js','litepix-render-health-461',timeline);};
