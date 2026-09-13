@@ -2,6 +2,8 @@
 const LP=root.LitePixNative=root.LitePixNative||{};
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const lum=c=>.2126*c[0]+.7152*c[1]+.0722*c[2];
+const now=()=>root.performance?.now?.()??Date.now();
+const l3n=(name,...args)=>{try{const f=root[name];if(typeof f==='function')return f(...args);}catch(_){}return undefined;};
 class LitePixPathExecution410{
   constructor(width,height,opts={}){
     if(!LP.Core2||!LP.Core3||!LP.Core4||!LP.Core5)throw new Error('LitePix v4.10 path bridge requires Core2-5');
@@ -13,17 +15,25 @@ class LitePixPathExecution410{
     this.temporal=new LP.Core5.TemporalHistory(this.width,this.height);this.temporal.beginFrame();
     this.spatial=new LP.Core5.SpatialReuse({radius:1,maxNeighbors:8});
     this.reservoirs=new Array(this.width*this.height);
-    this.pass=0;this.samples=0;this.primaryHits=0;this.guideWrites=0;this.blockPasses=0;this.startedAt=performance.now();
+    this.pass=0;this.samples=0;this.primaryHits=0;this.guideWrites=0;this.blockPasses=0;this.startedAt=now();this.__l3nPassWallStart=this.startedAt;this.__l3nLastPassSamples=0;
     const n=this.width*this.height;
     this.budget.reserve('path-gbuffer',n*(4+12+12+4+4+4+4+8+1));
     this.budget.reserve('path-reservoir-grid',n*24);
+    l3n('__3DLiteL3NInitPixels',n);l3n('__3DLiteL3NBeginStage','path-render',{source:'path410',width:this.width,height:this.height});l3n('__3DLiteL3NSetMemory',this.budget.snapshot());
   }
   record(index,x,y,sample,hit,accumulator){
-    this.samples++;
+    this.samples++;l3n('__3DLiteL3NRay','primary',1);
     const r=new LP.Core5.Reservoir();
     const radiance=sample?.radiance||[0,0,0];
     r.update({radiance,index,pass:this.pass},Math.max(1e-8,lum(radiance)),()=>0);
     this.reservoirs[index]=r;this.temporal.store(x,y,r);
+    if((this.samples&255)===0)l3n('__3DLiteL3NColor','raw',radiance);
+    try{
+      const variance=accumulator&&accumulator.samples?.[index]>1&&typeof accumulator.variance==='function'?accumulator.variance(index):1;
+      const noise=accumulator&&typeof accumulator.noise==='function'?accumulator.noise(index):variance;
+      const samples=accumulator?.samples?.[index]||1;
+      l3n('__3DLiteL3NPixel',index,{variance:Number.isFinite(variance)?variance:1,luma:Math.max(0,lum(radiance)),samples,converged:Number.isFinite(noise)&&noise<=(this.opts.noiseThreshold??.03)});
+    }catch(_){}
     if(hit?.hit){
       this.primaryHits++;
       const n=hit.orientedGeometricNormal||hit.geometricNormal||[0,1,0];
@@ -35,7 +45,7 @@ class LitePixPathExecution410{
     }
   }
   completePass(accumulator){
-    this.pass++;
+    const passStart=now();this.pass++;
     const g=this.gbuffer,guide=this.raster.guide,w=this.width,h=this.height;
     const sampleBlock=b=>{
       const x=Math.min(w-1,b.x+(b.size>>1)),y=Math.min(h-1,b.y+(b.size>>1)),i=y*w+x,o=i*3;
@@ -50,15 +60,23 @@ class LitePixPathExecution410{
       const v=Number.isFinite(accumulator.variance(i))?accumulator.variance(i):1;
       return guide.importance(g,x,y,v);
     };
+    l3n('__3DLiteL3NBeginStage','gi-evaluation',{source:'path410',pass:this.pass});
     if(this.gi.active.length){this.gi.runPass(sampleBlock,importance);this.blockPasses++;}
+    l3n('__3DLiteL3NEndStage','gi-evaluation',{source:'path410',pass:this.pass});
+    const wallMs=Math.max(0,now()-this.__l3nPassWallStart),sampleDelta=Math.max(0,this.samples-this.__l3nLastPassSamples);
+    let noise=0,spp=this.pass,active=0;
+    try{noise=typeof accumulator.averageNoise==='function'?accumulator.averageNoise():0;spp=typeof accumulator.averageSamples==='function'?accumulator.averageSamples():this.pass;active=Number(accumulator.active??0)||0;}catch(_){}
+    l3n('__3DLiteL3NPass',{pass:this.pass,timeMs:wallMs,rays:sampleDelta,noise,activePixels:active,totalPixels:w*h,samples:spp});
+    l3n('__3DLiteL3NObserveStage','pass-finalization',Math.max(0,now()-passStart),{source:'path410',pass:this.pass});
+    this.__l3nLastPassSamples=this.samples;this.__l3nPassWallStart=now();l3n('__3DLiteL3NSetMemory',this.budget.snapshot());
     return this.snapshot();
   }
   snapshot(){
-    return {version:'4.10.0',mode:'native-path-observer',samples:this.samples,passes:this.pass,primaryHits:this.primaryHits,guideWrites:this.guideWrites,blockPasses:this.blockPasses,gi:this.gi.stats(),guide:{...this.raster.guide.stats},spatial:this.spatial.stats(),memory:this.budget.snapshot(),elapsedMs:performance.now()-this.startedAt};
+    return {version:'4.10.0',l3nVersion:'4.48.0',mode:'native-path-observer',samples:this.samples,passes:this.pass,primaryHits:this.primaryHits,guideWrites:this.guideWrites,blockPasses:this.blockPasses,gi:this.gi.stats(),guide:{...this.raster.guide.stats},spatial:this.spatial.stats(),memory:this.budget.snapshot(),elapsedMs:now()-this.startedAt};
   }
-  dispose(){try{const m=this.budget.snapshot();for(const [tag,bytes] of Object.entries(m.tags||{}))this.budget.release(tag,bytes);}catch(_){}this.reservoirs.length=0;}
+  dispose(){l3n('__3DLiteL3NEndStage','path-render',{source:'path410',passes:this.pass,samples:this.samples});try{const m=this.budget.snapshot();for(const [tag,bytes] of Object.entries(m.tags||{}))this.budget.release(tag,bytes);}catch(_){}this.reservoirs.length=0;}
 }
 LP.PathExecution410=LitePixPathExecution410;
 root.LitePixPathExecution410=LitePixPathExecution410;
-root.__LitePixPathIntegration410=true;
+root.__LitePixPathIntegration410=true;root.__LitePixPathIntegrationL3N448=true;
 })(typeof globalThis!=='undefined'?globalThis:window);
