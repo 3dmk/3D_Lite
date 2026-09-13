@@ -1,0 +1,61 @@
+name: Validate L3N Rendering v4.48
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'litepix/l3n-rendering-v4.48.js'
+      - 'litepix/l3n-render-optimizer-v4.48.js'
+      - 'litepix/l3n-render-integration-v4.48.js'
+      - 'litepix/l3n-render-integration-extra-v4.48.js'
+      - 'litepix/l3n-render-health-v4.48.js'
+      - 'litepix/l3n-render-gate-v4.48.js'
+      - 'litepix/core5-ray-budget-v4.45.js'
+      - 'litepix/core7-production.js'
+      - 'litepix/core8-telemetry-optimization.js'
+      - 'litepix/path-integration-v4.10.js'
+      - '.github/workflows/l3n-v4.48-validate.yml'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: JavaScript syntax gate
+        run: |
+          set -euo pipefail
+          files=(
+            litepix/l3n-rendering-v4.48.js
+            litepix/l3n-render-optimizer-v4.48.js
+            litepix/l3n-render-integration-v4.48.js
+            litepix/l3n-render-integration-extra-v4.48.js
+            litepix/l3n-render-health-v4.48.js
+            litepix/l3n-render-gate-v4.48.js
+            litepix/core5-ray-budget-v4.45.js
+            litepix/core7-production.js
+            litepix/core8-telemetry-optimization.js
+            litepix/path-integration-v4.10.js
+          )
+          for f in "${files[@]}"; do
+            echo "node --check $f"
+            node --check "$f"
+          done
+      - name: Required API markers
+        run: |
+          set -euo pipefail
+          grep -q '__3DLiteL3NRenderingSnapshot' litepix/l3n-rendering-v4.48.js
+          grep -q 'MAX_SAMPLES_NOT_CONVERGED' litepix/l3n-rendering-v4.48.js
+          grep -q '__3DLiteL3NRenderOptimizer' litepix/l3n-render-optimizer-v4.48.js
+          grep -q '__3DLiteL3NRunExperiment' litepix/l3n-render-integration-extra-v4.48.js
+          grep -q '__3DLiteRunL3NWorkflowGate' litepix/l3n-render-gate-v4.48.js
+          grep -q '__LitePixShadowVerificationVersion' litepix/core5-ray-budget-v4.45.js
+          grep -q 'varianceSource' litepix/core7-production.js
+          grep -q 'l3n-rendering-v4.48.js' litepix/core8-telemetry-optimization.js
+      - name: Startup safety markers
+        run: |
+          set -euo pipefail
+          test "$(grep -o 'requestAnimationFrame(animate)' litepix/l3n-rendering-v4.48.js | wc -l)" -eq 0
+          test "$(grep -o 'requestAnimationFrame(animate)' litepix/l3n-render-integration-v4.48.js | wc -l)" -eq 0
+          test "$(grep -o 'requestAnimationFrame(animate)' litepix/l3n-render-integration-extra-v4.48.js | wc -l)" -eq 0
+          echo 'No extra animation-loop start introduced by L3N v4.48.'
