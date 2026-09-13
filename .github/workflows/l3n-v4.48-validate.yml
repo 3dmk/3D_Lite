@@ -7,10 +7,15 @@ on:
       - 'litepix/l3n-rendering-v4.48.js'
       - 'litepix/l3n-render-optimizer-v4.48.js'
       - 'litepix/l3n-render-learning-store-v4.48.js'
+      - 'litepix/l3n-feature-denoiser-v4.48.js'
       - 'litepix/l3n-render-integration-v4.48.js'
       - 'litepix/l3n-render-integration-extra-v4.48.js'
       - 'litepix/l3n-render-health-v4.48.js'
       - 'litepix/l3n-render-gate-v4.48.js'
+      - 'litepix/l3n-render-session-v4.48.js'
+      - 'litepix/core2-scene-acceleration.js'
+      - 'litepix/core4-production-v4.27.js'
+      - 'litepix/core5-production-v4.31.js'
       - 'litepix/core5-ray-budget-v4.45.js'
       - 'litepix/core7-production.js'
       - 'litepix/core8-telemetry-optimization.js'
@@ -30,10 +35,15 @@ jobs:
             litepix/l3n-rendering-v4.48.js
             litepix/l3n-render-optimizer-v4.48.js
             litepix/l3n-render-learning-store-v4.48.js
+            litepix/l3n-feature-denoiser-v4.48.js
             litepix/l3n-render-integration-v4.48.js
             litepix/l3n-render-integration-extra-v4.48.js
             litepix/l3n-render-health-v4.48.js
             litepix/l3n-render-gate-v4.48.js
+            litepix/l3n-render-session-v4.48.js
+            litepix/core2-scene-acceleration.js
+            litepix/core4-production-v4.27.js
+            litepix/core5-production-v4.31.js
             litepix/core5-ray-budget-v4.45.js
             litepix/core7-production.js
             litepix/core8-telemetry-optimization.js
@@ -50,17 +60,30 @@ jobs:
           grep -q 'MAX_SAMPLES_NOT_CONVERGED' litepix/l3n-rendering-v4.48.js
           grep -q '__3DLiteL3NRenderOptimizer' litepix/l3n-render-optimizer-v4.48.js
           grep -q '__3DLiteL3NPromoteRenderBaseline' litepix/l3n-render-learning-store-v4.48.js
+          grep -q '__3DLiteL3NDenoise' litepix/l3n-feature-denoiser-v4.48.js
           grep -q '__3DLiteL3NRunExperiment' litepix/l3n-render-integration-extra-v4.48.js
           grep -q '__3DLiteRunL3NWorkflowGate' litepix/l3n-render-gate-v4.48.js
+          grep -q '__3DLiteL3NRenderSession' litepix/l3n-render-session-v4.48.js
+          grep -q 'TLAS_REFIT' litepix/core2-scene-acceleration.js
+          grep -q '__LitePixCore4L3N448' litepix/core4-production-v4.27.js
+          grep -q '__LitePixCore5L3N448' litepix/core5-production-v4.31.js
           grep -q '__LitePixShadowVerificationVersion' litepix/core5-ray-budget-v4.45.js
           grep -q 'varianceSource' litepix/core7-production.js
           grep -q 'l3n-rendering-v4.48.js' litepix/core8-telemetry-optimization.js
-          grep -q 'l3n-render-learning-store-v4.48.js' litepix/core8-telemetry-optimization.js
+          grep -q 'l3n-render-session-v4.48.js' litepix/core8-telemetry-optimization.js
       - name: Startup safety markers
         run: |
           set -euo pipefail
-          test "$(grep -o 'requestAnimationFrame(animate)' litepix/l3n-rendering-v4.48.js | wc -l)" -eq 0
-          test "$(grep -o 'requestAnimationFrame(animate)' litepix/l3n-render-integration-v4.48.js | wc -l)" -eq 0
-          test "$(grep -o 'requestAnimationFrame(animate)' litepix/l3n-render-integration-extra-v4.48.js | wc -l)" -eq 0
-          test "$(grep -o 'requestAnimationFrame(animate)' litepix/l3n-render-optimizer-v4.48.js | wc -l)" -eq 0
+          for f in \
+            litepix/l3n-rendering-v4.48.js \
+            litepix/l3n-render-optimizer-v4.48.js \
+            litepix/l3n-render-learning-store-v4.48.js \
+            litepix/l3n-feature-denoiser-v4.48.js \
+            litepix/l3n-render-integration-v4.48.js \
+            litepix/l3n-render-integration-extra-v4.48.js \
+            litepix/l3n-render-health-v4.48.js \
+            litepix/l3n-render-gate-v4.48.js \
+            litepix/l3n-render-session-v4.48.js; do
+            test "$(grep -o 'requestAnimationFrame(animate)' "$f" | wc -l)" -eq 0
+          done
           echo 'No extra animation-loop start introduced by L3N v4.48.'
