@@ -1,6 +1,6 @@
 (function(root){'use strict';
 const VERSION='4.48.0';
-const finite=(v,d=0)=>Number.isFinite(+v)?+v:d,clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,finite(v))),lum=c=>Array.isArray(c)?.2126*finite(c[0])+.7152*finite(c[1])+.0722*finite(c[2]):.2126*finite(c?.r)+.7152*finite(c?.g)+.0722*finite(c?.b);
+const finite=(v,d=0)=>Number.isFinite(+v)?+v:d,clamp=(v,a=0,b=1)=>Math.max(a,Math.min(b,finite(v))),lum=c=>Array.isArray(c)?(.2126*finite(c[0])+.7152*finite(c[1])+.0722*finite(c[2])):(.2126*finite(c?.r)+.7152*finite(c?.g)+.0722*finite(c?.b));
 class RevisionPolicy{
  static decide(prev={},next={}){const p=prev||{},n=next||{};if(p.geometryTopologyRevision!==n.geometryTopologyRevision)return{action:'FULL_BLAS_REBUILD',reason:'topology changed'};if(p.geometryRevision!==n.geometryRevision)return{action:'PARTIAL_BLAS_REBUILD_OR_REFIT',reason:'geometry deformation changed'};if(p.transformRevision!==n.transformRevision||p.instanceRevision!==n.instanceRevision)return{action:'TLAS_REFIT',reason:'transform/instance changed'};if(p.materialRevision!==n.materialRevision||p.textureRevision!==n.textureRevision)return{action:'REUSE_ACCELERATION',reason:'shading-only change'};if(p.lightRevision!==n.lightRevision)return{action:'REUSE_ACCELERATION',reason:'light-only change'};if(p.cameraRevision!==n.cameraRevision)return{action:'REUSE_ACCELERATION',reason:'camera-only change'};return{action:'REUSE_ALL',reason:'no relevant revision changed'};}}
 class ResidencyManager{
