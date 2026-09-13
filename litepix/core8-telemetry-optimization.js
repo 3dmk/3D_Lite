@@ -18,7 +18,8 @@ function loadExtensions(){if(typeof document==='undefined')return;
   const l3nHealth=()=>appendScript('./litepix/l3n-render-health-v4.48.js','litepix-l3n-render-health-448',gate);
   const timeline=()=>appendScript('./litepix/render-health-timeline-v4.46.2.js','litepix-render-health-timeline-462',l3nHealth);
   const health=()=>{if(root.LitePixRenderHealthDebugger)timeline();else appendScript('./litepix/render-health-v4.46.1.js','litepix-render-health-461',timeline);};
-  const bridge=()=>appendScript('./litepix/l3n-render-integration-v4.48.js','litepix-l3n-render-integration-448',health);
+  const extra=()=>appendScript('./litepix/l3n-render-integration-extra-v4.48.js','litepix-l3n-render-integration-extra-448',health);
+  const bridge=()=>appendScript('./litepix/l3n-render-integration-v4.48.js','litepix-l3n-render-integration-448',extra);
   appendScript('./litepix/l3n-rendering-v4.48.js','litepix-l3n-rendering-448',bridge);
 }
 if(typeof document!=='undefined'){if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',loadExtensions,{once:true});else loadExtensions();}
