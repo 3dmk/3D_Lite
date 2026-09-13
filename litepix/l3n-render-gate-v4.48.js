@@ -1,0 +1,20 @@
+(function(root){'use strict';
+const VERSION='4.48.0';
+const check=(name,ok,details='')=>({name,status:ok?'PASS':'FAIL',passed:!!ok,details});
+function run(){const rows=[];
+  const L=root.__3DLiteL3NRendering;
+  rows.push(check('L3N rendering controller',!!L&&root.__3DLiteL3NRenderingVersion===VERSION,root.__3DLiteL3NRenderingVersion||'missing'));
+  const apis=['__3DLiteL3NBeginStage','__3DLiteL3NEndStage','__3DLiteL3NRay','__3DLiteL3NBounce','__3DLiteL3NContribution','__3DLiteL3NTraversal','__3DLiteL3NRoulette','__3DLiteL3NColor','__3DLiteL3NLight','__3DLiteL3NSpotProbe','__3DLiteL3NCache','__3DLiteL3NInitPixels','__3DLiteL3NPixel','__3DLiteL3NPass','__3DLiteL3NFinish','__3DLiteL3NSetBackend','__3DLiteL3NSetMemory','__3DLiteL3NExperimentStart','__3DLiteL3NExperimentFinish','__3DLiteL3NLearn'];
+  for(const a of apis)rows.push(check(a,typeof root[a]==='function'));
+  try{const t=new root.L3NRendering448();t.initPixels(4);t.pixel(0,{variance:.2,luma:.1,samples:1});t.pass({pass:1,timeMs:10,rays:100,noise:.2,activePixels:4,totalPixels:4});t.pass({pass:2,timeMs:10,rays:100,noise:.15,activePixels:3,totalPixels:4});const reason=t.finish({status:'Finished',noise:.15,noiseTarget:.03,currentSamples:2,maximumSamples:2});const s=t.snapshot();rows.push(check('Explicit non-convergence reason',reason==='MAX_SAMPLES_NOT_CONVERGED',reason));rows.push(check('Per-pass efficiency',!!s.convergence?.efficiency&&s.convergence.efficiency.noiseGain>0,JSON.stringify(s.convergence?.efficiency||{})));rows.push(check('Per-pixel convergence map',s.convergence?.pixels?.total===4,JSON.stringify(s.convergence?.pixels||{})));}catch(e){rows.push(check('L3N isolated controller self-test',false,String(e?.message||e)));}
+  try{const R=root.LitePixRayBudget445;rows.push(check('Variance + Luma ray budget',typeof R==='function'&&root.__LitePixVarianceLumaRayBudgetVersion===VERSION,root.__LitePixVarianceLumaRayBudgetVersion||'missing'));if(typeof R==='function'){const acc={bvh:{root:-1,nodes:[]}},r=new R({settings:{quality:'Preview'}},acc,{},4,4);rows.push(check('Shadow verification policy',!!r.shadowVerify&&r.shadowVerify.every>=256,JSON.stringify(r.shadowVerify||{})));rows.push(check('Ray budget snapshot',r.snapshot()?.version===VERSION,r.snapshot()?.version||'missing'));}}catch(e){rows.push(check('Ray budget construction',false,String(e?.message||e)));}
+  try{const A=root.LitePixNative?.Core7?.AOVRegistry,a=typeof A==='function'?new A():null,d=a?.diagnostic?.();rows.push(check('L3N diagnostic AOV set',!!d?.ok,d?JSON.stringify(d):'AOV registry unavailable'));}catch(e){rows.push(check('L3N diagnostic AOV set',false,String(e?.message||e)));}
+  const integ=root.__3DLiteL3NRenderIntegrationSnapshot?.();rows.push(check('Renderer integration bridge',!!integ&&integ.version===VERSION,integ?JSON.stringify(integ.coverage):'missing'));
+  const snap=root.__3DLiteL3NRenderingSnapshot?.();rows.push(check('Snapshot schema',snap?.schema===2&&snap?.version===VERSION,snap?`schema ${snap.schema} version ${snap.version}`:'missing'));
+  rows.push(check('Long-task observer capability',!!L&&Array.isArray(L.longTasks),'runtime long-task evidence'));
+  rows.push(check('A/B experiment framework',!!L?.experiments&&typeof L.experimentStart==='function'&&typeof L.experimentFinish==='function'));
+  rows.push(check('Knowledge keep/reject records',!!L?.knowledge&&typeof L.learn==='function'));
+  const failed=rows.filter(r=>!r.passed);const report={schema:1,version:VERSION,method:'L3N Rendering Workflow Gate',passed:failed.length===0,total:rows.length,passedCount:rows.length-failed.length,failedCount:failed.length,rows,time:Date.now()};root.__3DLiteL3NWorkflowGateLast=report;return report;}
+function text(){const r=run(),lines=[`L3N RENDERING WORKFLOW GATE v${VERSION}`,`${r.passed?'PASS':'FAIL'} ${r.passedCount}/${r.total}`,''];for(const x of r.rows)lines.push(`${x.status.padEnd(4)} | ${x.name}${x.details?' | '+x.details:''}`);return lines.join('\n');}
+root.__3DLiteRunL3NWorkflowGate=run;root.__3DLiteL3NWorkflowGateText=text;root.__3DLiteL3NWorkflowGateVersion=VERSION;
+})(typeof globalThis!=='undefined'?globalThis:window);
