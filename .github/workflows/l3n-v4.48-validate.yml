@@ -6,6 +6,7 @@ on:
     paths:
       - 'litepix/l3n-rendering-v4.48.js'
       - 'litepix/l3n-render-optimizer-v4.48.js'
+      - 'litepix/l3n-render-learning-store-v4.48.js'
       - 'litepix/l3n-render-integration-v4.48.js'
       - 'litepix/l3n-render-integration-extra-v4.48.js'
       - 'litepix/l3n-render-health-v4.48.js'
@@ -28,6 +29,7 @@ jobs:
           files=(
             litepix/l3n-rendering-v4.48.js
             litepix/l3n-render-optimizer-v4.48.js
+            litepix/l3n-render-learning-store-v4.48.js
             litepix/l3n-render-integration-v4.48.js
             litepix/l3n-render-integration-extra-v4.48.js
             litepix/l3n-render-health-v4.48.js
@@ -47,15 +49,18 @@ jobs:
           grep -q '__3DLiteL3NRenderingSnapshot' litepix/l3n-rendering-v4.48.js
           grep -q 'MAX_SAMPLES_NOT_CONVERGED' litepix/l3n-rendering-v4.48.js
           grep -q '__3DLiteL3NRenderOptimizer' litepix/l3n-render-optimizer-v4.48.js
+          grep -q '__3DLiteL3NPromoteRenderBaseline' litepix/l3n-render-learning-store-v4.48.js
           grep -q '__3DLiteL3NRunExperiment' litepix/l3n-render-integration-extra-v4.48.js
           grep -q '__3DLiteRunL3NWorkflowGate' litepix/l3n-render-gate-v4.48.js
           grep -q '__LitePixShadowVerificationVersion' litepix/core5-ray-budget-v4.45.js
           grep -q 'varianceSource' litepix/core7-production.js
           grep -q 'l3n-rendering-v4.48.js' litepix/core8-telemetry-optimization.js
+          grep -q 'l3n-render-learning-store-v4.48.js' litepix/core8-telemetry-optimization.js
       - name: Startup safety markers
         run: |
           set -euo pipefail
           test "$(grep -o 'requestAnimationFrame(animate)' litepix/l3n-rendering-v4.48.js | wc -l)" -eq 0
           test "$(grep -o 'requestAnimationFrame(animate)' litepix/l3n-render-integration-v4.48.js | wc -l)" -eq 0
           test "$(grep -o 'requestAnimationFrame(animate)' litepix/l3n-render-integration-extra-v4.48.js | wc -l)" -eq 0
+          test "$(grep -o 'requestAnimationFrame(animate)' litepix/l3n-render-optimizer-v4.48.js | wc -l)" -eq 0
           echo 'No extra animation-loop start introduced by L3N v4.48.'
