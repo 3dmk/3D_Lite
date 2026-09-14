@@ -6,10 +6,10 @@ def patch(path:Path):
     text=path.read_text(encoding='utf-8')
     original=text
 
-    # Remove only dedicated external development scripts by script TAG attributes.
-    # Never remove an inline production script merely because its body mentions an old hook.
+    # Remove only dedicated external development scripts by their SRC attribute.
+    # Their bodies may contain fallback text, so consume the full external script block.
     text=re.sub(
-        r'<script\b[^>]*\bsrc=["\'][^"\']*(?:litepix/l3n-|litepix/render-health-|render-health-bridge)[^"\']*["\'][^>]*>\s*</script>\s*',
+        r'<script\b(?=[^>]*\bsrc=["\'][^"\']*(?:litepix/l3n-|litepix/render-health-|render-health-bridge)[^"\']*["\'])[^>]*>[\s\S]*?</script>\s*',
         '', text, flags=re.I)
     # Remove dedicated inline development blocks only when their own id marks them as such.
     text=re.sub(
@@ -29,8 +29,6 @@ def patch(path:Path):
     if '</body>' not in text: raise RuntimeError('body end missing')
     text=text.replace('</body>',marker+'\n</body>',1)
 
-    # Only dedicated development resources are static blockers. Legacy text/hooks that live inside
-    # preserved core scripts are verified at runtime instead, so core initialization is never deleted.
     forbidden=['litepix/l3n-','litepix/render-health-','render-health-bridge-v4.49.js']
     leftovers=[x for x in forbidden if x.lower() in text.lower()]
     if leftovers: raise RuntimeError('dedicated development runtime remains: '+', '.join(leftovers))
