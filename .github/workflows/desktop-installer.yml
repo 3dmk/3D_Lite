@@ -22,12 +22,12 @@ jobs:
 
       - name: Install Tauri CLI
         shell: pwsh
-        run: cargo install tauri-cli --version "^2" --locked
+        run: npm install --global @tauri-apps/cli@latest
 
       - name: Build NSIS installer
         working-directory: desktop/src-tauri
         shell: pwsh
-        run: cargo tauri build --bundles nsis
+        run: tauri build --bundles nsis
 
       - name: Collect installer
         shell: pwsh
