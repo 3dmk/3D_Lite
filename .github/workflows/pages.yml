@@ -31,20 +31,8 @@ jobs:
         run: python3 patches/apply_low_sample_quality_v3_99_11.py index.html
       - name: Apply 3DLite v3.99.12 guided denoiser
         run: python3 patches/apply_guided_denoiser_v3_99_12.py index.html
-      - name: Inspect render preview hooks
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          t=Path('index.html').read_text(encoding='utf-8')
-          for key in ['resolveRGBA','putImageData','beautyFrame','onProgress(','RenderPresenter13','renderCanvas','renderOutput','imageData']:
-              print('\n===',key,'===')
-              start=0
-              for n in range(8):
-                  i=t.find(key,start)
-                  if i<0: break
-                  print(t[max(0,i-700):min(len(t),i+1400)].replace('\n',' '))
-                  start=i+len(key)
-          PY
+      - name: Apply 3DLite v3.99.13 live pass preview
+        run: python3 patches/apply_live_pass_preview_v3_99_13.py index.html
       - name: Validate published renderer
         run: |
           grep -q '<option selected>Irradiance</option>' index.html
@@ -62,11 +50,14 @@ jobs:
           grep -q "this.maxBounces=4;this.denoise='Quality'" index.html
           grep -q 'minSamples:2' index.html
           grep -q 'settings.noiseThreshold\*.75' index.html
-          grep -q "version:'3.99.12-guided-low-sample'" index.html
+          grep -q "version:'3.99.13-guided-low-sample'" index.html
           grep -q "process(channels,mode='Quality')" index.html
           grep -q 'Math.pow(nDot,normalPower)' index.html
           grep -q 'out\[b\]=out\[b\]\*.90+src\[b\]\*.10' index.html
-          grep -q '3.99.12' index.html
+          grep -q 'livePreview:true' index.html
+          grep -q 'partialPass:true' index.html
+          grep -q 'previewNow16-previewLastMs16>=120' index.html
+          grep -q '3.99.13' index.html
           ! grep -q '<option>Brute Force</option>' index.html
           ! grep -q 'job.progress.percent=96+Math.round(ratio\*4)' index.html
           node -e "const fs=require('fs');const h=fs.readFileSync('index.html','utf8');const s=[...h.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/gi)].map(m=>m[1]).filter(x=>x.trim());for(const x of s)new Function(x);console.log('renderer inline JS syntax OK:',s.length)"
