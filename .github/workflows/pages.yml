@@ -31,9 +31,11 @@ jobs:
           from pathlib import Path
           p=Path('index.html')
           h=p.read_text(encoding='utf-8')
-          h=h.replace('3DLite 4.45.0','3DLite 4.49.5')
           h=h.replace("__3DLiteProductionVersion='4.49.4'","__3DLiteProductionVersion='4.49.5'")
           h=h.replace('3D Lite — LitePix v4.49.4 Production','3D Lite — LitePix v4.49.5 Production')
+          sync='''\n<script id="visibleVersionSync495">\n(()=>{\n  const apply=()=>{\n    try{\n      document.title='3D Lite — LitePix v4.49.5 Production';\n      window.__3DLiteProductionVersion='4.49.5';\n      const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);\n      let n;\n      while((n=walker.nextNode())){\n        const t=n.nodeValue||'';\n        if(/3DLite\\s+4\\.45\\.0/i.test(t)) n.nodeValue=t.replace(/3DLite\\s+4\\.45\\.0/ig,'3DLite 4.49.5');\n      }\n    }catch(_){}\n  };\n  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',apply,{once:true}); else apply();\n  addEventListener('load',apply,{once:true});\n  setTimeout(apply,100); setTimeout(apply,500); setTimeout(apply,1500);\n})();\n</script>\n'''
+          if 'visibleVersionSync495' not in h:
+              h=h.replace('</body>',sync+'\n</body>',1)
           p.write_text(h,encoding='utf-8')
           PY
 
@@ -44,8 +46,8 @@ jobs:
           from pathlib import Path
           import re,sys
           h=Path('index.html').read_text(encoding='utf-8')
-          required=['productionLayout494','productionRuntimeCleanup449',"__3DLiteProductionVersion='4.49.5'",'3DLite 4.49.5','Scene Instances','sceneInstancesPanel39922','sceneInstancesList39922']
-          forbidden=['litepix/l3n-','litepix/render-health-','render-health-bridge-v4.49.js','3DLite 4.45.0']
+          required=['productionLayout494','productionRuntimeCleanup449',"__3DLiteProductionVersion='4.49.5'",'visibleVersionSync495','3DLite 4.49.5','Scene Instances','sceneInstancesPanel39922','sceneInstancesList39922']
+          forbidden=['litepix/l3n-','litepix/render-health-','render-health-bridge-v4.49.js']
           missing=[x for x in required if x not in h]
           leftovers=[x for x in forbidden if x.lower() in h.lower()]
           ids=re.findall(r'id="([^"]+)"',h); dup=sorted({x for x in ids if ids.count(x)>1})
