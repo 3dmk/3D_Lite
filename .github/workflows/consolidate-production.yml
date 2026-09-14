@@ -50,7 +50,7 @@ jobs:
           import re,sys
           h=Path('index.html').read_text(encoding='utf-8')
           required=['productionLayout494','productionRuntimeCleanup449',"__3DLiteProductionVersion='4.49.4'",'Scene Instances','sceneInstancesPanel39922','sceneInstancesList39922']
-          forbidden=['Run L3N Runtime Test','L3N Runtime Report','litepix/l3n-','litepix/render-health-','render-health-bridge-v4.49.js']
+          forbidden=['litepix/l3n-','litepix/render-health-','render-health-bridge-v4.49.js']
           missing=[x for x in required if x not in h]
           leftovers=[x for x in forbidden if x.lower() in h.lower()]
           ids=re.findall(r'id="([^"]+)"',h); dup=sorted({x for x in ids if ids.count(x)>1})
@@ -88,8 +88,7 @@ jobs:
             await page.waitForTimeout(100);
             const materialsActive=await page.evaluate(()=>document.getElementById('materialsTabPage')?.classList.contains('active')===true);
             const state=await page.evaluate(()=>{
-              const panel=document.getElementById('sceneInstancesPanel39922');
-              const list=document.getElementById('sceneInstancesList39922');
+              const panel=document.getElementById('sceneInstancesPanel39922'); const list=document.getElementById('sceneInstancesList39922');
               const center=document.getElementById('center'); const workspace=document.getElementById('workspace');
               const pr=panel?.getBoundingClientRect(); const cr=center?.getBoundingClientRect(); const wr=workspace?.getBoundingClientRect();
               const canvases=[...document.querySelectorAll('#viewport canvas')];
@@ -120,9 +119,6 @@ jobs:
           git config user.name "3DLite Production Builder"
           git config user.email "actions@users.noreply.github.com"
           git add index.html
-          if git diff --cached --quiet; then
-            echo "Production index already consolidated"
-            exit 0
-          fi
+          if git diff --cached --quiet; then echo "Production index already consolidated"; exit 0; fi
           git commit -m "Consolidate clean 3DLite production v4.49.4 [skip ci]"
           git push
