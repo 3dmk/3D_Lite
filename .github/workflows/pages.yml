@@ -23,7 +23,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Apply 3DLite v3.99.8 GI renderer update
+      - name: Apply 3DLite v3.99.9 renderer update
         run: python3 patches/apply_gi_irradiance_lightcache_v3_99_8.py index.html latest.html
       - name: Validate published renderer
         run: |
@@ -31,7 +31,11 @@ jobs:
           grep -q '<option selected>Light Cache</option>' index.html
           grep -q "primaryGI='Irradiance'" index.html
           grep -q "Irradiance + Light Cache" index.html
+          grep -q 'job.progress.inPassPercent' index.html
+          grep -q 'job.progress.tracedPixels' index.html
+          grep -q 'job.progress.percent=20+Math.round' index.html
           ! grep -q '<option>Brute Force</option>' index.html
+          ! grep -q 'job.progress.percent=96+Math.round(ratio\*4)' index.html
           node -e "const fs=require('fs');const h=fs.readFileSync('index.html','utf8');const s=[...h.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/gi)].map(m=>m[1]).filter(x=>x.trim());for(const x of s)new Function(x);console.log('renderer inline JS syntax OK:',s.length)"
       - name: Configure Pages
         uses: actions/configure-pages@v5
