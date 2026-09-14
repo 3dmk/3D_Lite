@@ -24,13 +24,27 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Apply 3DLite v3.99.9 renderer base update
-        run: python3 patches/apply_gi_irradiance_lightcache_v3_99_8.py index.html latest.html
+        run: python3 patches/apply_gi_irradiance_lightcache_v3_99_8.py index.html
       - name: Apply 3DLite v3.99.10 fast first-light startup
-        run: python3 patches/apply_render_start_v3_99_10.py index.html latest.html
+        run: python3 patches/apply_render_start_v3_99_10.py index.html
       - name: Apply 3DLite v3.99.11 low-sample quality tuning
-        run: python3 patches/apply_low_sample_quality_v3_99_11.py index.html latest.html
+        run: python3 patches/apply_low_sample_quality_v3_99_11.py index.html
       - name: Apply 3DLite v3.99.12 guided denoiser
         run: python3 patches/apply_guided_denoiser_v3_99_12.py index.html
+      - name: Inspect render preview hooks
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          t=Path('index.html').read_text(encoding='utf-8')
+          for key in ['resolveRGBA','putImageData','beautyFrame','onProgress(','RenderPresenter13','renderCanvas','renderOutput','imageData']:
+              print('\n===',key,'===')
+              start=0
+              for n in range(8):
+                  i=t.find(key,start)
+                  if i<0: break
+                  print(t[max(0,i-700):min(len(t),i+1400)].replace('\n',' '))
+                  start=i+len(key)
+          PY
       - name: Validate published renderer
         run: |
           grep -q '<option selected>Irradiance</option>' index.html
