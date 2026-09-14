@@ -1,7 +1,7 @@
 from pathlib import Path
 import sys
 
-VERSION='3.99.8'
+VERSION='3.99.9'
 
 def replace_required(text, old, new, label):
     if old not in text:
@@ -49,7 +49,7 @@ def patch(path: Path):
         'progress GI label')
 
     marker="""      if(previousGuide&&job.pathGuide){\n        const w=Math.max(0,.2126*safeDirect[0]+.7152*safeDirect[1]+.0722*safeDirect[2]);\n        job.pathGuide.record(previousGuide.position,previousGuide.normal,previousGuide.direction,w);\n      }\n\n      if(bounce>=1){"""
-    replacement="""      if(previousGuide&&job.pathGuide){\n        const w=Math.max(0,.2126*safeDirect[0]+.7152*safeDirect[1]+.0722*safeDirect[2]);\n        job.pathGuide.record(previousGuide.position,previousGuide.normal,previousGuide.direction,w);\n      }\n\n      // Primary GI: Irradiance cache/probe estimate at the first diffuse-dominant hit.\n      // This replaces the former brute-force-only primary GI policy while preserving\n      // specular/transmission continuation for materials that require path transport.\n      if(bounce===0&&job?.settings?.globalIllumination!==false&&job?.settings?.primaryGI==='Irradiance'&&LightCacheEstimator.cacheable(material)){\n        const irradianceTail=LightCacheEstimator.estimate(job,acceleration,compiled,hit,n,material,pixelSeed^0x6D2B79F5,bounce);\n        if(irradianceTail){\n          radiance=RenderColor.add(radiance,RenderColor.mul(throughput,this.safeColor(irradianceTail)));\n          const diffuseDominant=(material.metalness||0)<.5&&(material.transmission||0)<.05&&(material.roughness||1)>.18;\n          if(diffuseDominant)break;\n        }\n      }\n\n      if(bounce>=1){"""
+    replacement="""      if(previousGuide&&job.pathGuide){\n        const w=Math.max(0,.2126*safeDirect[0]+.7152*safeDirect[1]+.0722*safeDirect[2]);\n        job.pathGuide.record(previousGuide.position,previousGuide.normal,previousGuide.direction,w);\n      }\n\n      // Primary GI: Irradiance cache/probe estimate at the first diffuse-dominant hit.\n      if(bounce===0&&job?.settings?.globalIllumination!==false&&job?.settings?.primaryGI==='Irradiance'&&LightCacheEstimator.cacheable(material)){\n        const irradianceTail=LightCacheEstimator.estimate(job,acceleration,compiled,hit,n,material,pixelSeed^0x6D2B79F5,bounce);\n        if(irradianceTail){\n          radiance=RenderColor.add(radiance,RenderColor.mul(throughput,this.safeColor(irradianceTail)));\n          const diffuseDominant=(material.metalness||0)<.5&&(material.transmission||0)<.05&&(material.roughness||1)>.18;\n          if(diffuseDominant)break;\n        }\n      }\n\n      if(bounce>=1){"""
     text=replace_required(text,marker,replacement,'primary Irradiance integrator')
 
     text=replace_required(text,
@@ -60,6 +60,102 @@ def patch(path: Path):
         "      estimator:'Brute Force + direct NEE',",
         "      estimator:'Irradiance cache + direct NEE + Light Cache',",
         'path diagnostics estimator')
+
+    # Render controller progress: geometry gets 0-20%, tracing gets 20-99%, completion owns 100%.
+    text=replace_required(text,
+        "job.progress.percent=Math.max(0,Math.min(95,Math.round(ratio*95)));",
+        "job.progress.percent=Math.max(0,Math.min(20,Math.round(ratio*20)));",
+        'geometry progress range')
+    text=replace_required(text,
+        "job.status=RenderJobStatus.PREPARING;job.progress.status=RenderJobStatus.PREPARING;job.progress.percent=96;this.onProgress(job.progress.snapshot());",
+        "job.status=RenderJobStatus.PREPARING;job.progress.status=RenderJobStatus.PREPARING;job.progress.percent=20;this.onProgress(job.progress.snapshot());",
+        'render handoff progress')
+    text=replace_required(text,
+        "job.progress.percent=96+Math.round(ratio*4);",
+        "job.progress.percent=20+Math.round(Math.max(0,Math.min(1,ratio))*79);",
+        'render progress range')
+
+    # Progressive path tracer: report progress within each pass, not only after a full frame.
+    old_queue="""      const workQueue16=RenderWorkQueue16.fromIndices(activePixels16,Math.max(32,RenderCoreH.tileSize(job)*4));
+      await workQueue16.run(async batch=>{
+        for(const i of batch){
+          if(job.cancelled||job.controlToken16?.cancelled?.())throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
+          const x=i%width,y=(i/width)|0;
+          const seed=((i+1)^Math.imul(pass+1,0x9E3779B1))>>>0;
+          const jitterX=PathSampler.scalar(seed,pass,20)-.5;
+          const jitterY=PathSampler.scalar(seed,pass,21)-.5;
+          const ray=RenderPart5Core.ray(
+            job.renderScene.camera,
+            rr.x0+x+jitterX,rr.y0+y+jitterY,
+            rr.fullW,rr.fullH
+          );
+          perf16.addRay(RenderRayType.CAMERA);
+          const sample=RenderPart5Core.trace(job,acceleration,compiled,ray,seed);
+          perf16.samples++;
+          primaryMask[i]|=sample.primaryHit?1:0;
+          accumulator.add(i,sample.radiance);
+          const ph=sample.primaryHitRecord;
+          if(litePixPath410)litePixPath410.record(i,x,y,sample,ph,accumulator);
+          if(litePixCore3Production423)litePixCore3Production423.recordPrimary(i,x,y,ray,sample,ph,job,compiled,acceleration);
+          if(litePixCores4to8Production443)litePixCores4to8Production443.record(i,x,y,sample,ph,accumulator);
+          if(pass===0){
+            if(ph?.hit)RenderAOVUtil.writePrimary(aovs,i,RenderAOVUtil.primary(job,acceleration,compiled,ray,ph,seed));
+            else RenderAOVUtil.writePrimary(aovs,i,null);
+          }
+          sampledThisPass++;
+        }
+        perf16.yields++;
+        await new Promise(r=>setTimeout(r,0));
+      });"""
+    new_queue="""      const workQueue16=RenderWorkQueue16.fromIndices(activePixels16,Math.max(32,RenderCoreH.tileSize(job)*4));
+      const passPixelTotal16=Math.max(1,activePixels16.length);
+      let passPixelDone16=0;
+      await workQueue16.run(async batch=>{
+        for(const i of batch){
+          if(job.cancelled||job.controlToken16?.cancelled?.())throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
+          const x=i%width,y=(i/width)|0;
+          const seed=((i+1)^Math.imul(pass+1,0x9E3779B1))>>>0;
+          const jitterX=PathSampler.scalar(seed,pass,20)-.5;
+          const jitterY=PathSampler.scalar(seed,pass,21)-.5;
+          const ray=RenderPart5Core.ray(
+            job.renderScene.camera,
+            rr.x0+x+jitterX,rr.y0+y+jitterY,
+            rr.fullW,rr.fullH
+          );
+          perf16.addRay(RenderRayType.CAMERA);
+          const sample=RenderPart5Core.trace(job,acceleration,compiled,ray,seed);
+          perf16.samples++;
+          primaryMask[i]|=sample.primaryHit?1:0;
+          accumulator.add(i,sample.radiance);
+          const ph=sample.primaryHitRecord;
+          if(litePixPath410)litePixPath410.record(i,x,y,sample,ph,accumulator);
+          if(litePixCore3Production423)litePixCore3Production423.recordPrimary(i,x,y,ray,sample,ph,job,compiled,acceleration);
+          if(litePixCores4to8Production443)litePixCores4to8Production443.record(i,x,y,sample,ph,accumulator);
+          if(pass===0){
+            if(ph?.hit)RenderAOVUtil.writePrimary(aovs,i,RenderAOVUtil.primary(job,acceleration,compiled,ray,ph,seed));
+            else RenderAOVUtil.writePrimary(aovs,i,null);
+          }
+          sampledThisPass++;
+        }
+        passPixelDone16+=batch.length;
+        const passRatio16=Math.min(1,passPixelDone16/passPixelTotal16);
+        const overallRatio16=Math.min(1,(pass+passRatio16)/Math.max(1,passLimit));
+        job.progress.currentSamples=pass;
+        job.progress.maximumSamples=maxSamples;
+        job.progress.inPassPercent=Math.round(passRatio16*100);
+        job.progress.tracedPixels=passPixelDone16;
+        job.progress.activePixels=passPixelTotal16;
+        onProgress(overallRatio16);
+        perf16.yields++;
+        await new Promise(r=>setTimeout(r,0));
+      });"""
+    text=replace_required(text,old_queue,new_queue,'path in-pass progress')
+
+    # Do not overwrite the real GI label with a generic Path GI label at render start.
+    text=replace_required(text,
+        "job.progress.gi=(job.settings.engine==='path'&&job.settings.globalIllumination)\n        ? `Path GI • ${PathIntegrator.maxDepth(job)} bounces`\n        : 'Direct';",
+        "job.progress.gi=(job.settings.engine==='path'&&job.settings.globalIllumination)\n        ? `${job.settings.primaryGI||'Irradiance'} + ${job.settings.secondaryGI||'Light Cache'} • ${PathIntegrator.maxDepth(job)} bounces`\n        : 'Direct';",
+        'controller GI label')
 
     text=text.replace(
         "expect(LightCacheEstimator.enabled({settings:{globalIllumination:true,secondaryGI:'Brute Force'}})===false,\n      'Brute Force incorrectly enabled Light Cache');",
@@ -78,16 +174,18 @@ def patch(path: Path):
       "<option>Brute Force</option>",
       "this.primaryGI='Brute Force'",
       "x.primaryGI='Brute Force'",
-      "'Brute Force + Light Cache'"
+      "'Brute Force + Light Cache'",
+      "job.progress.percent=96+Math.round(ratio*4)",
+      "job.progress.percent=96;this.onProgress"
     ]
     for token in critical:
         if token in text:
-            raise RuntimeError(f'legacy GI token remains in critical runtime: {token}')
+            raise RuntimeError(f'legacy renderer token remains in critical runtime: {token}')
 
     if text==original:
         raise RuntimeError('patch made no changes')
     path.write_text(text,encoding='utf-8')
-    print(f'patched {path} -> 3DLite v{VERSION} Irradiance + Light Cache')
+    print(f'patched {path} -> 3DLite v{VERSION} Irradiance + Light Cache + live path progress')
 
 if __name__=='__main__':
     targets=[Path(x) for x in sys.argv[1:]] or [Path('index.html')]
