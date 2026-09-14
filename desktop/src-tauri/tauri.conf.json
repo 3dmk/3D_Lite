@@ -1,0 +1,38 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "3DLite",
+  "version": "4.49.2",
+  "identifier": "com.3dmk.threedlite",
+  "build": {},
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "3DLite",
+        "url": "https://3dmk.github.io/3D_Lite/",
+        "width": 1600,
+        "height": 900,
+        "minWidth": 1000,
+        "minHeight": 650,
+        "resizable": true,
+        "maximized": false,
+        "fullscreen": false,
+        "decorations": true,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "windows": {
+      "nsis": {
+        "installerIcon": null,
+        "installMode": "currentUser"
+      }
+    }
+  }
+}
