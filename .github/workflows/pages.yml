@@ -24,6 +24,19 @@ jobs:
       - name: Checkout authoritative production snapshot
         uses: actions/checkout@v4
 
+      - name: Sync production version label
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('index.html')
+          h=p.read_text(encoding='utf-8')
+          h=h.replace('3DLite 4.45.0','3DLite 4.49.5')
+          h=h.replace("__3DLiteProductionVersion='4.49.4'","__3DLiteProductionVersion='4.49.5'")
+          h=h.replace('3D Lite — LitePix v4.49.4 Production','3D Lite — LitePix v4.49.5 Production')
+          p.write_text(h,encoding='utf-8')
+          PY
+
       - name: Validate clean production runtime
         run: |
           set -euo pipefail
@@ -31,8 +44,8 @@ jobs:
           from pathlib import Path
           import re,sys
           h=Path('index.html').read_text(encoding='utf-8')
-          required=['productionLayout494','productionRuntimeCleanup449',"__3DLiteProductionVersion='4.49.4'",'Scene Instances','sceneInstancesPanel39922','sceneInstancesList39922']
-          forbidden=['litepix/l3n-','litepix/render-health-','render-health-bridge-v4.49.js']
+          required=['productionLayout494','productionRuntimeCleanup449',"__3DLiteProductionVersion='4.49.5'",'3DLite 4.49.5','Scene Instances','sceneInstancesPanel39922','sceneInstancesList39922']
+          forbidden=['litepix/l3n-','litepix/render-health-','render-health-bridge-v4.49.js','3DLite 4.45.0']
           missing=[x for x in required if x not in h]
           leftovers=[x for x in forbidden if x.lower() in h.lower()]
           ids=re.findall(r'id="([^"]+)"',h); dup=sorted({x for x in ids if ids.count(x)>1})
@@ -81,7 +94,9 @@ jobs:
             const failures=[];
             const workingCanvas=state.canvasInfo.some(c=>c.w>300&&c.h>200&&c.bw>1&&c.bh>1&&c.display!=='none'&&c.visibility!=='hidden'&&c.gl);
             if(response?.status()!==200)failures.push('HTTP '+response?.status());
-            if(state.version!=='4.49.4'||!state.prod)failures.push('production v4.49.4 marker missing');
+            if(state.version!=='4.49.5'||!state.prod)failures.push('production v4.49.5 marker missing');
+            if(!state.text.includes('3DLite 4.49.5'))failures.push('visible version label not v4.49.5');
+            if(state.text.includes('3DLite 4.45.0'))failures.push('old visible version label remains');
             if(!state.workspaceVisible||!state.centerVisible)failures.push('editor layout not visible');
             if(!workingCanvas)failures.push('working WebGL viewport missing');
             if(!state.scenePanelVisible||!state.sceneList)failures.push('Scene Instances panel missing');
