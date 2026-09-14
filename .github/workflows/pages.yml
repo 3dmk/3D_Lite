@@ -49,7 +49,7 @@ jobs:
           from pathlib import Path
           import re,sys
           h=Path('index.html').read_text(encoding='utf-8')
-          required=['productionRuntimeCleanup449',"__3DLiteProductionVersion='4.49.1'",'Scene Instances','sceneInstancesPanel39922','sceneInstancesList39922']
+          required=['productionRuntimeCleanup449',"__3DLiteProductionVersion='4.49.2'",'Scene Instances','sceneInstancesPanel39922','sceneInstancesList39922']
           missing=[x for x in required if x not in h]
           forbidden=['Run L3N Runtime Test','Copy Report','View Report','L3N Runtime Report','ThreeDLiteRuntimeLearningEngine','ThreeDLiteBrowserTestAPI','ThreeDLiteL3NRenderDebugger','__3DLiteL3NRuntimeRenderDebug3976','__3DLiteRenderDebugList3977','litepix/l3n-','litepix/render-health-']
           leftovers=[x for x in forbidden if x.lower() in h.lower()]
@@ -78,18 +78,41 @@ jobs:
             page.on('pageerror',e=>pageErrors.push(String(e?.stack||e)));
             page.on('console',m=>{ if(m.type()==='error') consoleErrors.push(m.text()); });
             const response=await page.goto('http://127.0.0.1:8000/index.html',{waitUntil:'domcontentloaded',timeout:120000});
-            await page.waitForTimeout(4500);
+            await page.waitForTimeout(5000);
             const state=await page.evaluate(()=>{
               const panel=document.getElementById('sceneInstancesPanel39922');
               const list=document.getElementById('sceneInstancesList39922');
+              const center=document.getElementById('center');
+              const workspace=document.getElementById('workspace');
+              const canvases=[...document.querySelectorAll('canvas')];
               const pr=panel?.getBoundingClientRect();
-              return {title:document.title,text:document.body?.innerText||'',viewport:document.querySelectorAll('canvas').length,l3nButtons:[...document.querySelectorAll('button')].filter(b=>/L3N Runtime|Copy Report|View Report|Render Debug/i.test(b.textContent||'')).map(b=>b.textContent),prod:window.__3DLiteProductionRuntime449===true,version:window.__3DLiteProductionVersion||null,scenePanel:!!panel,sceneList:!!list,scenePanelVisible:!!panel&&getComputedStyle(panel).display!=='none'&&pr.width>100&&pr.height>100,scenePanelTitle:panel?.innerText?.includes('Scene Instances')||false};
+              const cr=center?.getBoundingClientRect();
+              const wr=workspace?.getBoundingClientRect();
+              const canvasInfo=canvases.map(c=>{const r=c.getBoundingClientRect();const s=getComputedStyle(c);let gl=false;try{gl=!!(c.getContext('webgl2')||c.getContext('webgl'));}catch(_){}return {w:r.width,h:r.height,display:s.display,visibility:s.visibility,gl};});
+              return {
+                title:document.title,
+                text:document.body?.innerText||'',
+                prod:window.__3DLiteProductionRuntime449===true,
+                version:window.__3DLiteProductionVersion||null,
+                viewport:canvases.length,
+                canvasInfo,
+                workspaceVisible:!!workspace&&wr.width>700&&wr.height>400&&getComputedStyle(workspace).display!=='none',
+                centerVisible:!!center&&cr.width>300&&cr.height>250&&getComputedStyle(center).display!=='none',
+                scenePanel:!!panel,
+                sceneList:!!list,
+                scenePanelVisible:!!panel&&getComputedStyle(panel).display!=='none'&&pr.width>100&&pr.height>100,
+                scenePanelTitle:panel?.innerText?.includes('Scene Instances')||false,
+                l3nButtons:[...document.querySelectorAll('button')].filter(b=>/L3N Runtime|Copy Report|View Report|Render Debug/i.test(b.textContent||'')).map(b=>b.textContent)
+              };
             });
             const failures=[];
+            const workingCanvas=state.canvasInfo.some(c=>c.w>300&&c.h>200&&c.display!=='none'&&c.visibility!=='hidden');
             if(response?.status()!==200) failures.push('HTTP '+response?.status());
             if(!state.prod) failures.push('v4.49 production marker missing');
-            if(state.version!=='4.49.1') failures.push('v4.49.1 production version missing');
-            if(state.viewport<1) failures.push('viewport canvas missing');
+            if(state.version!=='4.49.2') failures.push('v4.49.2 production version missing');
+            if(!state.workspaceVisible) failures.push('editor workspace missing/not visible');
+            if(!state.centerVisible) failures.push('editor center/viewport region missing/not visible');
+            if(state.viewport<1||!workingCanvas) failures.push('working viewport canvas missing/not visible');
             if(!state.scenePanel||!state.sceneList||!state.scenePanelVisible||!state.scenePanelTitle) failures.push('Scene Instances panel missing/not visible');
             if(state.l3nButtons.length) failures.push('L3N/debug UI remains: '+state.l3nButtons.join(', '));
             if(/3DLite startup error/i.test(state.text)) failures.push('startup error UI present');
