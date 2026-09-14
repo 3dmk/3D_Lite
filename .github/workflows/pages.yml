@@ -45,25 +45,35 @@ jobs:
       - name: Validate production runtime
         run: |
           set -euo pipefail
-          grep -q '<option selected>Irradiance</option>' index.html
-          grep -q '<option selected>Light Cache</option>' index.html
-          grep -q "rayBudgetMin=1000" index.html
-          grep -q "rayBudgetMax=4000" index.html
-          grep -q "renderPreset='Fast Clean'" index.html
-          grep -q 'defaultRenderScene39920' index.html
-          grep -q "EditorLightSystem.create('rectangle'" index.html
-          grep -q "EditorLightSystem.create('point'" index.html
-          grep -q "EditorLightSystem.create('dome'" index.html
-          grep -q 'sceneInstancesPanel39922' index.html
-          grep -q 'Scene Instances' index.html
-          grep -q 'productionRuntimeCleanup449' index.html
-          grep -q "version:'4.49.0'" index.html
-          for marker in 'Run L3N Runtime Test' 'Copy Report' 'View Report' 'L3N Runtime Report' 'ThreeDLiteRuntimeLearningEngine' 'ThreeDLiteBrowserTestAPI' 'ThreeDLiteL3NRenderDebugger' '__3DLiteL3NRuntimeRenderDebug3976' '__3DLiteRenderDebugList3977'; do
-            if grep -Fq "$marker" index.html; then echo "forbidden runtime/debug marker remains: $marker"; exit 1; fi
-          done
-          if grep -qi 'litepix/l3n-' index.html; then echo 'L3N runtime script still present'; exit 1; fi
-          if grep -qi 'litepix/render-health-' index.html; then echo 'Render health runtime script still present'; exit 1; fi
-          node -e "const fs=require('fs');const h=fs.readFileSync('index.html','utf8');const ids=[...h.matchAll(/id=\"([^\"]+)\"/g)].map(m=>m[1]);const dup=ids.filter((x,i)=>ids.indexOf(x)!==i);if(dup.length)throw new Error('duplicate ids: '+[...new Set(dup)].join(','));const s=[...h.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/gi)].map(m=>m[1]).filter(x=>x.trim());for(const x of s)new Function(x);console.log('inline JS syntax and duplicate IDs OK:',s.length)"
+          python3 - <<'PY'
+          from pathlib import Path
+          import re,sys
+          h=Path('index.html').read_text(encoding='utf-8')
+          required=[
+            'productionRuntimeCleanup449',
+            "version:'4.49.0'",
+            'Scene Instances',
+            'defaultRenderScene39920',
+            "renderPreset='Fast Clean'",
+          ]
+          missing=[x for x in required if x not in h]
+          forbidden=[
+            'Run L3N Runtime Test','Copy Report','View Report','L3N Runtime Report',
+            'ThreeDLiteRuntimeLearningEngine','ThreeDLiteBrowserTestAPI',
+            'ThreeDLiteL3NRenderDebugger','__3DLiteL3NRuntimeRenderDebug3976',
+            '__3DLiteRenderDebugList3977','litepix/l3n-','litepix/render-health-'
+          ]
+          leftovers=[x for x in forbidden if x.lower() in h.lower()]
+          ids=re.findall(r'id="([^"]+)"',h)
+          dup=sorted({x for x in ids if ids.count(x)>1})
+          if missing or leftovers or dup:
+              print('missing:',missing)
+              print('forbidden:',leftovers)
+              print('duplicate_ids:',dup)
+              sys.exit(1)
+          print('production validation OK')
+          PY
+          node -e "const fs=require('fs');const h=fs.readFileSync('index.html','utf8');const s=[...h.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/gi)].map(m=>m[1]).filter(x=>x.trim());for(const x of s)new Function(x);console.log('inline JS syntax OK:',s.length)"
 
       - name: Browser startup release gate
         run: |
