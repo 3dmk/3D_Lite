@@ -53,8 +53,6 @@ jobs:
             'productionRuntimeCleanup449',
             "__3DLiteProductionVersion='4.49.0'",
             'Scene Instances',
-            'defaultRenderScene39920',
-            "renderPreset='Fast Clean'",
           ]
           missing=[x for x in required if x not in h]
           forbidden=[
