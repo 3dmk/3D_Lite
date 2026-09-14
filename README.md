@@ -1,6 +1,6 @@
 # 3D_Lite
 
-Current GitHub Pages development build: **v3.99.8 — Irradiance + Light Cache Renderer Update**
+Current GitHub Pages development build: **v3.99.9 — Render Progress + Irradiance/Light Cache Fix**
 
 The visible editor version is owned by `ThreeDLiteVersion.version`.
 
@@ -19,6 +19,13 @@ Current GI implementation:
 - Primary and secondary GI controls enabled
 - Path renderer cache creation, progress text, metadata, telemetry, diagnostics and settings synchronized
 - Specular/transmission paths continue through the path integrator
-- deployment gate verifies GI options and JavaScript syntax before publish
+
+Render-progress fix:
+- geometry preparation uses 0–20% instead of 0–95%
+- path tracing uses 20–99%
+- progress is reported inside every path-tracing pass/batch instead of only after a full 1280×720 pass
+- first-pass traced pixels and in-pass percentage are exposed immediately
+- 100% remains reserved for completed renders
+- deployment gate verifies GI options, progress fix, and JavaScript syntax before publish
 
 Historical subsystem version strings are intentionally preserved where they identify subsystem generations.
