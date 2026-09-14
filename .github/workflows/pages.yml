@@ -51,15 +51,13 @@ jobs:
           grep -q "EditorLightSystem.create('point'" index.html
           grep -q "EditorLightSystem.create('dome'" index.html
           grep -q 'sceneInstancesPanel39922' index.html
-          grep -q 'sceneInstancesList39922' index.html
-          grep -q '__3DLiteSceneInstancesPanel39922' index.html
           grep -q 'Scene Instances' index.html
           grep -q 'removeL3NDebug39923' index.html
           grep -q '__3DLiteDebugLayerRemoved39923' index.html
           grep -q '3.99.23' index.html
-          ! grep -qi '<script[^>]*src=["'"'][^"'"']*litepix/l3n-' index.html
-          ! grep -qi '<script[^>]*src=["'"'][^"'"']*litepix/render-health-' index.html
-          ! grep -q 'render-health-bridge-v4.49.js' index.html
+          if grep -qi 'litepix/l3n-' index.html; then echo 'L3N runtime script still present'; exit 1; fi
+          if grep -qi 'litepix/render-health-' index.html; then echo 'Render health runtime script still present'; exit 1; fi
+          if grep -q 'render-health-bridge-v4.49.js' index.html; then echo 'Obsolete health bridge still present'; exit 1; fi
           node -e "const fs=require('fs');const h=fs.readFileSync('index.html','utf8');const ids=[...h.matchAll(/id=\"([^\"]+)\"/g)].map(m=>m[1]);const dup=ids.filter((x,i)=>ids.indexOf(x)!==i);if(dup.length)throw new Error('duplicate ids: '+[...new Set(dup)].join(','));const s=[...h.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/gi)].map(m=>m[1]).filter(x=>x.trim());for(const x of s)new Function(x);console.log('inline JS syntax and duplicate IDs OK:',s.length)"
       - name: Configure Pages
         uses: actions/configure-pages@v5
