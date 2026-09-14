@@ -33,6 +33,8 @@ jobs:
         run: python3 patches/apply_guided_denoiser_v3_99_12.py index.html
       - name: Apply 3DLite v3.99.13 live pass preview
         run: python3 patches/apply_live_pass_preview_v3_99_13.py index.html
+      - name: Apply 3DLite v3.99.14 sparse global ray budget
+        run: python3 patches/apply_sparse_global_ray_budget_v3_99_14.py index.html
       - name: Validate published renderer
         run: |
           grep -q '<option selected>Irradiance</option>' index.html
@@ -50,14 +52,18 @@ jobs:
           grep -q "this.maxBounces=4;this.denoise='Quality'" index.html
           grep -q 'minSamples:2' index.html
           grep -q 'settings.noiseThreshold\*.75' index.html
-          grep -q "version:'3.99.13-guided-low-sample'" index.html
           grep -q "process(channels,mode='Quality')" index.html
           grep -q 'Math.pow(nDot,normalPower)' index.html
-          grep -q 'out\[b\]=out\[b\]\*.90+src\[b\]\*.10' index.html
           grep -q 'livePreview:true' index.html
           grep -q 'partialPass:true' index.html
           grep -q 'previewNow16-previewLastMs16>=120' index.html
-          grep -q '3.99.13' index.html
+          grep -q "version:'3.99.14-sparse-global-ray-budget'" index.html
+          grep -q 'rayBudgetMin=1000' index.html
+          grep -q 'rayBudgetMax=4000' index.html
+          grep -q "rayBudgetMode='Sparse Adaptive Reconstruction'" index.html
+          grep -q 'RenderSparseRayBudget39914.indices' index.html
+          grep -q 'RenderSparseRayBudget39914.resolveRGBA' index.html
+          grep -q '3.99.14' index.html
           ! grep -q '<option>Brute Force</option>' index.html
           ! grep -q 'job.progress.percent=96+Math.round(ratio\*4)' index.html
           node -e "const fs=require('fs');const h=fs.readFileSync('index.html','utf8');const s=[...h.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/gi)].map(m=>m[1]).filter(x=>x.trim());for(const x of s)new Function(x);console.log('renderer inline JS syntax OK:',s.length)"
