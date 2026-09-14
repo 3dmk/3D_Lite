@@ -1,0 +1,45 @@
+name: Build 3DLite Windows Installer
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'desktop/**'
+      - '.github/workflows/desktop-installer.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Tauri CLI
+        shell: pwsh
+        run: cargo install tauri-cli --version "^2" --locked
+
+      - name: Build NSIS installer
+        working-directory: desktop/src-tauri
+        shell: pwsh
+        run: cargo tauri build --bundles nsis
+
+      - name: Collect installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path installer | Out-Null
+          $exe = Get-ChildItem -Path desktop/src-tauri/target/release/bundle/nsis -Filter *.exe | Select-Object -First 1
+          if (-not $exe) { throw 'NSIS installer not found' }
+          Copy-Item $exe.FullName installer/3DLite_Setup_AutoUpdate.exe
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: 3DLite-Windows-Installer-AutoUpdate
+          path: installer/3DLite_Setup_AutoUpdate.exe
+          if-no-files-found: error
