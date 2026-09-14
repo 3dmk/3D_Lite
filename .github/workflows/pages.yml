@@ -37,6 +37,8 @@ jobs:
         run: python3 patches/apply_sparse_global_ray_budget_v3_99_14.py index.html
       - name: Apply 3DLite v3.99.15 default render scene
         run: python3 patches/apply_default_render_scene_v3_99_15.py index.html
+      - name: Apply 3DLite v3.99.16 post-boot default scene fix
+        run: python3 patches/apply_default_scene_postboot_v3_99_16.py index.html
       - name: Validate published renderer
         run: |
           grep -q '<option selected>Irradiance</option>' index.html
@@ -53,13 +55,17 @@ jobs:
           grep -q "rayBudgetMin=1000" index.html
           grep -q "rayBudgetMax=4000" index.html
           grep -q "renderPreset='Fast Clean'" index.html
-          grep -q 'defaultRenderScene39915' index.html
+          grep -q 'post-boot default render scene' index.html
+          grep -q 'defaultRenderScene39916' index.html
+          grep -q 'new THREE.BoxGeometry' index.html
+          grep -q 'new THREE.SphereGeometry' index.html
+          grep -q 'new THREE.CylinderGeometry' index.html
           grep -q 'Fast Clean Key' index.html
           grep -q 'Render Ground' index.html
           grep -q 'Render Box' index.html
           grep -q 'Render Sphere' index.html
           grep -q 'Render Pyramid' index.html
-          grep -q '3.99.15' index.html
+          grep -q '3.99.16' index.html
           ! grep -q '<option>Brute Force</option>' index.html
           node -e "const fs=require('fs');const h=fs.readFileSync('index.html','utf8');const s=[...h.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/gi)].map(m=>m[1]).filter(x=>x.trim());for(const x of s)new Function(x);console.log('renderer inline JS syntax OK:',s.length)"
       - name: Configure Pages
