@@ -4,7 +4,6 @@ on:
   push:
     paths:
       - '.github/workflows/consolidate-production.yml'
-      - 'src/3DLite.html'
       - 'patches/releases/v3.99/**'
       - 'patches/releases/v4.49/**'
   workflow_dispatch:
@@ -28,7 +27,6 @@ jobs:
       - name: Build one authoritative production index
         run: |
           set -euo pipefail
-          cp src/3DLite.html index.html
           python3 patches/releases/v3.99/apply_gi_irradiance_lightcache_v3_99_8.py index.html
           python3 patches/releases/v3.99/apply_render_start_v3_99_10.py index.html
           python3 patches/releases/v3.99/apply_low_sample_quality_v3_99_11.py index.html
@@ -92,10 +90,9 @@ jobs:
             const state=await page.evaluate(()=>{
               const panel=document.getElementById('sceneInstancesPanel39922');
               const list=document.getElementById('sceneInstancesList39922');
-              const center=document.getElementById('center');
-              const workspace=document.getElementById('workspace');
+              const center=document.getElementById('center'); const workspace=document.getElementById('workspace');
+              const pr=panel?.getBoundingClientRect(); const cr=center?.getBoundingClientRect(); const wr=workspace?.getBoundingClientRect();
               const canvases=[...document.querySelectorAll('#viewport canvas')];
-              const cr=center?.getBoundingClientRect(); const wr=workspace?.getBoundingClientRect(); const pr=panel?.getBoundingClientRect();
               const canvasInfo=canvases.map(c=>{const r=c.getBoundingClientRect(),s=getComputedStyle(c);let gl=false;try{gl=!!(c.getContext('webgl2')||c.getContext('webgl'));}catch(_){}return{w:r.width,h:r.height,bw:c.width,bh:c.height,display:s.display,visibility:s.visibility,gl}});
               return {version:window.__3DLiteProductionVersion||null,prod:window.__3DLiteProductionRuntime449===true,text:document.body?.innerText||'',canvasInfo,workspaceVisible:!!workspace&&wr.width>700&&wr.height>400,centerVisible:!!center&&cr.width>300&&cr.height>250,scenePanelVisible:!!panel&&pr.width>100&&pr.height>100,sceneList:!!list,debugButtons:[...document.querySelectorAll('button')].filter(b=>/L3N Runtime|Copy Report|View Report|Render Debug/i.test(b.textContent||'')).map(b=>b.textContent)};
             });
