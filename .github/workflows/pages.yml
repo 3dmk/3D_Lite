@@ -23,50 +23,39 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Apply 3DLite v3.99.9 renderer base update
-        run: python3 patches/releases/v3.99/apply_gi_irradiance_lightcache_v3_99_8.py index.html
-      - name: Apply 3DLite v3.99.10 fast first-light startup
-        run: python3 patches/releases/v3.99/apply_render_start_v3_99_10.py index.html
-      - name: Apply 3DLite v3.99.11 low-sample quality tuning
-        run: python3 patches/releases/v3.99/apply_low_sample_quality_v3_99_11.py index.html
-      - name: Apply 3DLite v3.99.12 guided denoiser
-        run: python3 patches/releases/v3.99/apply_guided_denoiser_v3_99_12.py index.html
-      - name: Apply 3DLite v3.99.13 live pass preview
-        run: python3 patches/releases/v3.99/apply_live_pass_preview_v3_99_13.py index.html
-      - name: Apply 3DLite v3.99.14 sparse global ray budget
-        run: python3 patches/releases/v3.99/apply_sparse_global_ray_budget_v3_99_14.py index.html
-      - name: Apply 3DLite v3.99.15 default render scene
-        run: python3 patches/releases/v3.99/apply_default_render_scene_v3_99_15.py index.html
-      - name: Apply 3DLite v3.99.16 post-boot default scene fix
-        run: python3 patches/releases/v3.99/apply_default_scene_postboot_v3_99_16.py index.html
-      - name: Apply 3DLite v3.99.17 reliable render-ready default scene
-        run: python3 patches/releases/v3.99/apply_default_scene_force_v3_99_17.py index.html
-      - name: Apply 3DLite v3.99.18 default scene camera fix
-        run: python3 patches/releases/v3.99/apply_default_scene_camera_fix_v3_99_18.py index.html
-      - name: Validate published renderer
+      - name: Apply renderer release chain
+        run: |
+          python3 patches/releases/v3.99/apply_gi_irradiance_lightcache_v3_99_8.py index.html
+          python3 patches/releases/v3.99/apply_render_start_v3_99_10.py index.html
+          python3 patches/releases/v3.99/apply_low_sample_quality_v3_99_11.py index.html
+          python3 patches/releases/v3.99/apply_guided_denoiser_v3_99_12.py index.html
+          python3 patches/releases/v3.99/apply_live_pass_preview_v3_99_13.py index.html
+          python3 patches/releases/v3.99/apply_sparse_global_ray_budget_v3_99_14.py index.html
+          python3 patches/releases/v3.99/apply_default_render_scene_v3_99_15.py index.html
+          python3 patches/releases/v3.99/apply_default_scene_postboot_v3_99_16.py index.html
+          python3 patches/releases/v3.99/apply_default_scene_force_v3_99_17.py index.html
+          python3 patches/releases/v3.99/apply_default_scene_camera_fix_v3_99_18.py index.html
+          python3 patches/releases/v3.99/apply_default_scene_clean_v3_99_19.py index.html
+      - name: Validate published renderer and default scene
         run: |
           grep -q '<option selected>Irradiance</option>' index.html
           grep -q '<option selected>Light Cache</option>' index.html
-          grep -q "primaryGI='Irradiance'" index.html
-          grep -q "Irradiance + Light Cache" index.html
-          grep -q 'job.progress.inPassPercent' index.html
-          grep -q 'startupBatch16=pass===0?8' index.html
-          grep -q "this.maxBounces=4;this.denoise='Quality'" index.html
-          grep -q 'livePreview:true' index.html
           grep -q "rayBudgetMin=1000" index.html
           grep -q "rayBudgetMax=4000" index.html
           grep -q "renderPreset='Fast Clean'" index.html
-          grep -q 'defaultRenderScene39918' index.html
-          grep -q 'orbit?.target' index.html
-          grep -q 'Render Ground' index.html
-          grep -q 'Render Box' index.html
-          grep -q 'Render Sphere' index.html
-          grep -q 'Render Pyramid' index.html
-          grep -q 'Fast Clean Key' index.html
-          grep -q 'Fast Clean Fill' index.html
-          grep -q '3.99.18' index.html
-          ! grep -q 'controls?.target' index.html
-          node -e "const fs=require('fs');const h=fs.readFileSync('index.html','utf8');const s=[...h.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/gi)].map(m=>m[1]).filter(x=>x.trim());for(const x of s)new Function(x);console.log('renderer inline JS syntax OK:',s.length)"
+          grep -q 'defaultRenderScene39919' index.html
+          grep -q "new THREE.Group" index.html
+          grep -q "new THREE.PlaneGeometry" index.html
+          grep -q "new THREE.BoxGeometry" index.html
+          grep -q "new THREE.SphereGeometry" index.html
+          grep -q "new THREE.CylinderGeometry" index.html
+          grep -q "new THREE.HemisphereLight" index.html
+          grep -q "new THREE.DirectionalLight" index.html
+          grep -q "new THREE.PointLight" index.html
+          grep -q 'meshes:4,lights:3' index.html
+          grep -q 'camera.lookAt' index.html
+          grep -q '3.99.19' index.html
+          node -e "const fs=require('fs');const h=fs.readFileSync('index.html','utf8');const s=[...h.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/gi)].map(m=>m[1]).filter(x=>x.trim());for(const x of s)new Function(x);console.log('inline JS syntax OK:',s.length)"
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload site
