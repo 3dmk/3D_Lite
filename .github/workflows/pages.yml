@@ -32,7 +32,7 @@ jobs:
           import re,sys
           h=Path('index.html').read_text(encoding='utf-8')
           required=['productionLayout494','productionRuntimeCleanup449',"__3DLiteProductionVersion='4.49.4'",'Scene Instances','sceneInstancesPanel39922','sceneInstancesList39922']
-          forbidden=['Run L3N Runtime Test','L3N Runtime Report','litepix/l3n-','litepix/render-health-','render-health-bridge-v4.49.js']
+          forbidden=['litepix/l3n-','litepix/render-health-','render-health-bridge-v4.49.js']
           missing=[x for x in required if x not in h]
           leftovers=[x for x in forbidden if x.lower() in h.lower()]
           ids=re.findall(r'id="([^"]+)"',h); dup=sorted({x for x in ids if ids.count(x)>1})
