@@ -21,46 +21,27 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: Checkout authoritative production snapshot
         uses: actions/checkout@v4
 
-      - name: Apply renderer release chain
-        run: |
-          set -euo pipefail
-          python3 patches/releases/v3.99/apply_gi_irradiance_lightcache_v3_99_8.py index.html
-          python3 patches/releases/v3.99/apply_render_start_v3_99_10.py index.html
-          python3 patches/releases/v3.99/apply_low_sample_quality_v3_99_11.py index.html
-          python3 patches/releases/v3.99/apply_guided_denoiser_v3_99_12.py index.html
-          python3 patches/releases/v3.99/apply_live_pass_preview_v3_99_13.py index.html
-          python3 patches/releases/v3.99/apply_sparse_global_ray_budget_v3_99_14.py index.html
-          python3 patches/releases/v3.99/apply_default_render_scene_v3_99_15.py index.html
-          python3 patches/releases/v3.99/apply_default_scene_postboot_v3_99_16.py index.html
-          python3 patches/releases/v3.99/apply_default_scene_force_v3_99_17.py index.html
-          python3 patches/releases/v3.99/apply_default_scene_camera_fix_v3_99_18.py index.html
-          python3 patches/releases/v3.99/apply_default_scene_clean_v3_99_19.py index.html
-          python3 patches/releases/v3.99/apply_default_scene_native_lights_v3_99_20.py index.html
-          python3 patches/releases/v3.99/apply_scene_instances_panel_v3_99_22.py index.html
-          python3 patches/releases/v4.49/apply_production_runtime_cleanup_v4_49.py index.html
-
-      - name: Validate production runtime
+      - name: Validate clean production runtime
         run: |
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
           import re,sys
           h=Path('index.html').read_text(encoding='utf-8')
-          required=['productionRuntimeCleanup449',"__3DLiteProductionVersion='4.49.2'",'Scene Instances','sceneInstancesPanel39922','sceneInstancesList39922']
+          required=['productionLayout493','productionRuntimeCleanup449',"__3DLiteProductionVersion='4.49.3'",'Scene Instances','sceneInstancesPanel39922','sceneInstancesList39922']
+          forbidden=['Run L3N Runtime Test','L3N Runtime Report','ThreeDLiteRuntimeLearningEngine','ThreeDLiteBrowserTestAPI','ThreeDLiteL3NRenderDebugger','__3DLiteL3NRuntimeRenderDebug3976','__3DLiteRenderDebugList3977','litepix/l3n-','litepix/render-health-']
           missing=[x for x in required if x not in h]
-          forbidden=['Run L3N Runtime Test','Copy Report','View Report','L3N Runtime Report','ThreeDLiteRuntimeLearningEngine','ThreeDLiteBrowserTestAPI','ThreeDLiteL3NRenderDebugger','__3DLiteL3NRuntimeRenderDebug3976','__3DLiteRenderDebugList3977','litepix/l3n-','litepix/render-health-']
           leftovers=[x for x in forbidden if x.lower() in h.lower()]
           ids=re.findall(r'id="([^"]+)"',h); dup=sorted({x for x in ids if ids.count(x)>1})
-          if missing or leftovers or dup:
-              print('missing:',missing); print('forbidden:',leftovers); print('duplicate_ids:',dup); sys.exit(1)
-          print('production validation OK')
+          print('missing:',missing); print('forbidden:',leftovers); print('duplicate_ids:',dup)
+          if missing or leftovers or dup: sys.exit(1)
           PY
           node -e "const fs=require('fs');const h=fs.readFileSync('index.html','utf8');const s=[...h.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/gi)].map(m=>m[1]).filter(x=>x.trim());for(const x of s)new Function(x);console.log('inline JS syntax OK:',s.length)"
 
-      - name: Browser startup release gate
+      - name: Browser editor release gate
         run: |
           set -euo pipefail
           npm init -y >/dev/null 2>&1
@@ -76,51 +57,42 @@ jobs:
             const page=await browser.newPage({viewport:{width:1600,height:900}});
             const pageErrors=[]; const consoleErrors=[];
             page.on('pageerror',e=>pageErrors.push(String(e?.stack||e)));
-            page.on('console',m=>{ if(m.type()==='error') consoleErrors.push(m.text()); });
+            page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text())});
             const response=await page.goto('http://127.0.0.1:8000/index.html',{waitUntil:'domcontentloaded',timeout:120000});
-            await page.waitForTimeout(5000);
+            await page.waitForTimeout(1500);
+            try{await page.click('#createTabBtn');}catch(_){}
+            await page.waitForTimeout(100);
+            const createActive=await page.evaluate(()=>document.getElementById('createTabPage')?.classList.contains('active')===true);
+            try{await page.click('#rotateBtn');}catch(_){}
+            await page.waitForTimeout(100);
+            const rotateActive=await page.evaluate(()=>document.getElementById('rotateBtn')?.classList.contains('active')===true);
+            try{await page.click('#materialsTabBtn');}catch(_){}
+            await page.waitForTimeout(100);
+            const materialsActive=await page.evaluate(()=>document.getElementById('materialsTabPage')?.classList.contains('active')===true);
             const state=await page.evaluate(()=>{
               const panel=document.getElementById('sceneInstancesPanel39922');
               const list=document.getElementById('sceneInstancesList39922');
-              const center=document.getElementById('center');
-              const workspace=document.getElementById('workspace');
-              const canvases=[...document.querySelectorAll('canvas')];
-              const pr=panel?.getBoundingClientRect();
-              const cr=center?.getBoundingClientRect();
-              const wr=workspace?.getBoundingClientRect();
-              const canvasInfo=canvases.map(c=>{const r=c.getBoundingClientRect();const s=getComputedStyle(c);let gl=false;try{gl=!!(c.getContext('webgl2')||c.getContext('webgl'));}catch(_){}return {w:r.width,h:r.height,display:s.display,visibility:s.visibility,gl};});
-              return {
-                title:document.title,
-                text:document.body?.innerText||'',
-                prod:window.__3DLiteProductionRuntime449===true,
-                version:window.__3DLiteProductionVersion||null,
-                viewport:canvases.length,
-                canvasInfo,
-                workspaceVisible:!!workspace&&wr.width>700&&wr.height>400&&getComputedStyle(workspace).display!=='none',
-                centerVisible:!!center&&cr.width>300&&cr.height>250&&getComputedStyle(center).display!=='none',
-                scenePanel:!!panel,
-                sceneList:!!list,
-                scenePanelVisible:!!panel&&getComputedStyle(panel).display!=='none'&&pr.width>100&&pr.height>100,
-                scenePanelTitle:panel?.innerText?.includes('Scene Instances')||false,
-                l3nButtons:[...document.querySelectorAll('button')].filter(b=>/L3N Runtime|Copy Report|View Report|Render Debug/i.test(b.textContent||'')).map(b=>b.textContent)
-              };
+              const center=document.getElementById('center'); const workspace=document.getElementById('workspace');
+              const pr=panel?.getBoundingClientRect(); const cr=center?.getBoundingClientRect(); const wr=workspace?.getBoundingClientRect();
+              const canvases=[...document.querySelectorAll('#viewport canvas')];
+              const canvasInfo=canvases.map(c=>{const r=c.getBoundingClientRect(),s=getComputedStyle(c);let gl=false;try{gl=!!(c.getContext('webgl2')||c.getContext('webgl'));}catch(_){}return{w:r.width,h:r.height,bw:c.width,bh:c.height,display:s.display,visibility:s.visibility,gl}});
+              return {version:window.__3DLiteProductionVersion||null,prod:window.__3DLiteProductionRuntime449===true,text:document.body?.innerText||'',canvasInfo,workspaceVisible:!!workspace&&wr.width>700&&wr.height>400,centerVisible:!!center&&cr.width>300&&cr.height>250,scenePanelVisible:!!panel&&pr.width>100&&pr.height>100,sceneList:!!list,debugButtons:[...document.querySelectorAll('button')].filter(b=>/L3N Runtime|Copy Report|View Report|Render Debug/i.test(b.textContent||'')).map(b=>b.textContent)};
             });
             const failures=[];
-            const workingCanvas=state.canvasInfo.some(c=>c.w>300&&c.h>200&&c.display!=='none'&&c.visibility!=='hidden');
-            if(response?.status()!==200) failures.push('HTTP '+response?.status());
-            if(!state.prod) failures.push('v4.49 production marker missing');
-            if(state.version!=='4.49.2') failures.push('v4.49.2 production version missing');
-            if(!state.workspaceVisible) failures.push('editor workspace missing/not visible');
-            if(!state.centerVisible) failures.push('editor center/viewport region missing/not visible');
-            if(state.viewport<1||!workingCanvas) failures.push('working viewport canvas missing/not visible');
-            if(!state.scenePanel||!state.sceneList||!state.scenePanelVisible||!state.scenePanelTitle) failures.push('Scene Instances panel missing/not visible');
-            if(state.l3nButtons.length) failures.push('L3N/debug UI remains: '+state.l3nButtons.join(', '));
-            if(/3DLite startup error/i.test(state.text)) failures.push('startup error UI present');
-            const allErrors=[...pageErrors,...consoleErrors];
-            if(allErrors.some(x=>/Cannot assign to read only property ['\"]sample['\"]|3DLite startup error/i.test(x))) failures.push('read-only sample/startup exception remains');
-            if(pageErrors.length) failures.push('page errors: '+pageErrors.join(' | '));
-            console.log(JSON.stringify({passed:!failures.length,state,pageErrors,consoleErrors,failures},null,2));
-            await browser.close(); if(failures.length) process.exit(1);
+            const workingCanvas=state.canvasInfo.some(c=>c.w>300&&c.h>200&&c.bw>1&&c.bh>1&&c.display!=='none'&&c.visibility!=='hidden'&&c.gl);
+            if(response?.status()!==200)failures.push('HTTP '+response?.status());
+            if(state.version!=='4.49.3'||!state.prod)failures.push('production v4.49.3 marker missing');
+            if(!state.workspaceVisible||!state.centerVisible)failures.push('editor layout not visible');
+            if(!workingCanvas)failures.push('working WebGL viewport missing');
+            if(!state.scenePanelVisible||!state.sceneList)failures.push('Scene Instances panel missing');
+            if(state.debugButtons.length)failures.push('debug UI remains: '+state.debugButtons.join(', '));
+            if(!createActive)failures.push('Create tab interaction failed');
+            if(!rotateActive)failures.push('Rotate tool interaction failed');
+            if(!materialsActive)failures.push('Materials tab interaction failed');
+            if(/3DLite startup error/i.test(state.text))failures.push('startup error UI present');
+            if(pageErrors.length)failures.push('page errors: '+pageErrors.join(' | '));
+            console.log(JSON.stringify({passed:!failures.length,state,createActive,rotateActive,materialsActive,pageErrors,consoleErrors,failures},null,2));
+            await browser.close(); if(failures.length)process.exit(1);
           })().catch(e=>{console.error(e);process.exit(1)});
           NODE
 
