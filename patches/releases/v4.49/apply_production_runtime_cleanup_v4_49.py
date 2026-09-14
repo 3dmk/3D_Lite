@@ -2,11 +2,19 @@ from pathlib import Path
 import re,sys
 VERSION='4.49.0'
 
-L3N_MARKERS=(
-  'L3N Runtime Learning','ThreeDLiteRuntimeLearning','ThreeDLiteRuntimeWorkflowTests',
-  'ThreeDLiteRuntimeReport','ThreeDLiteBrowserTestAPI','l3nRuntime',
-  '__3DLiteL3N','ThreeDLiteL3N','__3DLiteRenderDebug','ThreeDLiteL3NRenderDebugger',
-  'Render Debug:'
+# Remove only dedicated L3N runtime/debug scripts. Do not match generic L3N
+# telemetry calls that can exist inside production renderer scripts.
+L3N_SCRIPT_MARKERS=(
+  'L3N Runtime Learning',
+  'ThreeDLiteRuntimeLearningEngine',
+  'ThreeDLiteRuntimeWorkflowTests',
+  'ThreeDLiteRuntimeReportBridge',
+  'ThreeDLiteBrowserTestAPI',
+  'l3nRuntimeLearningBar',
+  '__3DLiteL3NDebugRegistry3973',
+  '__3DLiteL3NRenderDebugger3975',
+  '__3DLiteL3NRuntimeRenderDebug3976',
+  '__3DLiteRenderDebugList3977',
 )
 
 def strip_marked_scripts(text):
@@ -21,7 +29,7 @@ def strip_marked_scripts(text):
             out.append(text[start:]); break
         end+=len('</script>')
         block=text[start:end]
-        hit=next((m for m in L3N_MARKERS if m.lower() in block.lower()),None)
+        hit=next((m for m in L3N_SCRIPT_MARKERS if m.lower() in block.lower()),None)
         if hit:
             removed.append(hit); out.append('\n')
         else:
@@ -34,24 +42,24 @@ def patch(path:Path):
     original=text
     text,removed=strip_marked_scripts(text)
 
-    # Remove any static remnants of the runtime/debug controls.
+    # Remove dedicated runtime/debug UI remnants if any survived as static HTML.
     text=re.sub(r'\s*<[^>]+id=["\'][^"\']*(?:l3nRuntime|renderDebug)[^"\']*["\'][^>]*>[\s\S]*?</[^>]+>\s*','\n',text,flags=re.I)
 
-    # Promote the public production version. Keep historical compatibility fields untouched.
-    text=text.replace('3D Lite — LitePix v4.45.0 Adaptive Ray Budget','3D Lite — LitePix v4.49.0 Production Runtime')
-    text=text.replace("name:'LitePix',version:'4.45.0'","name:'LitePix',version:'4.49.0'")
+    # Normalize visible source title where possible.
+    text=re.sub(r'<title>[^<]*</title>', '<title>3D Lite — LitePix v4.49.0 Production Runtime</title>', text, count=1, flags=re.I)
 
-    marker='''\n<script id="productionRuntimeCleanup449">\n(()=>{\n  const ids=['l3nRuntimeLearningBar','l3nRuntimeRunButton','l3nRuntimeExportButton','l3nRuntimeCopyButton','l3nRuntimeViewButton','l3nRuntimeReportPanel','l3nRuntimeMachineReport'];\n  for(const id of ids){try{document.getElementById(id)?.remove();}catch(_){}}\n  window.__3DLiteProductionRuntime449=true;\n})();\n</script>\n'''
+    marker='''\n<script id="productionRuntimeCleanup449">\n(()=>{\n  const ids=['l3nRuntimeLearningBar','l3nRuntimeRunButton','l3nRuntimeExportButton','l3nRuntimeCopyButton','l3nRuntimeViewButton','l3nRuntimeReportPanel','l3nRuntimeMachineReport'];\n  for(const id of ids){try{document.getElementById(id)?.remove();}catch(_){}}\n  window.__3DLiteProductionRuntime449=true;\n  window.__3DLiteProductionVersion='4.49.0';\n  try{document.title='3D Lite — LitePix v4.49.0 Production Runtime';}catch(_){}\n})();\n</script>\n'''
     if '</body>' not in text: raise RuntimeError('body end missing')
     text=text.replace('</body>',marker+'\n</body>',1)
 
     forbidden=['Run L3N Runtime Test','Copy Report','View Report','L3N Runtime Report','ThreeDLiteRuntimeLearningEngine','ThreeDLiteBrowserTestAPI','ThreeDLiteL3NRenderDebugger','__3DLiteL3NRuntimeRenderDebug3976','__3DLiteRenderDebugList3977']
     leftovers=[x for x in forbidden if x in text]
     if leftovers: raise RuntimeError('L3N/debug remnants remain: '+', '.join(leftovers))
-    if 'productionRuntimeCleanup449' not in text: raise RuntimeError('production cleanup marker missing')
+    if 'productionRuntimeCleanup449' not in text or "__3DLiteProductionVersion='4.49.0'" not in text:
+        raise RuntimeError('production markers missing')
     if text==original: raise RuntimeError('no changes made')
     path.write_text(text,encoding='utf-8')
-    print(f'patched {path} -> 3DLite/LitePix v{VERSION}; removed {len(removed)} runtime/debug script blocks')
+    print(f'patched {path} -> 3DLite/LitePix v{VERSION}; removed {len(removed)} dedicated L3N runtime/debug script blocks')
 
 if __name__=='__main__':
     for p in ([Path(x) for x in sys.argv[1:]] or [Path('index.html')]):
