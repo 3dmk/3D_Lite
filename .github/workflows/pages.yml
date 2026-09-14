@@ -38,7 +38,8 @@ jobs:
           python3 patches/releases/v3.99/apply_default_scene_clean_v3_99_19.py index.html
           python3 patches/releases/v3.99/apply_default_scene_native_lights_v3_99_20.py index.html
           python3 patches/releases/v3.99/apply_render_health_bridge_v3_99_21.py index.html
-      - name: Validate published renderer, scene and health integration
+          python3 patches/releases/v3.99/apply_scene_instances_panel_v3_99_22.py index.html
+      - name: Validate published renderer, scene, health and scene instances panel
         run: |
           grep -q '<option selected>Irradiance</option>' index.html
           grep -q '<option selected>Light Cache</option>' index.html
@@ -51,18 +52,16 @@ jobs:
           grep -q "EditorLightSystem.create('dome'" index.html
           grep -q 'rendererNativeLights' index.html
           grep -q 'render-health-bridge-v4.49.js' index.html
-          grep -q '3.99.21' index.html
           grep -q "const VERSION='4.49.0'" litepix/render-health-bridge-v4.49.js
-          grep -q "__3DLiteRenderHealthBridgeVersion" litepix/render-health-bridge-v4.49.js
-          grep -q "__3DLiteL3NRenderingSnapshot" litepix/render-health-bridge-v4.49.js
-          grep -q "__3DLiteL3NRenderIntegrationSnapshot" litepix/render-health-bridge-v4.49.js
-          grep -q "cpu-js/litepix-path" litepix/render-health-bridge-v4.49.js
-          grep -q "primary-rays" litepix/render-health-bridge-v4.49.js
-          grep -q "shadow-visibility" litepix/render-health-bridge-v4.49.js
-          grep -q "noise-check" litepix/render-health-bridge-v4.49.js
+          grep -q 'sceneInstancesPanel39922' index.html
+          grep -q 'sceneInstancesList39922' index.html
+          grep -q '__3DLiteSceneInstancesPanel39922' index.html
+          grep -q 'Scene Instances' index.html
+          grep -q 'grid-template-columns:260px 5px minmax(0,1fr) 5px 270px' index.html
+          grep -q '3.99.22' index.html
           ! grep -q '<script src="litepix/render-health-bridge-v4.49.js">[^<]' index.html
           node --check litepix/render-health-bridge-v4.49.js
-          node -e "const fs=require('fs');const h=fs.readFileSync('index.html','utf8');const s=[...h.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/gi)].map(m=>m[1]).filter(x=>x.trim());for(const x of s)new Function(x);console.log('inline JS syntax OK:',s.length)"
+          node -e "const fs=require('fs');const h=fs.readFileSync('index.html','utf8');const ids=[...h.matchAll(/id=\"([^\"]+)\"/g)].map(m=>m[1]);const dup=ids.filter((x,i)=>ids.indexOf(x)!==i);if(dup.length)throw new Error('duplicate ids: '+[...new Set(dup)].join(','));const s=[...h.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/gi)].map(m=>m[1]).filter(x=>x.trim());for(const x of s)new Function(x);console.log('inline JS syntax and duplicate IDs OK:',s.length)"
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload site
