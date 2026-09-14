@@ -7,5 +7,42 @@ class IrradianceCache424{constructor(opts={}){this.cache=new C4.RadianceCache({c
 class ProbeHierarchy425{constructor(opts={}){this.levels=opts.levels||4;this.baseResolution=opts.baseResolution||8;this.probes=[];this.refinements=0;}add(p,n,level=0){const res=Math.min(64,this.baseResolution<<Math.min(level,this.levels-1)),probe={p:p.slice(),n:n.slice(),level,resolution:res,radiance:new Float32Array(res*res*3),samples:0,variance:1,confidence:0};this.probes.push(probe);return probe;}refine(probe){if(!probe||probe.level>=this.levels-1)return probe;probe.level++;probe.resolution=Math.min(64,this.baseResolution<<probe.level);probe.radiance=new Float32Array(probe.resolution*probe.resolution*3);probe.samples=0;this.refinements++;return probe;}stats(){return{version:'4.48.0',probes:this.probes.length,refinements:this.refinements,levels:this.levels};}}
 class AdaptiveGI426{constructor(w,h,opts={}){this.hgi=new C4.HierarchicalGI(w,h,{startBlock:opts.startBlock||32,minBlock:opts.minBlock||1,maxLevel:opts.maxLevel||7,varianceThreshold:opts.varianceThreshold??.018,errorThreshold:opts.errorThreshold??.025});this.samples=0;this.passes=0;this.totalMs=0;}run(accumulator,guide){const t=now(),w=this.hgi.width,h=this.hgi.height;const sample=b=>{const x=Math.min(w-1,b.x+(b.size>>1)),y=Math.min(h-1,b.y+(b.size>>1)),i=y*w+x,o=i*3,s=Math.max(1,accumulator.samples[i]);this.samples++;return{radiance:[accumulator.sum[o]/s,accumulator.sum[o+1]/s,accumulator.sum[o+2]/s],variance:Number.isFinite(accumulator.variance(i))?accumulator.variance(i):1,error:Number.isFinite(accumulator.noise(i))?accumulator.noise(i):1,confidence:clamp(s/8,0,1)};};const imp=b=>{if(!guide?.importance)return 0;const x=Math.min(w-1,b.x+(b.size>>1)),y=Math.min(h-1,b.y+(b.size>>1));return guide.importance(x,y);};l3n('__3DLiteL3NBeginStage','adaptive-gi',{source:'Core4Production',pass:this.passes+1});if(this.hgi.active.length)this.hgi.runPass(sample,imp);this.passes++;const ms=now()-t;this.totalMs+=ms;l3n('__3DLiteL3NEndStage','adaptive-gi',{source:'Core4Production',pass:this.passes});l3n('__3DLiteL3NObserveStage','adaptive-gi-pass',ms,{source:'Core4Production',samples:this.samples});return this.stats();}stats(){return{version:'4.48.0',passes:this.passes,samples:this.samples,totalMs:this.totalMs,...this.hgi.stats()};}}
 class LitePixCore4Production427{constructor(w,h,opts={}){this.cache=new IrradianceCache424(opts);this.probes=new ProbeHierarchy425(opts);this.adaptive=new AdaptiveGI426(w,h,opts);this.primaryHits=0;this.cacheHits=0;this.cacheMisses=0;this.inserts=0;this.started=now();}recordPrimary(hit,sample,accumulator,index){if(!hit?.hit)return;this.primaryHits++;const p=hit.position||[0,0,0],n=hit.orientedGeometricNormal||hit.geometricNormal||[0,1,0],q=this.cache.query(p,n);if(q)this.cacheHits++;else{this.cacheMisses++;const L=sample?.radiance||[0,0,0],v=accumulator&&accumulator.samples[index]>1?accumulator.variance(index):1,c=accumulator?clamp(accumulator.samples[index]/8,0,1):.1;this.cache.insert(p,n,L,Math.max(8,Math.sqrt(Math.abs(hit.t||1))*12),v,c);this.inserts++;}if((this.primaryHits&255)===0)l3n('__3DLiteL3NColor','raw',sample?.radiance||[0,0,0]);}completePass(accumulator,guide){return this.adaptive.run(accumulator,guide);}snapshot(){const c=this.cache.stats(),snap={version:'4.48.0',provider:'LitePix Core4 production hierarchical GI + L3N evidence',architecture:'irradiance cache + probe hierarchy + adaptive hierarchical GI',primaryHits:this.primaryHits,cacheHits:this.cacheHits,cacheMisses:this.cacheMisses,inserts:this.inserts,cache:c,probes:this.probes.stats(),adaptive:this.adaptive.stats(),elapsedMs:now()-this.started};l3n('__3DLiteL3NLearn','light-cache-effectiveness','cache reuse should reduce GI cost without blocking convergence',`hitRate ${Number(c.hitRate||0).toFixed(4)} hits ${c.hits||0} misses ${c.misses||0}`,'OBSERVED',(c.hits+c.misses)>100?'HIGH':'LOW');return snap;}}
+
+function installGISettings3942(){
+  const primary=document.getElementById('rsPrimaryGI');
+  const secondary=document.getElementById('rsSecondaryGI');
+  const gi=document.getElementById('rsGI');
+  if(primary){
+    primary.innerHTML='<option value="Irradiance">Irradiance</option>';
+    primary.value='Irradiance';
+    primary.disabled=false;
+    primary.title='LitePix irradiance-cache / hierarchical GI';
+  }
+  if(secondary){
+    secondary.innerHTML='<option value="Light Cache">Light Cache</option><option value="None">None</option>';
+    secondary.value='Light Cache';
+    secondary.disabled=false;
+    secondary.title='LitePix secondary GI cache';
+  }
+  if(gi){gi.disabled=false;gi.title='';}
+  const RF=root.RenderFramework;
+  if(RF?.settings){RF.settings.primaryGI='Irradiance';RF.settings.secondaryGI='Light Cache';}
+  if(RF&&!RF.__gi3942ReadSettingsPatched&&typeof RF.readSettings==='function'){
+    const original=RF.readSettings.bind(RF);
+    RF.readSettings=function(){
+      const s=original();
+      const p=document.getElementById('rsPrimaryGI')?.value||'Irradiance';
+      const q=document.getElementById('rsSecondaryGI')?.value||'Light Cache';
+      return Object.freeze({...s,primaryGI:p==='Irradiance'?'Irradiance':'Irradiance',secondaryGI:q==='None'?'None':'Light Cache'});
+    };
+    RF.__gi3942ReadSettingsPatched=true;
+  }
+  root.__3DLiteGIControls3942=Object.freeze({version:'3.94.2',primary:'Irradiance',secondary:'Light Cache',bruteForceRemoved:true});
+  document.documentElement.dataset.giControlsVersion='3.94.2';
+}
+
 LP.Core4Production427=LitePixCore4Production427;LP.Core4.version='4.48.0';root.LitePixCore4Production427=LitePixCore4Production427;root.__LitePixCore4GI424=true;root.__LitePixCore4Probe425=true;root.__LitePixCore4Adaptive426=true;root.__LitePixCore4Production427=true;root.__LitePixCore4L3N448=true;
+installGISettings3942();
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',installGISettings3942,{once:true});
+root.addEventListener?.('load',installGISettings3942,{once:true});
 })(typeof globalThis!=='undefined'?globalThis:window);
