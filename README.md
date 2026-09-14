@@ -1,33 +1,37 @@
 # 3D_Lite
 
-Current GitHub Pages development build: **v3.99.13 — Live Progressive Render Preview**
+Current GitHub Pages development build: **v3.99.14 — Sparse 1K–4K Ray Budget Renderer**
 
 The visible editor version is owned by `ThreeDLiteVersion.version`.
 
 Current render defaults:
 - Primary GI: Irradiance
 - Secondary GI: Light Cache
-- Adaptive sampling: 2–8 samples
-- Maximum bounces: 4
+- Global sparse camera/radiance budget: 1,000–4,000 rays
 - Denoise: Quality (default)
 - Path Guiding: enabled by default
 
-Live render preview v3.99.13:
-- progressive framebuffer preview begins during the first pass instead of waiting for pass completion
-- the preview refreshes during active path-tracing batches with throttling to avoid excessive presentation cost
-- first-light rendering is visible instead of a black frame
-- completed passes still publish full preview frames
-- the last valid framebuffer remains visible if a render is cancelled, stalls, or throws after preview data exists
-- render progress, traced-pixel count, in-pass percentage and preview image advance together
+Sparse adaptive reconstruction v3.99.14:
+- first lighting estimate uses about 1K sparse radiance probes across the frame
+- later refinement phases spend additional rays only until the 4K global camera/radiance-probe ceiling is reached
+- deterministic interleaved grid phases prevent repeatedly sampling the same pixels
+- sparse samples are reconstructed to full resolution with neighborhood interpolation instead of leaving unsampled pixels black
+- live framebuffer preview uses the reconstructed image during active passes
+- Irradiance + Light Cache, visibility reuse, path guiding and Quality denoise remain the quality-recovery layers
+- telemetry reports rayBudgetMin, rayBudgetMax, rayBudgetUsed and rayBudgetRemaining
+
+Important budget definition:
+- v3.99.14 strictly caps the sparse **camera/radiance-probe launches** at 4,000
+- secondary/shadow/cache rays produced inside an individual path are still accounted separately by renderer telemetry; a later hard-total-ray governor can clamp those internal rays too
+
+Live render preview:
+- preview begins during the first pass
+- active batches refresh the framebuffer instead of waiting on a black image
+- the last valid framebuffer remains visible if rendering is cancelled or errors
 
 Guided denoiser:
-- uses Beauty + Albedo + Normal + Depth AOV guidance
-- two-stage edge-aware quality filtering for low-sample renders
-- protects silhouette, material/color, depth and normal discontinuities
-- Quality is the default denoise mode
+- Beauty + Albedo + Normal + Depth guidance
+- edge-aware Quality filtering for low-sample renders
+- Quality remains the default denoise mode
 
-Render startup:
-- pass 0 remains a fast first-light pass
-- first pass uses 1 bounce and 8-pixel work batches
-- full Irradiance + Light Cache resumes after startup
-- deployment validation blocks publication if renderer/preview/denoiser gates fail
+Deployment validation blocks publication if renderer, preview, sparse-budget, denoiser or JavaScript syntax gates fail.
