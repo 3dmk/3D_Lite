@@ -40,7 +40,6 @@ jobs:
           python3 patches/releases/v3.99/apply_default_scene_clean_v3_99_19.py index.html
           python3 patches/releases/v3.99/apply_default_scene_native_lights_v3_99_20.py index.html
           python3 patches/releases/v3.99/apply_scene_instances_panel_v3_99_22.py index.html
-          python3 patches/releases/v3.99/apply_remove_l3n_debug_v3_99_23.py index.html
           python3 patches/releases/v4.49/apply_production_runtime_cleanup_v4_49.py index.html
 
       - name: Validate production runtime
