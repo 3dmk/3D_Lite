@@ -28,9 +28,10 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "icon": ["icons/icon.ico"],
     "windows": {
       "nsis": {
-        "installerIcon": null,
+        "installerIcon": "icons/icon.ico",
         "installMode": "currentUser"
       }
     }
