@@ -49,26 +49,13 @@ jobs:
           from pathlib import Path
           import re,sys
           h=Path('index.html').read_text(encoding='utf-8')
-          required=[
-            'productionRuntimeCleanup449',
-            "__3DLiteProductionVersion='4.49.0'",
-            'Scene Instances',
-          ]
+          required=['productionRuntimeCleanup449',"__3DLiteProductionVersion='4.49.1'",'Scene Instances','sceneInstancesPanel39922','sceneInstancesList39922']
           missing=[x for x in required if x not in h]
-          forbidden=[
-            'Run L3N Runtime Test','Copy Report','View Report','L3N Runtime Report',
-            'ThreeDLiteRuntimeLearningEngine','ThreeDLiteBrowserTestAPI',
-            'ThreeDLiteL3NRenderDebugger','__3DLiteL3NRuntimeRenderDebug3976',
-            '__3DLiteRenderDebugList3977','litepix/l3n-','litepix/render-health-'
-          ]
+          forbidden=['Run L3N Runtime Test','Copy Report','View Report','L3N Runtime Report','ThreeDLiteRuntimeLearningEngine','ThreeDLiteBrowserTestAPI','ThreeDLiteL3NRenderDebugger','__3DLiteL3NRuntimeRenderDebug3976','__3DLiteRenderDebugList3977','litepix/l3n-','litepix/render-health-']
           leftovers=[x for x in forbidden if x.lower() in h.lower()]
-          ids=re.findall(r'id="([^"]+)"',h)
-          dup=sorted({x for x in ids if ids.count(x)>1})
+          ids=re.findall(r'id="([^"]+)"',h); dup=sorted({x for x in ids if ids.count(x)>1})
           if missing or leftovers or dup:
-              print('missing:',missing)
-              print('forbidden:',leftovers)
-              print('duplicate_ids:',dup)
-              sys.exit(1)
+              print('missing:',missing); print('forbidden:',leftovers); print('duplicate_ids:',dup); sys.exit(1)
           print('production validation OK')
           PY
           node -e "const fs=require('fs');const h=fs.readFileSync('index.html','utf8');const s=[...h.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/gi)].map(m=>m[1]).filter(x=>x.trim());for(const x of s)new Function(x);console.log('inline JS syntax OK:',s.length)"
@@ -87,33 +74,30 @@ jobs:
           (async()=>{
             const browser=await chromium.launch({headless:true,args:['--use-gl=swiftshader','--enable-webgl','--ignore-gpu-blocklist']});
             const page=await browser.newPage({viewport:{width:1600,height:900}});
-            const pageErrors=[];
-            const consoleErrors=[];
+            const pageErrors=[]; const consoleErrors=[];
             page.on('pageerror',e=>pageErrors.push(String(e?.stack||e)));
             page.on('console',m=>{ if(m.type()==='error') consoleErrors.push(m.text()); });
             const response=await page.goto('http://127.0.0.1:8000/index.html',{waitUntil:'domcontentloaded',timeout:120000});
             await page.waitForTimeout(4500);
-            const state=await page.evaluate(()=>({
-              title:document.title,
-              text:document.body?.innerText||'',
-              viewport:document.querySelectorAll('canvas').length,
-              l3nButtons:[...document.querySelectorAll('button')].filter(b=>/L3N Runtime|Copy Report|View Report|Render Debug/i.test(b.textContent||'')).map(b=>b.textContent),
-              prod:window.__3DLiteProductionRuntime449===true,
-              version:window.__3DLiteProductionVersion||null
-            }));
+            const state=await page.evaluate(()=>{
+              const panel=document.getElementById('sceneInstancesPanel39922');
+              const list=document.getElementById('sceneInstancesList39922');
+              const pr=panel?.getBoundingClientRect();
+              return {title:document.title,text:document.body?.innerText||'',viewport:document.querySelectorAll('canvas').length,l3nButtons:[...document.querySelectorAll('button')].filter(b=>/L3N Runtime|Copy Report|View Report|Render Debug/i.test(b.textContent||'')).map(b=>b.textContent),prod:window.__3DLiteProductionRuntime449===true,version:window.__3DLiteProductionVersion||null,scenePanel:!!panel,sceneList:!!list,scenePanelVisible:!!panel&&getComputedStyle(panel).display!=='none'&&pr.width>100&&pr.height>100,scenePanelTitle:panel?.innerText?.includes('Scene Instances')||false};
+            });
             const failures=[];
             if(response?.status()!==200) failures.push('HTTP '+response?.status());
             if(!state.prod) failures.push('v4.49 production marker missing');
-            if(state.version!=='4.49.0') failures.push('v4.49 production version missing');
+            if(state.version!=='4.49.1') failures.push('v4.49.1 production version missing');
             if(state.viewport<1) failures.push('viewport canvas missing');
+            if(!state.scenePanel||!state.sceneList||!state.scenePanelVisible||!state.scenePanelTitle) failures.push('Scene Instances panel missing/not visible');
             if(state.l3nButtons.length) failures.push('L3N/debug UI remains: '+state.l3nButtons.join(', '));
             if(/3DLite startup error/i.test(state.text)) failures.push('startup error UI present');
             const allErrors=[...pageErrors,...consoleErrors];
             if(allErrors.some(x=>/Cannot assign to read only property ['\"]sample['\"]|3DLite startup error/i.test(x))) failures.push('read-only sample/startup exception remains');
             if(pageErrors.length) failures.push('page errors: '+pageErrors.join(' | '));
             console.log(JSON.stringify({passed:!failures.length,state,pageErrors,consoleErrors,failures},null,2));
-            await browser.close();
-            if(failures.length) process.exit(1);
+            await browser.close(); if(failures.length) process.exit(1);
           })().catch(e=>{console.error(e);process.exit(1)});
           NODE
 
