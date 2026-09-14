@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>3DLite Live</title>
+  <meta name="robots" content="noindex">
+  <style>
+    html,body{margin:0;width:100%;height:100%;background:#181818;color:#ddd;font:14px system-ui,Segoe UI,Arial,sans-serif}
+    body{display:grid;place-items:center}.box{text-align:center;max-width:520px;padding:24px}.muted{opacity:.7}
+  </style>
+</head>
+<body>
+  <div class="box">
+    <div>Opening the newest deployed 3DLite build…</div>
+    <div class="muted">This address stays the same between updates.</div>
+  </div>
+  <script>
+    const target = new URL('./index.html', location.href);
+    target.searchParams.set('live', Date.now().toString());
+    location.replace(target.href);
+  </script>
+</body>
+</html>
