@@ -9,32 +9,39 @@ L3N_MARKERS=(
   'Render Debug:'
 )
 
-SCRIPT_RE=re.compile(r'\s*<script\b([^>]*)>([\s\S]*?)</script>\s*',re.I)
+def strip_marked_scripts(text):
+    lower=text.lower(); out=[]; pos=0; removed=[]
+    while True:
+        start=lower.find('<script',pos)
+        if start<0:
+            out.append(text[pos:]); break
+        out.append(text[pos:start])
+        end=lower.find('</script>',start)
+        if end<0:
+            out.append(text[start:]); break
+        end+=len('</script>')
+        block=text[start:end]
+        hit=next((m for m in L3N_MARKERS if m.lower() in block.lower()),None)
+        if hit:
+            removed.append(hit); out.append('\n')
+        else:
+            out.append(block)
+        pos=end
+    return ''.join(out),removed
 
 def patch(path:Path):
     text=path.read_text(encoding='utf-8')
     original=text
-    removed=[]
-
-    def strip_runtime_script(m):
-        attrs=m.group(1) or ''
-        body=m.group(2) or ''
-        probe=attrs+'\n'+body
-        if any(marker.lower() in probe.lower() for marker in L3N_MARKERS):
-            removed.append(next((x for x in L3N_MARKERS if x.lower() in probe.lower()),'L3N'))
-            return '\n'
-        return m.group(0)
-
-    text=SCRIPT_RE.sub(strip_runtime_script,text)
+    text,removed=strip_marked_scripts(text)
 
     # Remove any static remnants of the runtime/debug controls.
     text=re.sub(r'\s*<[^>]+id=["\'][^"\']*(?:l3nRuntime|renderDebug)[^"\']*["\'][^>]*>[\s\S]*?</[^>]+>\s*','\n',text,flags=re.I)
 
-    # Promote the public production version. Keep the historical legacyVersion field untouched.
+    # Promote the public production version. Keep historical compatibility fields untouched.
     text=text.replace('3D Lite — LitePix v4.45.0 Adaptive Ray Budget','3D Lite — LitePix v4.49.0 Production Runtime')
     text=text.replace("name:'LitePix',version:'4.45.0'","name:'LitePix',version:'4.49.0'")
 
-    marker='''\n<script id="productionRuntimeCleanup449">\n(()=>{\n  const ids=['l3nRuntimeLearningBar','l3nRuntimeRunButton','l3nRuntimeExportButton','l3nRuntimeCopyButton','l3nRuntimeViewButton','l3nRuntimeReportPanel','l3nRuntimeMachineReport'];\n  for(const id of ids){try{document.getElementById(id)?.remove();}catch(_){}}\n  const timers=['__3DLiteL3NRenderingTimer','__3DLiteL3NIntegrationTimer'];\n  for(const n of timers){try{if(window[n])clearInterval(window[n]);}catch(_){} try{delete window[n];}catch(_){}}\n  window.__3DLiteProductionRuntime449=true;\n})();\n</script>\n'''
+    marker='''\n<script id="productionRuntimeCleanup449">\n(()=>{\n  const ids=['l3nRuntimeLearningBar','l3nRuntimeRunButton','l3nRuntimeExportButton','l3nRuntimeCopyButton','l3nRuntimeViewButton','l3nRuntimeReportPanel','l3nRuntimeMachineReport'];\n  for(const id of ids){try{document.getElementById(id)?.remove();}catch(_){}}\n  window.__3DLiteProductionRuntime449=true;\n})();\n</script>\n'''
     if '</body>' not in text: raise RuntimeError('body end missing')
     text=text.replace('</body>',marker+'\n</body>',1)
 
