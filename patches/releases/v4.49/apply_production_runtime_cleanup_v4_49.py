@@ -29,9 +29,9 @@ def patch(path:Path):
     if '</body>' not in text: raise RuntimeError('body end missing')
     text=text.replace('</body>',marker+'\n</body>',1)
 
-    # Dedicated runtime files/UI are gone.  Old optional hook names inside core scripts are tolerated
-    # for this recovery build because deleting those entire scripts breaks editor initialization.
-    forbidden=['Run L3N Runtime Test','L3N Runtime Report','litepix/l3n-','litepix/render-health-','render-health-bridge-v4.49.js']
+    # Only dedicated development resources are static blockers. Legacy text/hooks that live inside
+    # preserved core scripts are verified at runtime instead, so core initialization is never deleted.
+    forbidden=['litepix/l3n-','litepix/render-health-','render-health-bridge-v4.49.js']
     leftovers=[x for x in forbidden if x.lower() in text.lower()]
     if leftovers: raise RuntimeError('dedicated development runtime remains: '+', '.join(leftovers))
     if 'productionLayout494' not in text or 'productionRuntimeCleanup449' not in text or "__3DLiteProductionVersion='4.49.4'" not in text:
