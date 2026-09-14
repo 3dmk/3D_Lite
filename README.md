@@ -1,20 +1,27 @@
 # 3D_Lite
 
-Current GitHub Pages development build: **v3.99.10 — Fast First-Light Render Startup**
+Current GitHub Pages development build: **v3.99.12 — Guided Low-Sample Denoiser**
 
 The visible editor version is owned by `ThreeDLiteVersion.version`.
 
-Current GI implementation:
+Current render defaults:
 - Primary GI: Irradiance
 - Secondary GI: Light Cache
-- Brute Force removed from current GI settings/runtime labels
+- Adaptive sampling: 2–8 samples
+- Maximum bounces: 4
+- Denoise: Quality (default)
+- Path Guiding: enabled by default
 
-Render startup fix:
-- pass 0 is a fast first-light pass
-- first pass uses only 1 bounce
-- first pass uses 8-pixel work batches for immediate yielding/progress
-- Irradiance cache estimation is deferred until after the first visible pass starts
-- first-ray status changes to `Rendering first rays` as soon as pixels begin tracing
-- later passes restore the configured full path depth and Irradiance + Light Cache
-- geometry uses 0–20%; tracing uses 20–99%; completion owns 100%
-- deployment validation blocks publication if the old startup/stall path remains
+Guided denoiser v3.99.12:
+- uses Beauty + Albedo + Normal + Depth AOV guidance
+- two-stage edge-aware quality filtering for low-sample renders
+- protects silhouette, material/color, depth and normal discontinuities
+- retains a small original-detail contribution to avoid plastic/over-smoothed results
+- Fast mode remains available as a lighter single-pass filter
+- Quality is the default denoise mode
+
+Render startup:
+- pass 0 remains a fast first-light pass
+- first pass uses 1 bounce and 8-pixel work batches
+- full Irradiance + Light Cache resumes after startup
+- deployment validation blocks publication if renderer/denoiser startup gates fail
