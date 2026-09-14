@@ -51,7 +51,7 @@ jobs:
           h=Path('index.html').read_text(encoding='utf-8')
           required=[
             'productionRuntimeCleanup449',
-            "version:'4.49.0'",
+            "__3DLiteProductionVersion='4.49.0'",
             'Scene Instances',
             'defaultRenderScene39920',
             "renderPreset='Fast Clean'",
@@ -100,11 +100,13 @@ jobs:
               text:document.body?.innerText||'',
               viewport:document.querySelectorAll('canvas').length,
               l3nButtons:[...document.querySelectorAll('button')].filter(b=>/L3N Runtime|Copy Report|View Report|Render Debug/i.test(b.textContent||'')).map(b=>b.textContent),
-              prod:window.__3DLiteProductionRuntime449===true
+              prod:window.__3DLiteProductionRuntime449===true,
+              version:window.__3DLiteProductionVersion||null
             }));
             const failures=[];
             if(response?.status()!==200) failures.push('HTTP '+response?.status());
             if(!state.prod) failures.push('v4.49 production marker missing');
+            if(state.version!=='4.49.0') failures.push('v4.49 production version missing');
             if(state.viewport<1) failures.push('viewport canvas missing');
             if(state.l3nButtons.length) failures.push('L3N/debug UI remains: '+state.l3nButtons.join(', '));
             if(/3DLite startup error/i.test(state.text)) failures.push('startup error UI present');
