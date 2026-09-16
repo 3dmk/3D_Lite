@@ -838,7 +838,7 @@ input[type="number"].numericDragging{
 }
 #renderFrameWindow{
   width:min(980px,94vw);height:min(760px,86vh);left:50%;top:5%;
-  transform:translateX(-50%);overflow:hidden
+  transform:none;overflow:hidden;resize:both;min-width:420px;min-height:300px
 }
 
 .render-title{
@@ -23259,6 +23259,14 @@ L.startup();window.__3DLiteL3NIntegrationSnapshot=L.regression();})();
   function repositionMarker(){
     const job=activeJob();const t=job?.__liveTile3979;if(t)showBucket(t);
   }
+  function installWindowDrag(){
+    const win=$('renderFrameWindow'),title=win?.querySelector('.render-title');if(!win||!title||win.dataset.freeform3979==='1')return;
+    win.dataset.freeform3979='1';let drag=false,sx=0,sy=0,sl=0,st=0;
+    title.style.cursor='move';title.style.userSelect='none';
+    title.addEventListener('pointerdown',e=>{if(e.button!==0||e.target?.closest?.('button,select,input'))return;const r=win.getBoundingClientRect();win.style.transform='none';win.style.left=r.left+'px';win.style.top=r.top+'px';drag=true;sx=e.clientX;sy=e.clientY;sl=r.left;st=r.top;title.setPointerCapture?.(e.pointerId);e.preventDefault();});
+    title.addEventListener('pointermove',e=>{if(!drag)return;const maxX=Math.max(0,innerWidth-win.offsetWidth),maxY=Math.max(0,innerHeight-win.offsetHeight);win.style.left=clamp(sl+e.clientX-sx,0,maxX)+'px';win.style.top=clamp(st+e.clientY-sy,0,maxY)+'px';});
+    const end=e=>{if(!drag)return;drag=false;try{title.releasePointerCapture?.(e.pointerId)}catch(_){}};title.addEventListener('pointerup',end);title.addEventListener('pointercancel',end);
+  }
   function installInteractions(){
     const x=ui();if(!x||x.wrap.dataset.live3979==='1')return;
     x.wrap.dataset.live3979='1';
@@ -23285,7 +23293,7 @@ L.startup();window.__3DLiteL3NIntegrationSnapshot=L.regression();})();
   function install(){
     if(state.installed)return true;
     const rf=window.RenderFramework,fb=rf?.ui?.frameBuffer;if(!rf||!fb)return false;
-    state.installed=true;ui();installInteractions();
+    state.installed=true;ui();installWindowDrag();installInteractions();
     const origSet=fb.setZoom.bind(fb);fb.setZoom=function(v){const r=origSet(v);applyTransform();return r;};
     const origFit=fb.fit.bind(fb);fb.fit=function(){state.panX=0;state.panY=0;const r=origFit();applyTransform();return r;};
     const origPresent=fb.present.bind(fb);fb.present=function(frame){const r=origPresent(frame);present(frame);return r;};
