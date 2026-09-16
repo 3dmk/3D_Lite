@@ -1,0 +1,91 @@
+{
+  "status": "SUCCESS",
+  "analysis": {
+    "observations": [
+      {
+        "id": "render-share",
+        "value": 0.8146668568978407
+      },
+      {
+        "id": "worker-share",
+        "value": 0.0843201597953023
+      },
+      {
+        "id": "bvh-share",
+        "value": 0.0034241689261966806
+      },
+      {
+        "id": "primary-hit-rate",
+        "value": 0
+      }
+    ],
+    "opportunities": [
+      {
+        "id": "benchmark-visibility-gap",
+        "score": 1,
+        "target": "benchmark scene/camera",
+        "blockingQuality": true
+      },
+      {
+        "id": "render-hot-path",
+        "score": 0.8146668568978407,
+        "target": "path/render loop"
+      },
+      {
+        "id": "worker-prep",
+        "score": 0.0843201597953023,
+        "target": "worker geometry preparation"
+      }
+    ],
+    "selected": {
+      "id": "benchmark-visibility-gap",
+      "score": 1,
+      "target": "benchmark scene/camera",
+      "blockingQuality": true
+    }
+  },
+  "hypothesis": {
+    "id": "repair-visible-reference-scene",
+    "scope": "benchmark",
+    "expected": "primary hits > 0 before renderer optimization",
+    "risk": "low"
+  },
+  "decision": {
+    "promote": true,
+    "status": "PROMOTE",
+    "reasons": []
+  },
+  "promotion": {
+    "status": "PROMOTED",
+    "candidateRevision": "block-d-visible-reference-v1",
+    "fingerprint": "7b758fc6"
+  },
+  "knowledge": [
+    {
+      "hypothesis": "repair-visible-reference-scene",
+      "outcome": "candidate",
+      "evidence": {
+        "id": "benchmark-visibility-gap",
+        "score": 1,
+        "target": "benchmark scene/camera",
+        "blockingQuality": true
+      },
+      "at": 1789584233963
+    },
+    {
+      "hypothesis": "repair-visible-reference-scene",
+      "outcome": "promoted",
+      "evidence": {
+        "source": true,
+        "readBack": true,
+        "build": true,
+        "launch": true,
+        "render": true,
+        "quality": true,
+        "regression": true,
+        "artifactFingerprint": "5ca3fa78"
+      },
+      "at": 1789584233964
+    }
+  ]
+}
