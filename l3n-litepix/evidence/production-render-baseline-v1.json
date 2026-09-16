@@ -1,0 +1,333 @@
+{
+  "schema": 1,
+  "kind": "l3n-litepix-production-render-baseline",
+  "url": "http://127.0.0.1:8765/index.html",
+  "finished": true,
+  "error": null,
+  "status": "Finished",
+  "width": 64,
+  "height": 64,
+  "rgbaBytes": 16384,
+  "fingerprint": "7ba9ddc5",
+  "noise": 0,
+  "samples": 2,
+  "passes": 2,
+  "elapsedMs": 700.9000000003725,
+  "raysPerSecond": 12929,
+  "performance": {
+    "cameraRays": 8192,
+    "pathRays": 0,
+    "shadowRays": 0,
+    "probeRays": 0,
+    "totalRays": 8192,
+    "samples": 8192,
+    "yields": 64,
+    "raysPerSecond": 10936,
+    "stageMs": {
+      "snapshot": 5.3999999994412065,
+      "geometry": 0.30000000074505806,
+      "worker": 59.10000000055879,
+      "bvh": 2.400000000372529,
+      "shading": 1.199999999254942,
+      "lightCache": 0,
+      "render": 571,
+      "denoise": 0,
+      "toneMap": 0,
+      "post": 0
+    }
+  },
+  "diagnostics": {
+    "renderer": "Path GI",
+    "maxBounces": 2,
+    "materials": 1,
+    "lights": 2,
+    "triangles": 12,
+    "estimator": "Brute Force + direct NEE",
+    "samplesPerPixel": 1,
+    "mis": false,
+    "adaptive": false,
+    "progressive": false,
+    "russianRoulette": false,
+    "ggxImportanceSampling": false,
+    "transmission": false
+  },
+  "pathStats": {
+    "version": "4.10.0",
+    "mode": "native-path-observer",
+    "samples": 8192,
+    "passes": 2,
+    "primaryHits": 0,
+    "guideWrites": 0,
+    "blockPasses": 2,
+    "gi": {
+      "activeBlocks": 0,
+      "finalizedBlocks": 16,
+      "refinedBlocks": 16,
+      "createdBlocks": 20,
+      "cache": {
+        "records": 0,
+        "hits": 0,
+        "misses": 0,
+        "hitRate": 0,
+        "candidateTests": 0,
+        "cells": 0,
+        "spatialHash": true
+      }
+    },
+    "guide": {
+      "queries": 0,
+      "accepted": 0,
+      "rejected": 0
+    },
+    "spatial": {
+      "accepted": 0,
+      "rejected": 0,
+      "acceptRate": 0
+    },
+    "memory": {
+      "limitBytes": 268435456,
+      "usedBytes": 315392,
+      "freeBytes": 268120064,
+      "tags": {
+        "path-gbuffer": 217088,
+        "path-reservoir-grid": 98304
+      }
+    },
+    "elapsedMs": 576.7999999998137
+  },
+  "core8": {
+    "version": "4.43.0",
+    "provider": "LitePix Cores 4-8 production orchestrator",
+    "records": 8192,
+    "passes": 2,
+    "core4": {
+      "version": "4.27.0",
+      "provider": "LitePix Core4 production hierarchical GI",
+      "architecture": "irradiance cache + probe hierarchy + adaptive hierarchical GI",
+      "primaryHits": 0,
+      "cacheHits": 0,
+      "cacheMisses": 0,
+      "inserts": 0,
+      "cache": {
+        "version": "4.24.0",
+        "records": 0,
+        "hits": 0,
+        "misses": 0,
+        "hitRate": 0,
+        "candidateTests": 0,
+        "cells": 0,
+        "spatialHash": true,
+        "inserts": 0,
+        "updates": 0,
+        "queries": 0
+      },
+      "probes": {
+        "version": "4.25.0",
+        "probes": 0,
+        "refinements": 0,
+        "levels": 4
+      },
+      "adaptive": {
+        "version": "4.26.0",
+        "passes": 2,
+        "samples": 20,
+        "activeBlocks": 64,
+        "finalizedBlocks": 0,
+        "refinedBlocks": 80,
+        "createdBlocks": 84,
+        "cache": {
+          "records": 0,
+          "hits": 0,
+          "misses": 0,
+          "hitRate": 0,
+          "candidateTests": 0,
+          "cells": 0,
+          "spatialHash": true
+        }
+      },
+      "elapsedMs": 575.0999999996275
+    },
+    "core5": {
+      "version": "4.31.0",
+      "provider": "LitePix Core5 production ray reuse",
+      "architecture": "weighted reservoirs + spatial reuse + temporal reuse + shadow visibility cache",
+      "records": 8192,
+      "reused": 8192,
+      "spatial": {
+        "version": "4.29.0",
+        "accepted": 64008,
+        "rejected": 0,
+        "acceptRate": 1
+      },
+      "temporal": {
+        "version": "4.30.0",
+        "frames": 2,
+        "accepted": 4096,
+        "rejected": 0,
+        "acceptRate": 1
+      },
+      "shadow": {
+        "entries": 0,
+        "hits": 0,
+        "misses": 0,
+        "hitRate": 0
+      },
+      "elapsedMs": 574.9000000003725
+    },
+    "core6": {
+      "version": "4.35.0",
+      "provider": "LitePix Core6 production materials/color",
+      "architecture": "material preflight + texture color policy + energy audit + compiled material cache",
+      "compiled": 1,
+      "preflight": {
+        "version": "4.32.0",
+        "checked": 1,
+        "fixed": 1,
+        "invalid": 0
+      },
+      "textures": {
+        "version": "4.33.0",
+        "count": 0,
+        "invalid": 0,
+        "valid": 0,
+        "fixes": []
+      },
+      "energy": {
+        "version": "4.34.0",
+        "materials": 1,
+        "energyWarnings": 0
+      },
+      "cacheEntries": 1,
+      "elapsedMs": 574.5999999996275
+    },
+    "core7": {
+      "version": "4.39.0",
+      "provider": "LitePix Core7 production rendering",
+      "architecture": "tile scheduling + checkpoint/recovery + AOV contract + production frame state",
+      "state": "done",
+      "tiles": {
+        "version": "4.36.0",
+        "tiles": 16,
+        "completed": 0,
+        "failed": 0
+      },
+      "checkpoints": {
+        "version": "4.37.0",
+        "saves": 0,
+        "loads": 0,
+        "removes": 1
+      },
+      "output": {
+        "version": "4.38.0",
+        "frames": 1,
+        "aovs": [
+          "beauty",
+          "direct",
+          "indirect",
+          "diffuse",
+          "specular",
+          "reflection",
+          "refraction",
+          "emission",
+          "shadow",
+          "ao",
+          "normal",
+          "depth",
+          "objectId",
+          "materialId",
+          "variance"
+        ],
+        "aovCount": 15
+      },
+      "error": null,
+      "elapsedMs": 574
+    },
+    "core8": {
+      "version": "4.43.0",
+      "provider": "LitePix Core8 production telemetry/optimization",
+      "architecture": "runtime telemetry + quality regression + optimization advisor + hardware benchmark",
+      "telemetry": {
+        "version": "4.40.0",
+        "frames": 1,
+        "history": 1,
+        "last": {
+          "meta": {
+            "renderer": null,
+            "secondaryGI": null,
+            "frame": 1
+          },
+          "stages": {},
+          "rays": {
+            "camera": 0,
+            "path": 0,
+            "shadow": 0,
+            "probe": 0,
+            "reflection": 0,
+            "refraction": 0,
+            "total": 0,
+            "raysPerSecond": 0,
+            "elapsedMs": 573.3999999994412
+          },
+          "cache": {
+            "hits": 0,
+            "misses": 0,
+            "inserts": 0,
+            "refinements": 0,
+            "hitRate": 0
+          },
+          "noise": {
+            "count": 1,
+            "min": 0,
+            "max": 0,
+            "mean": 0,
+            "p50": 0,
+            "p95": 0
+          },
+          "memory": {
+            "usedBytes": 0,
+            "limitBytes": 0
+          },
+          "blocks": {
+            "active": 0,
+            "finalized": 0,
+            "refined": 0,
+            "version": "4.26.0",
+            "passes": 2,
+            "samples": 20,
+            "activeBlocks": 64,
+            "finalizedBlocks": 0,
+            "refinedBlocks": 80,
+            "createdBlocks": 84,
+            "cache": {
+              "records": 0,
+              "hits": 0,
+              "misses": 0,
+              "hitRate": 0,
+              "candidateTests": 0,
+              "cells": 0,
+              "spatialHash": true
+            }
+          },
+          "time": 1789583840696
+        }
+      },
+      "quality": {
+        "version": "4.41.0",
+        "comparisons": 0,
+        "failures": 0,
+        "last": null
+      },
+      "advisor": {
+        "version": "4.42.0",
+        "runs": 1,
+        "actions": [
+          "increase cache locality or improve compatibility thresholds"
+        ]
+      },
+      "hardware": {},
+      "elapsedMs": 573.7999999998137
+    },
+    "elapsedMs": 573.7999999998137
+  },
+  "verified": true
+}
