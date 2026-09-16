@@ -10903,6 +10903,7 @@ var RenderFramework={
     try{
       const snapshotStart16=RenderProfiler16.begin();
       job=RendererMasterCore.createRequest(mode,region,settingsOverride);
+      try{window.L3NRenderMode?.onStart?.(job);}catch(_){ }
       RenderPerformanceRuntime16.markStage(job,'snapshot',snapshotStart16);
       this.jobs?.configureThreads?.(job.settings.cpuThreads);
     }catch(err){
@@ -23726,6 +23727,7 @@ root.__3DLiteMaterialLinearColor3996=true;
 <script src="./litepix/core2-dynamic-v4.17.js"></script>
 <script src="./litepix/core2-async-v4.18.js"></script>
 <script src="./litepix/core2-production-v4.19.js"></script>
+<script src="l3n-litepix/l3n-render-mode.js"></script>
 <script src="l3n-litepix/render-diagnostics.js"></script>
 </body>
 </html>
