@@ -1,0 +1,21 @@
+﻿{
+    "schema":  1,
+    "kind":  "l3n-litepix-authority-baseline",
+    "authorityVersion":  "0.1.0",
+    "baselineRevision":  "62e1ccbe89e09a8a775f022676ab81ede6352f30",
+    "productionFrameFingerprint":  "7ba9ddc5",
+    "productionRenderVerified":  true,
+    "requiredGates":  [
+                          "source",
+                          "readBack",
+                          "build",
+                          "launch",
+                          "render",
+                          "quality",
+                          "regression",
+                          "artifactFingerprint"
+                      ],
+    "candidateIsolation":  "revision+candidate fingerprint",
+    "failurePolicy":  "reject and recover baseline",
+    "promotionPolicy":  "all gates must pass with matching candidate lineage"
+}

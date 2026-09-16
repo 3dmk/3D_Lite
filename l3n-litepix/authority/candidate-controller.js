@@ -1,0 +1,5 @@
+﻿(function(g){'use strict';
+function requireAuthority(){const a=g.L3NLitePixAuthority;if(!a)throw Error('L3NLitePixAuthority required');return a;}
+function session({baselineRevision,candidateRevision,files=[],intent=''}){const A=requireAuthority(),candidate=A.candidate({baselineRevision,candidateRevision,files,intent});let state='CANDIDATE',last=null;return Object.freeze({candidate,get state(){return state;},verify(raw){if(state!=='CANDIDATE'&&state!=='VERIFIED')throw Error('invalid state '+state);const e=A.evidence({candidate,...raw});last=A.decide(candidate,e);state=last.promote?'VERIFIED':'REJECTED';return last;},promote(){if(state!=='VERIFIED'||!last?.promote)throw Error('promotion gate not satisfied');state='PROMOTED';return Object.freeze({status:state,candidateRevision:candidate.candidateRevision,fingerprint:candidate.fingerprint});},recover(){if(state!=='REJECTED')throw Error('recovery requires rejected candidate');state='RECOVERED';return Object.freeze({status:state,baselineRevision:candidate.baselineRevision});}});}
+g.L3NLitePixCandidateController=Object.freeze({version:'0.1.0',session});
+})(typeof globalThis!=='undefined'?globalThis:window);

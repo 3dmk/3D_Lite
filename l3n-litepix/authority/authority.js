@@ -1,0 +1,8 @@
+﻿(function(g){'use strict';
+function clean(x){if(x===null||typeof x!=='object')return x;if(Array.isArray(x))return x.map(clean);return Object.keys(x).sort().reduce((o,k)=>(o[k]=clean(x[k]),o),{});}
+function hash(x){let h=2166136261>>>0,s=JSON.stringify(clean(x));for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}return h.toString(16).padStart(8,'0');}
+function candidate({baselineRevision,candidateRevision,files=[],intent=''}){if(!baselineRevision||!candidateRevision||baselineRevision===candidateRevision)throw Error('candidate identity/lineage invalid');return Object.freeze({schema:1,baselineRevision,candidateRevision,files:Object.freeze([...new Set(files)].sort()),intent,fingerprint:hash({baselineRevision,candidateRevision,files:[...new Set(files)].sort(),intent})});}
+function evidence({candidate,source=false,readBack=false,build=false,launch=false,render=false,quality=false,regression=false,artifactFingerprint=null}){return Object.freeze({candidateFingerprint:candidate.fingerprint,source,readBack,build,launch,render,quality,regression,artifactFingerprint});}
+function decide(candidate,e){const reasons=[];if(e.candidateFingerprint!==candidate.fingerprint)reasons.push('evidence-lineage-mismatch');for(const k of ['source','readBack','build','launch','render','quality','regression'])if(e[k]!==true)reasons.push('gate:'+k);if(!e.artifactFingerprint)reasons.push('artifact-unidentified');return Object.freeze({promote:!reasons.length,status:reasons.length?'REJECT':'PROMOTE',reasons:Object.freeze(reasons)});}
+g.L3NLitePixAuthority=Object.freeze({version:'0.1.0',hash,candidate,evidence,decide});
+})(typeof globalThis!=='undefined'?globalThis:window);
