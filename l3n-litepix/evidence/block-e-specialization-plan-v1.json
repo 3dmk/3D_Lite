@@ -1,0 +1,70 @@
+{
+  "schema": 1,
+  "kind": "l3n-litepix-block-e-specialization-plan",
+  "sourceFingerprint": "5ca3fa78",
+  "analysis": {
+    "shares": {
+      "render": 0.9166666666666666,
+      "worker": 0.03262786596119929,
+      "bvh": 0.0014109347439395688
+    },
+    "candidates": [
+      {
+        "id": "cpu-render-loop",
+        "domain": "CPU",
+        "score": 0.9166666666666666,
+        "evidence": {
+          "renderShare": 0.9166666666666666
+        }
+      },
+      {
+        "id": "ray-efficiency",
+        "domain": "Rays",
+        "score": 0.5,
+        "evidence": {
+          "pathRayShare": 0.5
+        }
+      },
+      {
+        "id": "worker-preparation",
+        "domain": "CPU/Workers",
+        "score": 0.03262786596119929,
+        "evidence": {
+          "workerShare": 0.03262786596119929
+        }
+      },
+      {
+        "id": "bvh-traversal",
+        "domain": "BVH",
+        "score": 0.0014109347439395688,
+        "evidence": {
+          "bvhShare": 0.0014109347439395688
+        }
+      },
+      {
+        "id": "path-memory",
+        "domain": "Memory",
+        "score": 0.0011749267578125,
+        "evidence": {
+          "usedBytes": 315392
+        }
+      }
+    ],
+    "selected": {
+      "id": "cpu-render-loop",
+      "domain": "CPU",
+      "score": 0.9166666666666666,
+      "evidence": {
+        "renderShare": 0.9166666666666666
+      }
+    }
+  },
+  "experiment": {
+    "id": "block-e-cpu-render-loop",
+    "domain": "CPU",
+    "goal": "reduce render-loop cost without changing framebuffer quality",
+    "requiresSameWorkload": true,
+    "requiresQualityGate": true,
+    "requiresRegressionGate": true
+  }
+}
