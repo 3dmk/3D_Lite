@@ -1,0 +1,6 @@
+﻿(function(root){'use strict';
+const median=a=>{const s=[...a].sort((x,y)=>x-y),n=s.length;return n?n%2?s[n>>1]:(s[n/2-1]+s[n/2])/2:null;};
+async function run({scene,repetitions=5,execute}){if(!scene||typeof execute!=='function')throw new Error('scene and execute required');const runs=[];for(let i=0;i<repetitions;i++){const r=await execute(scene,i);runs.push(r);}const times=runs.map(r=>Number(r.elapsedMs)).filter(Number.isFinite),noise=runs.map(r=>Number(r.meanNoise)).filter(Number.isFinite);return Object.freeze({schema:1,scene:scene.id,repetitions:runs.length,elapsedMs:{median:median(times),min:times.length?Math.min(...times):null,max:times.length?Math.max(...times):null},meanNoise:{median:median(noise)},runs});}
+function compare(base,candidate){const bt=base.elapsedMs.median,ct=candidate.elapsedMs.median,bn=base.meanNoise.median,cn=candidate.meanNoise.median;return Object.freeze({scene:base.scene,speedup:bt&&ct?bt/ct:null,timeDeltaPct:bt?((ct-bt)/bt)*100:null,noiseDelta:bn!=null&&cn!=null?cn-bn:null,qualityPreserved:bn==null||cn==null?null:cn<=bn});}
+root.L3NLitePixBenchmarkHarness=Object.freeze({version:'0.1.0',median,run,compare});
+})(typeof globalThis!=='undefined'?globalThis:window);
