@@ -1,0 +1,7 @@
+﻿(function(root){'use strict';
+const stable=v=>{if(Array.isArray(v))return v.map(stable);if(v&&typeof v==='object'){const o={};for(const k of Object.keys(v).sort())o[k]=stable(v[k]);return o;}return v;};
+function hash(text){let h=2166136261>>>0;for(let i=0;i<text.length;i++){h^=text.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}return h.toString(16).padStart(8,'0');}
+function quality(acc){if(!acc)return null;const n=acc.samples?.length||0;let noise=0,variance=0,count=0,minSamples=Infinity,maxSamples=0;for(let i=0;i<n;i++){const s=Number(acc.samples[i]||0);if(s<=0)continue;count++;minSamples=Math.min(minSamples,s);maxSamples=Math.max(maxSamples,s);const no=Number(acc.noise?.(i)),va=Number(acc.variance?.(i));if(Number.isFinite(no))noise+=no;if(Number.isFinite(va))variance+=va;}return{pixels:count,meanNoise:count?noise/count:null,meanVariance:count?variance/count:null,minSamples:count?minSamples:0,maxSamples};}
+function build(opts={}){const evidence=root.__L3NLitePixEvidenceSnapshot?.()||null,path=opts.path?.snapshot?.()||null,q=quality(opts.accumulator);const identity=stable({revision:opts.revision||null,rendererVersion:opts.rendererVersion||path?.version||null,scene:opts.scene||null,settings:opts.settings||null});return Object.freeze({schema:1,kind:'l3n-litepix-benchmark-evidence',identity,fingerprint:hash(JSON.stringify(identity)),quality:q,path,evidence});}
+root.L3NLitePixUnifiedEvidence=Object.freeze({version:'0.1.0',stable,hash,quality,build});
+})(typeof globalThis!=='undefined'?globalThis:window);
