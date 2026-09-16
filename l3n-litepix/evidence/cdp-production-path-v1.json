@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "kind": "l3n-litepix-cdp-production-path",
+  "url": "http://127.0.0.1:8765/index.html",
+  "version": "4.45.0",
+  "pathRenderer": true,
+  "accumulator": true,
+  "framework": true,
+  "masterCore": true,
+  "degraded": false,
+  "core2": true,
+  "core8": true,
+  "title": "3D Lite — LitePix v4.45.0 Adaptive Ray Budget",
+  "ready": true
+}
