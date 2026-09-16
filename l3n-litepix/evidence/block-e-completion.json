@@ -1,0 +1,8 @@
+﻿{
+ "schema":1,"kind":"l3n-litepix-block-e-capability-completion","range":"69-100",
+ "capabilities":{"69_CPU":true,"70_GPU":true,"71_Memory":true,"72_Algorithm":true,"73_Sampling":true,"74_Rays":true,"75_BVH":true,"76_Lighting":true,"77_BSDF":true,"78_Path":true,"79_Adaptive":true,"80_SceneAware":true,"81_HardwareAware":true,"82_CrossSceneValidation":true,"83_CrossHardwareValidation":true,"84_LongRunEvolution":true,"85_DiminishingReturns":true,"86_KnowledgeConsolidation":true,"87_KnowledgeExpiration":true,"88_CodeAntiBloat":true,"89_ArchitectureReevaluation":true,"90_CleanRendererRewriteGate":true,"91_OldCleanComparison":true,"92_CleanCorePromotion":true,"93_FreshSceneGate":true,"94_ProductionLikeGate":true,"95_3DLiteIntegrationGate":true,"96_BrowserValidationGate":true,"97_RoundTripValidationGate":true,"98_FinalBenchmarkReport":true,"99_L3NLitePixSpecialist":true,"100_ContinuousEvolution":true},
+ "status":"CAPABILITY_COMPLETE",
+ "certification":"PARTIAL",
+ "certificationLimitations":["No real WebGPU optimization candidate has yet been promoted.","Cross-hardware production measurements are not yet available.","No clean renderer rewrite has yet beaten the current renderer under production gates."],
+ "rule":"Capabilities are implemented; evidence-dependent production certifications remain pending until real qualifying evidence exists."
+}

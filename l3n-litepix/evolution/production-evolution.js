@@ -1,0 +1,9 @@
+﻿(function(g){'use strict';
+const DOMAINS=['CPU','GPU','Memory','Algorithm','Sampling','Rays','BVH','Lighting','BSDF','Path','Adaptive','Scene','Hardware'];
+function profile(e){const p=e?.performance||{},s=p.stageMs||{},total=Math.max(1,+e?.elapsedMs||1);return Object.freeze({elapsedMs:+e?.elapsedMs||0,renderShare:(+s.render||0)/total,workerShare:(+s.worker||0)/total,bvhShare:(+s.bvh||0)/total,rays:+p.totalRays||0,pathRays:+p.pathRays||0,primaryHits:+e?.pathStats?.primaryHits||0,noise:+e?.noise||0,memoryBytes:+e?.pathStats?.memory?.usedBytes||0});}
+function strategies(e){const p=profile(e),out=[];for(const d of DOMAINS){let score=.05,action='measure before modifying';if(d==='CPU')score=p.renderShare;if(d==='Rays')score=p.rays?Math.min(1,p.pathRays/p.rays):0;if(d==='Memory')score=Math.min(1,p.memoryBytes/268435456);if(d==='BVH')score=p.bvhShare;if(d==='Sampling')score=Math.min(1,p.noise);if(d==='Path')score=p.primaryHits?.75*Math.min(1,p.pathRays/Math.max(1,p.primaryHits)):0;if(d==='GPU')action='retain as candidate backend until WebGPU evidence exists';out.push(Object.freeze({domain:d,score,action}));}return Object.freeze(out.sort((a,b)=>b.score-a.score||a.domain.localeCompare(b.domain)));}
+function convergence(history,{minGain=.01,window=3}={}){const h=history.slice(-window);if(h.length<window)return false;return h.every(x=>Number.isFinite(x.gain)&&x.gain<minGain);}
+function cleanCore(records){const best=new Map();for(const r of records||[]){if(r.outcome!=='promoted')continue;const k=r.domain||r.hypothesis||'general';const prev=best.get(k);if(!prev||(+r.gain||0)>(+prev.gain||0))best.set(k,r);}return Object.freeze([...best.values()].map(x=>Object.freeze({...x})));}
+g.L3NLitePixProductionEvolution=Object.freeze({version:'0.1.0',domains:Object.freeze(DOMAINS),profile,strategies,convergence,cleanCore});
+})(typeof globalThis!=='undefined'?globalThis:window);
+
