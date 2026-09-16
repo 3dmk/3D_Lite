@@ -1,0 +1,28 @@
+You are taking over development of 3DLite from its GitHub repository.
+
+Repository: https://github.com/3dmk/3D_Lite
+Handoff branch: ai-transfer-v4.46.0
+Start file: AI_START_HERE.md
+
+Use GitHub/repository filesystem access. Do NOT depend on ZIP/archive binary access.
+
+MANDATORY FIRST PHASE — DO NOT MODIFY CODE YET:
+1. Open the repository and read AI_START_HERE.md.
+2. Read every file under AI_HANDOFF/.
+3. Inspect current main and recent Git history because main may be newer than the v4.46.0 historical transfer snapshot.
+4. Recursively inventory the actual source tree and identify the current authoritative editor/browser entry point, desktop/Tauri entry point, Main Core implementation, LitePix/rendering implementation, build scripts, installer sources and tests/diagnostics.
+5. Verify actual implementation before making architecture claims.
+6. Produce a takeover verification report containing: current branch/commit/version; authoritative files; subsystem ownership; startup/bootstrap path; build/run commands; renderer path; Main Core path; known-good/recovery baselines you can actually verify; release gates; conflicts between handoff documentation and actual source; and the next highest-priority implementation work.
+
+DEVELOPMENT RULES:
+- Preserve the newest verified working build. Never downgrade newer main to v4.46.0 simply because the handoff branch has that name.
+- Work on versioned branches/copies and keep recovery baselines untouched.
+- Main Core is the intended sole authority for mutable application state; UI/tools/viewport/rendering communicate through stable contracts.
+- LitePix owns rendering, not editable application state.
+- Preserve Gen3/Len3/L3N cumulative learning: carry forward proven patterns, failure history, repairs, ownership boundaries, conventions and release checks; replace obsolete logic cleanly instead of layering patches.
+- Startup/runtime failures are release blockers. Run the release gates in AI_HANDOFF/RELEASE_GATES.md before promotion.
+- For runtime-sensitive changes, syntax success alone is insufficient; obtain browser/runtime evidence.
+- Do not invent missing implementation details. Inspect code first and clearly separate verified current implementation from proposed architecture.
+
+AFTER THE TAKEOVER REPORT:
+Continue from the latest verified state and the user's next requested change. For every update report the new version, files changed, tests performed, regression status, commit/branch/PR link, completed work and pending next work.
