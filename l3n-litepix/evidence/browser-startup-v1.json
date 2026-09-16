@@ -1,0 +1,14 @@
+﻿{
+  "schema": 1,
+  "kind": "l3n-litepix-browser-startup-evidence",
+  "browser": "Google Chrome headless",
+  "url": "http://127.0.0.1:8765/index.html",
+  "virtualTimeBudgetMs": 12000,
+  "htmlLoaded": true,
+  "viewportPresent": true,
+  "litepixPresent": true,
+  "renderUIOrRuntimePresent": true,
+  "fatalRuntimePatternDetected": false,
+  "domBytes": 1195287,
+  "note": "Startup/bootstrap evidence only; not yet a completed reference render or interactive visual certification."
+}
