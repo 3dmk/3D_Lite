@@ -1,0 +1,376 @@
+﻿    const outgoing=this.probe(job,acceleration,compiled,hit,n,material,seed,bounce);
+    cache.insert(hit.position,n,outgoing);
+    return outgoing;
+  }
+});
+
+var PathIntegrator=Object.freeze({
+  maxDepth(job){
+    return Math.max(1,Math.min(16,Number(job?.settings?.maxBounces)||5));
+  },
+
+  finiteColor(c){
+    return Array.isArray(c)&&c.length===3&&c.every(v=>Number.isFinite(v)&&v>=0);
+  },
+
+  safeColor(c){
+    return this.finiteColor(c)?c:[0,0,0];
+  },
+
+  offsetOrigin(hit,n,direction){
+    const sign=RayMath.dot(direction,n)>=0?1:-1;
+    const eps=RenderRayPolicy.epsilonForPoint(hit.position);
+    return RayMath.add(hit.position,RayMath.mul(n,eps*sign));
+  },
+
+  trace(job,acceleration,compiled,primaryRay,pixelSeed,initialHit=null){
+    if(window.__LitePixCore2Production419Enabled!==false&&typeof window.LitePixCore2Production419==='function'){
+      acceleration=window.LitePixCore2Production419.wrap(acceleration,job);
+    }else if(window.__LitePixCore2Partial415Enabled!==false&&typeof window.LitePixCore2PartialAcceleration415==='function'){
+      acceleration=window.LitePixCore2PartialAcceleration415.wrap(acceleration,job);
+    }else if(window.__LitePixCore2Persistent414Enabled!==false&&typeof window.LitePixCore2PersistentAcceleration414==='function'){
+      acceleration=window.LitePixCore2PersistentAcceleration414.wrap(acceleration,job);
+    }else if(window.__LitePixCore2Scene413Enabled!==false&&typeof window.LitePixSceneAcceleration413==='function'){
+      acceleration=window.LitePixSceneAcceleration413.wrap(acceleration,job);
+    }else if(window.__LitePixCore2Path412Enabled!==false&&typeof window.LitePixCore2PathAcceleration412==='function'){
+      acceleration=window.LitePixCore2PathAcceleration412.wrap(acceleration,job);
+    }
+    let radiance=[0,0,0];
+    let throughput=[1,1,1];
+    let ray=primaryRay;
+    let previousGuide=null;
+    const maxDepth=this.maxDepth(job);
+    const maxPathRays=Math.max(1,Math.min(4096,Number(job?.settings?.maxPathRays)||64));
+    let pathRays=1;
+
+    for(let bounce=0;bounce<maxDepth;bounce++){
+      const hit=(bounce===0&&initialHit)?initialHit:acceleration.trace(ray);
+
+      if(!hit.hit){
+        const env=this.safeColor(RenderCoreD.evaluateEnvironment(job,compiled,ray.direction));
+        radiance=RenderColor.add(radiance,RenderColor.mul(throughput,env));
+        if(previousGuide&&job.pathGuide){
+          const w=Math.max(0,.2126*env[0]+.7152*env[1]+.0722*env[2]);
+          job.pathGuide.record(previousGuide.position,previousGuide.normal,previousGuide.direction,w);
+        }
+        break;
+      }
+
+      const material=RenderMaterialLibrary.resolveHit(job.renderScene,compiled.materials,hit);
+      const n=SurfaceInterpolator.normal(acceleration,hit);
+      const v=RayMath.mul(ray.direction,-1);
+
+      // Next-event direct lighting at each hit. Dome is excluded here because
+      // environment energy is accounted for by path miss evaluation.
+      const direct=Group9DirectMIS.evaluate(
+        job,acceleration,compiled,ray,hit,pixelSeed^(bounce*0x9E3779B9)
+      );
+      const safeDirect=this.safeColor(direct);
+      radiance=RenderColor.add(radiance,RenderColor.mul(throughput,safeDirect));
+
+      if(previousGuide&&job.pathGuide){
+        const w=Math.max(0,.2126*safeDirect[0]+.7152*safeDirect[1]+.0722*safeDirect[2]);
+        job.pathGuide.record(previousGuide.position,previousGuide.normal,previousGuide.direction,w);
+      }
+
+      if(bounce>=1){
+        if(job?.settings?.secondaryGI==='None')break;
+        if(LightCacheEstimator.enabled(job)){
+          const cachedTail=LightCacheEstimator.estimate(job,acceleration,compiled,hit,n,material,pixelSeed,bounce);
+          if(cachedTail){
+            radiance=RenderColor.add(radiance,RenderColor.mul(throughput,cachedTail));
+            break;
+          }
+        }
+      }
+
+      if(material.shading==='unlit')break;
+
+      const sample=GuidedBSDFSampler.sample(job,material,n,v,hit.position,pixelSeed,bounce);
+      if(!sample)break;
+
+      throughput=RenderColor.mul(throughput,sample.weight);
+
+      if(!this.finiteColor(throughput))break;
+      if(Math.max(throughput[0],throughput[1],throughput[2])<1e-6)break;
+
+      // Russian roulette after the first few bounces. Survival probability tracks path throughput.
+      if(bounce>=2){
+        const survive=Math.max(.08,Math.min(.95,Math.max(throughput[0],throughput[1],throughput[2])));
+        if(PathSampler.scalar(pixelSeed,bounce,15)>survive)break;
+        throughput=RenderColor.mul(throughput,1/survive);
+      }
+
+      if(sample.transmission&&material.thickness>0){
+        throughput=RenderColor.mul(
+          throughput,
+          DielectricTransport.beerLambert(material.attenuationColor,material.thickness,material.attenuationDistance)
+        );
+      }
+
+      previousGuide=(!sample.transmission&&job.pathGuide&&RayMath.dot(n,sample.direction)>0)
+        ? {position:hit.position.slice(),normal:n.slice(),direction:sample.direction.slice()}
+        : null;
+
+      if(pathRays>=maxPathRays)break;
+      pathRays++;
+      const origin=this.offsetOrigin(hit,n,sample.direction);
+      const eps=RenderRayPolicy.epsilonForPoint(origin);
+      const rayType=sample.transmission?RenderRayType.TRANSMISSION:(sample.lobe==='ggx'?RenderRayType.GLOSSY:RenderRayType.DIFFUSE);
+      RenderCoreH.attachPerformance(job).addRay(rayType);
+      ray=new RenderRay(origin,sample.direction,eps,Infinity,rayType,bounce+1);
+    }
+
+    return radiance;
+  },
+
+  tracePixel(job,acceleration,compiled,primaryRay,pixelSeed){
+    if(window.__LitePixCore2Production419Enabled!==false&&typeof window.LitePixCore2Production419==='function'){
+      acceleration=window.LitePixCore2Production419.wrap(acceleration,job);
+    }else if(window.__LitePixCore2Partial415Enabled!==false&&typeof window.LitePixCore2PartialAcceleration415==='function'){
+      acceleration=window.LitePixCore2PartialAcceleration415.wrap(acceleration,job);
+    }else if(window.__LitePixCore2Persistent414Enabled!==false&&typeof window.LitePixCore2PersistentAcceleration414==='function'){
+      acceleration=window.LitePixCore2PersistentAcceleration414.wrap(acceleration,job);
+    }else if(window.__LitePixCore2Scene413Enabled!==false&&typeof window.LitePixSceneAcceleration413==='function'){
+      acceleration=window.LitePixSceneAcceleration413.wrap(acceleration,job);
+    }else if(window.__LitePixCore2Path412Enabled!==false&&typeof window.LitePixCore2PathAcceleration412==='function'){
+      acceleration=window.LitePixCore2PathAcceleration412.wrap(acceleration,job);
+    }
+    const primaryHitRecord=acceleration.trace(primaryRay);
+    if(!primaryHitRecord.hit){
+      const env=this.safeColor(RenderCoreD.evaluateEnvironment(job,compiled,primaryRay.direction));
+      return {radiance:env,primaryHit:false,primaryHitRecord:null};
+    }
+    return {
+      radiance:this.trace(job,acceleration,compiled,primaryRay,pixelSeed,primaryHitRecord),
+      primaryHit:true,
+      primaryHitRecord
+    };
+  }
+});
+
+class ProgressiveAccumulator{
+  constructor(width,height){
+    this.width=width;this.height=height;
+    const n=width*height;
+    this.sum=new Float64Array(n*3);
+    this.mean=new Float64Array(n);
+    this.m2=new Float64Array(n);
+    this.samples=new Uint32Array(n);
+    this.converged=new Uint8Array(n);
+    this.active=n;
+  }
+  add(index,color){
+    const s=++this.samples[index];
+    const o=index*3;
+    this.sum[o]+=color[0];this.sum[o+1]+=color[1];this.sum[o+2]+=color[2];
+    const lum=.2126*color[0]+.7152*color[1]+.0722*color[2];
+    const delta=lum-this.mean[index];
+    this.mean[index]+=delta/s;
+    this.m2[index]+=delta*(lum-this.mean[index]);
+  }
+  variance(index){
+    const s=this.samples[index];
+    return s>1?Math.max(0,this.m2[index]/(s-1)):Infinity;
+  }
+  noise(index){
+    const mean=Math.max(1e-6,Math.abs(this.mean[index]));
+    const s=Math.max(1,this.samples[index]);
+    return Math.sqrt(this.variance(index)/s)/mean;
+  }
+  shouldSample(index,settings){
+    if(!settings.adaptive)return this.samples[index]<settings.maxSamples;
+    if(this.samples[index]<settings.minSamples)return true;
+    if(this.samples[index]>=settings.maxSamples)return false;
+    return this.noise(index)>settings.noiseThreshold;
+  }
+  markConverged(index){
+    if(this.converged[index])return;
+    this.converged[index]=1;this.active=Math.max(0,this.active-1);
+  }
+  resolveRGBA(settings,primaryMask){
+    const rgba=new Uint8ClampedArray(this.width*this.height*4);
+    for(let i=0;i<this.width*this.height;i++){
+      const s=Math.max(1,this.samples[i]),o=i*3,p=i*4;
+      const linear=[this.sum[o]/s,this.sum[o+1]/s,this.sum[o+2]/s];
+      const mapped=RenderColor.linearToSrgb(RenderColor.aces(linear));
+      rgba[p]=Math.round(RenderColor.clamp01(mapped[0])*255);
+      rgba[p+1]=Math.round(RenderColor.clamp01(mapped[1])*255);
+      rgba[p+2]=Math.round(RenderColor.clamp01(mapped[2])*255);
+      rgba[p+3]=(settings.transparent&&!primaryMask[i])?0:255;
+    }
+    return rgba;
+  }
+  averageSamples(){
+    let total=0;for(let i=0;i<this.samples.length;i++)total+=this.samples[i];
+    return total/Math.max(1,this.samples.length);
+  }
+  activeIndices(settings){
+    const out=new Uint32Array(this.active||this.samples.length);
+    let n=0;
+    for(let i=0;i<this.samples.length;i++){
+      if(this.shouldSample(i,settings))out[n++]=i;
+      else this.markConverged(i);
+    }
+    return out.subarray(0,n);
+  }
+  compactActive(settings){
+    return this.activeIndices(settings);
+  }
+
+  averageNoise(){
+    let sum=0,count=0;
+    for(let i=0;i<this.samples.length;i++){
+      if(this.samples[i]>1&&Number.isFinite(this.noise(i))){sum+=this.noise(i);count++;}
+    }
+    return count?sum/count:null;
+  }
+}
+
+var PathGIRenderer=Object.freeze({
+  async render(job,acceleration,onProgress=()=>{}){
+    if(window.__LitePixCore2Worker418Enabled!==false&&window.LitePixCore2Worker418?.prewarm)await window.LitePixCore2Worker418.prewarm(job?.renderScene);
+    const rr=RenderRegion14.resolve(job,640,360);
+    const width=rr.width,height=rr.height;
+    const compiled=RenderPart5Core.compile(job);
+    const settings=job.settings;
+    job.lightCache=LightCacheEstimator.enabled(job)?new RenderLightCache(job,acceleration):null;
+    job.lightTree=RenderCoreH.createLightTree(job,compiled);
+    job.pathGuide=RenderCoreH.createPathGuide(job,acceleration);
+    const litePixRayBudget445=(typeof window.LitePixRayBudget445==='function')?new window.LitePixRayBudget445(job,acceleration,compiled,width,height):null;
+    job.litePixRayBudget445=litePixRayBudget445;
+    window.ThreeDLiteMainCore?.syncLegacyRevisions?.();
+    job.progress.gi=settings.secondaryGI==='Light Cache'?'Brute Force + Light Cache':settings.secondaryGI;
+    const accumulator=new ProgressiveAccumulator(width,height);
+    const aovs=new RenderAOVSet(width,height);
+    const primaryMask=new Uint8Array(width*height);
+    const litePixPath410=(typeof LitePixPathExecution410==='function')?new LitePixPathExecution410(width,height,{startBlock:32,minBlock:1,maxLevel:6}):null;
+    const litePixCore3Production423=(window.__LitePixCore3Production423Enabled!==false&&typeof window.LitePixCore3Production423==='function')?new window.LitePixCore3Production423(width,height):null;
+    if(litePixCore3Production423)litePixCore3Production423.beginFrame();
+    job.litePixCore3Production423=litePixCore3Production423;
+    const litePixCores4to8Production443=(window.__LitePixCores4to8Production443Enabled!==false&&typeof window.LitePixCores4to8Production443==='function')?new window.LitePixCores4to8Production443(width,height,job,compiled):null;
+    job.litePixCores4to8Production443=litePixCores4to8Production443;
+    job.litePixPath410=litePixPath410;
+    const perf16=RenderCoreH.attachPerformance(job);
+    const rowChunk16=RenderCoreH.yieldRows(job);
+    const renderStart16=RenderProfiler16.begin();
+    LiteTraceExecutionContext.activeJob=job;LiteTraceExecutionContext.performance=perf16;
+    const maxSamples=Math.max(1,settings.maxSamples||1);
+    const progressive=settings.progressive!==false;
+    const passLimit=progressive?maxSamples:1;
+    let completedPasses=0;
+
+    for(let pass=0;pass<passLimit;pass++){
+      if(job.cancelled)throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
+      while(job.paused&&!job.cancelled)await new Promise(r=>setTimeout(r,20));
+
+      let sampledThisPass=0;
+      const activePixels16=progressive?accumulator.compactActive(settings):(()=>{
+        const a=new Uint32Array(width*height);for(let i=0;i<a.length;i++)a[i]=i;return a;
+      })();
+      if(activePixels16.length===0)break;
+
+      const workQueue16=RenderWorkQueue16.fromIndices(activePixels16,Math.max(32,RenderCoreH.tileSize(job)*4));
+      await workQueue16.run(async batch=>{
+        for(const i of batch){
+          if(job.cancelled||job.controlToken16?.cancelled?.())throw Object.assign(new Error('Render job cancelled'),{cancelled:true});
+          const x=i%width,y=(i/width)|0;
+          const seed=((i+1)^Math.imul(pass+1,0x9E3779B1))>>>0;
+          const jitterX=PathSampler.scalar(seed,pass,20)-.5;
+          const jitterY=PathSampler.scalar(seed,pass,21)-.5;
+          const ray=RenderPart5Core.ray(
+            job.renderScene.camera,
+            rr.x0+x+jitterX,rr.y0+y+jitterY,
+            rr.fullW,rr.fullH
+          );
+          perf16.addRay(RenderRayType.CAMERA);
+          const sample=RenderPart5Core.trace(job,acceleration,compiled,ray,seed);
+          perf16.samples++;
+          primaryMask[i]|=sample.primaryHit?1:0;
+          accumulator.add(i,sample.radiance);
+          const ph=sample.primaryHitRecord;
+          if(litePixPath410)litePixPath410.record(i,x,y,sample,ph,accumulator);
+          if(litePixCore3Production423)litePixCore3Production423.recordPrimary(i,x,y,ray,sample,ph,job,compiled,acceleration);
+          if(litePixCores4to8Production443)litePixCores4to8Production443.record(i,x,y,sample,ph,accumulator);
+          if(pass===0){
+            if(ph?.hit)RenderAOVUtil.writePrimary(aovs,i,RenderAOVUtil.primary(job,acceleration,compiled,ray,ph,seed));
+            else RenderAOVUtil.writePrimary(aovs,i,null);
+          }
+          sampledThisPass++;
+        }
+        perf16.yields++;
+        await new Promise(r=>setTimeout(r,0));
+      });
+      completedPasses=pass+1;
+      const litePixPass410=litePixPath410?litePixPath410.completePass(accumulator):null;
+      if(litePixCore3Production423)job.litePixCore3Pass423=litePixCore3Production423.completePass();
+      if(litePixCores4to8Production443)job.litePixCores4to8Pass443=litePixCores4to8Production443.completePass(accumulator);
+      job.litePixPathStats410=litePixPass410;
+      const rgba=accumulator.resolveRGBA(settings,primaryMask);
+      job.previewFrame={
+        width,height,rgba,
+        metadata:Object.freeze({
+          renderer:'Group 9 Progressive Path GI',
+          samplesPerPixel:accumulator.averageSamples(),
+          currentPass:completedPasses,
+          maxSamples,
+          adaptive:!!settings.adaptive,
+          noise:accumulator.averageNoise(),
+          activePixels:accumulator.active
+        })
+      };
+      job.progress.currentSamples=Math.round(accumulator.averageSamples());
+      job.progress.maximumSamples=maxSamples;
+      job.progress.noise=accumulator.averageNoise();
+      onProgress(Math.min(1,completedPasses/passLimit));
+
+      if(!progressive)break;
+      if(settings.adaptive&&completedPasses>=settings.minSamples&&accumulator.active===0)break;
+      if(sampledThisPass===0)break;
+    }
+
+    const rgba=accumulator.resolveRGBA(settings,primaryMask);
+    for(let i=0;i<width*height;i++){
+      const s=Math.max(1,accumulator.samples[i]),o=i*3;
+      const beauty=[accumulator.sum[o]/s,accumulator.sum[o+1]/s,accumulator.sum[o+2]/s];
+      aovs.set3('Beauty',i,beauty);
+      aovs.set1('Noise',i,Number.isFinite(accumulator.noise(i))?accumulator.noise(i):0);
+      const d=aovs.get('Direct Lighting'),e=aovs.get('Emission');
+      const direct=d?[d[o],d[o+1],d[o+2]]:[0,0,0];
+      const emission=e?[e[o],e[o+1],e[o+2]]:[0,0,0];
+      aovs.set3('Global Illumination',i,[
+        Math.max(0,beauty[0]-direct[0]-emission[0]),
+        Math.max(0,beauty[1]-direct[1]-emission[1]),
+        Math.max(0,beauty[2]-direct[2]-emission[2])
+      ]);
+    }
+    RenderCoreH.markStage(job,'render',renderStart16);
+    job.litePixCore3Stats423=litePixCore3Production423?.endFrame?.()||job.litePixCore3Pass423||null;
+    job.litePixCores4to8Stats443=litePixCores4to8Production443?.finalize?.(job)||job.litePixCores4to8Pass443||null;
+    job.litePixPathStats410=litePixPath410?.snapshot?.()||job.litePixPathStats410||null;
+    if(litePixPath410)litePixPath410.dispose();
+    if(LiteTraceExecutionContext.performance===perf16){LiteTraceExecutionContext.activeJob=null;LiteTraceExecutionContext.performance=null;}
+    job.renderChannels=aovs;
+    return {
+      width,height,rgba,
+      channels:aovs,
+      metadata:Object.freeze({
+        renderer:'Group 9 Progressive Path GI',
+        samplesPerPixel:accumulator.averageSamples(),
+        passes:completedPasses,
+        maxBounces:PathIntegrator.maxDepth(job),
+        estimator:'Path GI + direct NEE + power-heuristic MIS',
+        mis:true,
+        adaptive:!!settings.adaptive,
+        progressive:!!settings.progressive,
+        russianRoulette:true,
+        importanceSampling:'GGX + cosine mixture',
+        noise:accumulator.averageNoise(),
+        transmission:true,
+        secondaryGI:settings.secondaryGI,
+        lightCache:job.lightCache?.stats?.()||null,
+        emissiveTriangleLights:compiled.emissiveTriangles?.triangles?.length||0,
+        diagnostics:RenderPart5Core.diagnostics(job,compiled,acceleration),
+        performance:RenderCoreH.performance(job),
+        litePixNativePath:litePixPath410?.snapshot?.()||null,
+        litePixCore3Production:job.litePixCore3Stats423||litePixCore3Production423?.snapshot?.()||null,
